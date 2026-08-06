@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard RDO de Campo · IPQ Tecnologia</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  :root{
+    --primary:#1e6fd9; --bg:#f4f6f9; --card:#fff; --line:#e3e7ed; --text:#1c2530; --muted:#6b7684;
+    --ok:#1f9d55; --ok-bg:#e6f7ec; --danger:#c6392f; --danger-bg:#fdecea; --warn:#b8860b; --warn-bg:#fff6e0;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;background:var(--bg);color:var(--text);}
+  header{background:var(--card);border-bottom:1px solid var(--line);padding:16px 24px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;position:sticky;top:0;z-index:10;}
+  header h1{font-size:19px;margin:0;}
+  header .sub{font-size:12.5px;color:var(--muted);margin-top:2px;}
+  .cfg-bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
+  .cfg-bar input{padding:8px 10px;border:1.5px solid var(--line);border-radius:8px;font-size:13px;min-width:160px;}
+  .cfg-bar button{padding:8px 14px;border:none;border-radius:8px;background:var(--primary);color:#fff;font-weight:600;font-size:13px;cursor:pointer;}
+  .cfg-bar button.ghost{background:var(--line);color:var(--text);}
+  main{max-width:1280px;margin:0 auto;padding:22px 20px 60px;}
+  .grid{display:grid;gap:16px;}
+  .grid.stats{grid-template-columns:repeat(auto-fit,minmax(150px,1fr));margin-bottom:20px;}
+  .stat-card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;}
+  .stat-card .val{font-size:26px;font-weight:800;}
+  .stat-card .lbl{font-size:12.5px;color:var(--muted);margin-top:2px;}
+  section.block{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;margin-bottom:20px;}
+  section.block h2{font-size:15px;margin:0 0 14px;display:flex;align-items:center;gap:8px;}
+  .tec-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px;}
+  .tec-card{border:1.5px solid var(--line);border-radius:12px;padding:13px;position:relative;}
+  .tec-card .dot{width:9px;height:9px;border-radius:50%;display:inline-block;margin-right:6px;}
+  .tec-card.online .dot{background:var(--ok);box-shadow:0 0 0 3px var(--ok-bg);}
+  .tec-card.recent .dot{background:var(--warn);box-shadow:0 0 0 3px var(--warn-bg);}
+  .tec-card.offline .dot{background:var(--muted);box-shadow:0 0 0 3px #eee;}
+  .tec-card .nome{font-weight:700;font-size:14.5px;}
+  .tec-card .info{font-size:12.5px;color:var(--muted);margin-top:6px;line-height:1.5;}
+  #map{height:380px;border-radius:12px;}
+  .two-col{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+  .bar-row{display:flex;align-items:center;gap:10px;margin-bottom:8px;font-size:13px;}
+  .bar-row .name{width:150px;flex-shrink:0;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .bar-track{flex:1;background:var(--bg);border-radius:6px;height:10px;overflow:hidden;}
+  .bar-fill{background:var(--primary);height:100%;border-radius:6px;}
+  .bar-num{width:36px;text-align:right;font-weight:700;font-size:12.5px;}
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  th,td{text-align:left;padding:9px 8px;border-bottom:1px solid var(--line);}
+  th{color:var(--muted);font-weight:600;font-size:11.5px;text-transform:uppercase;letter-spacing:.03em;}
+  tr.atraso{background:var(--danger-bg);}
+  .empty{text-align:center;padding:30px;color:var(--muted);font-size:13.5px;}
+  .badge-atraso{background:var(--danger-bg);color:var(--danger);padding:2px 8px;border-radius:99px;font-size:11px;font-weight:700;}
+  .refresh-info{font-size:12px;color:var(--muted);}
+  @media (max-width:800px){ .two-col{grid-template-columns:1fr;} }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>📊 Dashboard RDO de Campo</h1>
+    <div class="sub">Acompanhamento em tempo real dos técnicos e obras — IPQ Tecnologia</div>
+  </div>
+  <div class="cfg-bar" id="cfgBar">
+    <input type="text" id="cfgServidor" placeholder="https://rdo.ipqsistemas.com.br">
+    <input type="text" id="cfgChave" placeholder="Chave de API">
+    <button id="btnConectar">Conectar</button>
+    <button class="ghost" id="btnAtualizar" style="display:none;">↻ Atualizar</button>
+    <span class="refresh-info" id="refreshInfo"></span>
+  </div>
+</header>
+
+<main>
+  <div id="semConexao" class="empty" style="display:none;">Configure o servidor e a chave de API acima para carregar o dashboard.</div>
+  <div id="erroConexao" class="empty" style="display:none;color:var(--danger);"></div>
+
+  <div id="conteudo" style="display:none;">
+    <div class="grid stats" id="statsGrid"></div>
+
+    <section class="block">
+      <h2>👷 Técnicos</h2>
+      <div class="tec-grid" id="tecGrid"></div>
+    </section>
+
+    <section class="block">
+      <h2>🗺️ Mapa</h2>
+      <div id="map"></div>
+    </section>
+
+    <div class="two-col">
+      <section class="block">
+        <h2>📦 Materiais mais usados</h2>
+        <div id="materiaisBars"></div>
+      </section>
+      <section class="block">
+        <h2>🏗️ RDOs por obra</h2>
+        <div id="obrasBars"></div>
+      </section>
+    </div>
+
+    <section class="block">
+      <h2>🕒 RDOs recentes</h2>
+      <table id="tabelaRdos">
+        <thead><tr><th>Recebido</th><th>Técnico</th><th>Obra</th><th>Local</th><th>Atividade</th><th>Data</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </section>
+  </div>
+</main>
+
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+  const CFG_KEY = 'rdo_dashboard_config';
+  let map = null, mapLayer = null;
+  let refreshTimer = null;
+
+  function getCfg(){ try{ return JSON.parse(localStorage.getItem(CFG_KEY)||'null'); }catch(e){ return null; } }
+  function setCfg(c){ localStorage.setItem(CFG_KEY, JSON.stringify(c)); }
+
+  function escHtml(s){ const d=document.createElement('div'); d.textContent=String(s??''); return d.innerHTML; }
+  function timeAgo(iso){
+    if(!iso) return 'nunca';
+    const diffMs = Date.now() - new Date(iso).getTime();
+    const min = Math.floor(diffMs/60000);
+    if(min < 1) return 'agora mesmo';
+    if(min < 60) return `há ${min} min`;
+    const h = Math.floor(min/60);
+    if(h < 24) return `há ${h}h`;
+    return `há ${Math.floor(h/24)}d`;
+  }
+  function formatarData(iso){ if(!iso) return '—'; const [y,m,d]=iso.split('-'); return `${d}/${m}/${y}`; }
+  function formatarDataHora(iso){
+    if(!iso) return '—'; const d = new Date(iso); if(isNaN(d)) return iso;
+    const p = n=>String(n).padStart(2,'0');
+    return `${p(d.getDate())}/${p(d.getMonth()+1)} ${p(d.getHours())}:${p(d.getMinutes())}`;
+  }
+
+  $('btnConectar').addEventListener('click', ()=>{
+    const servidor = $('cfgServidor').value.trim().replace(/\/+$/,'');
+    const chave = $('cfgChave').value.trim();
+    if(!servidor || !chave){ alert('Preencha servidor e chave de API.'); return; }
+    setCfg({servidor, chave});
+    startDashboard();
+  });
+  $('btnAtualizar').addEventListener('click', carregarDados);
+
+  function initFromStorage(){
+    const cfg = getCfg();
+    if(cfg){ $('cfgServidor').value = cfg.servidor; $('cfgChave').value = cfg.chave; startDashboard(); }
+  }
+
+  function startDashboard(){
+    $('btnAtualizar').style.display='inline-block';
+    carregarDados();
+    if(refreshTimer) clearInterval(refreshTimer);
+    refreshTimer = setInterval(carregarDados, 30000);
+  }
+
+  async function carregarDados(){
+    const cfg = getCfg();
+    if(!cfg){ $('semConexao').style.display='block'; return; }
+    $('erroConexao').style.display='none';
+    try{
+      const resp = await fetch(cfg.servidor+'/api/dashboard', { headers:{'x-api-key':cfg.chave} });
+      if(!resp.ok) throw new Error('HTTP '+resp.status+(resp.status===401?' (chave de API inválida)':''));
+      const data = await resp.json();
+      $('semConexao').style.display='none';
+      $('conteudo').style.display='block';
+      render(data);
+      $('refreshInfo').textContent = 'Atualizado ' + new Date().toLocaleTimeString('pt-BR');
+    }catch(err){
+      console.error(err);
+      $('conteudo').style.display='none';
+      $('erroConexao').style.display='block';
+      $('erroConexao').textContent = 'Não foi possível carregar: ' + err.message;
+    }
+  }
+
+  function render(data){
+    renderStats(data);
+    renderTecnicos(data);
+    renderMapa(data);
+    renderBars('materiaisBars', data.indicadores.materiaisTop.map(m=>({name:m.nome, val:m.qtd})));
+    renderBars('obrasBars', data.indicadores.rdosPorObra.map(o=>({name:o.obra_nome||'sem obra', val:o.c})));
+    renderTabela(data.rdos_recentes);
+  }
+
+  function renderStats(data){
+    const ind = data.indicadores;
+    const cards = [
+      {val: ind.totalObras, lbl:'Obras cadastradas'},
+      {val: ind.totalRdos, lbl:'RDOs no total'},
+      {val: ind.rdosHoje, lbl:'RDOs hoje'},
+      {val: ind.atrasosHoje, lbl:'Atrasos/paradas hoje'},
+      {val: data.tecnicos.filter(t=>Date.now()-new Date(t.atualizado_em).getTime() < 15*60000).length, lbl:'Técnicos ativos agora'}
+    ];
+    $('statsGrid').innerHTML = cards.map(c=>`<div class="stat-card"><div class="val">${c.val}</div><div class="lbl">${c.lbl}</div></div>`).join('');
+  }
+
+  function renderTecnicos(data){
+    const box = $('tecGrid');
+    if(!data.tecnicos.length){ box.innerHTML = '<div class="empty">Nenhum técnico enviou status ainda.</div>'; return; }
+    box.innerHTML = data.tecnicos.map(t=>{
+      const diffMin = (Date.now()-new Date(t.atualizado_em).getTime())/60000;
+      const status = diffMin < 15 ? 'online' : diffMin < 60 ? 'recent' : 'offline';
+      return `<div class="tec-card ${status}">
+        <div class="nome"><span class="dot"></span>${escHtml(t.tecnico)}</div>
+        <div class="info">
+          🏗️ ${escHtml(t.obra_nome||'—')}${t.local?' · '+escHtml(t.local):''}<br>
+          ${t.atividade?('🔧 '+escHtml(t.atividade)+'<br>'):''}
+          🕒 ${timeAgo(t.atualizado_em)}
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  function renderMapa(data){
+    if(!map){
+      map = L.map('map').setView([-3.7327,-38.5267], 12);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution:'© OpenStreetMap' }).addTo(map);
+      mapLayer = L.layerGroup().addTo(map);
+    }
+    mapLayer.clearLayers();
+    const pontos = [];
+    data.tecnicos.forEach(t=>{
+      if(t.lat==null || t.lon==null) return;
+      const diffMin = (Date.now()-new Date(t.atualizado_em).getTime())/60000;
+      const cor = diffMin<15 ? '#1f9d55' : diffMin<60 ? '#b8860b' : '#6b7684';
+      const marker = L.circleMarker([t.lat, t.lon], {radius:9, color:cor, fillColor:cor, fillOpacity:0.85, weight:2});
+      marker.bindPopup(`<strong>${escHtml(t.tecnico)}</strong><br>${escHtml(t.obra_nome||'')} ${escHtml(t.local||'')}<br>${timeAgo(t.atualizado_em)}`);
+      marker.addTo(mapLayer);
+      pontos.push([t.lat, t.lon]);
+    });
+    if(pontos.length) map.fitBounds(pontos, {maxZoom:14, padding:[30,30]});
+  }
+
+  function renderBars(elId, items){
+    const box = $(elId);
+    if(!items.length){ box.innerHTML = '<div class="empty">Sem dados ainda.</div>'; return; }
+    const max = Math.max(...items.map(i=>i.val), 1);
+    box.innerHTML = items.map(i=>`
+      <div class="bar-row">
+        <span class="name" title="${escHtml(i.name)}">${escHtml(i.name)}</span>
+        <span class="bar-track"><span class="bar-fill" style="width:${Math.round(i.val/max*100)}%"></span></span>
+        <span class="bar-num">${i.val}</span>
+      </div>`).join('');
+  }
+
+  function renderTabela(rdos){
+    const tbody = document.querySelector('#tabelaRdos tbody');
+    if(!rdos.length){ tbody.innerHTML = '<tr><td colspan="6" class="empty">Nenhum RDO recebido ainda.</td></tr>'; return; }
+    tbody.innerHTML = rdos.map(r=>`
+      <tr class="${r.parou==='sim'?'atraso':''}">
+        <td>${formatarDataHora(r.recebido_em)}</td>
+        <td>${escHtml(r.tecnico||'—')}</td>
+        <td>${escHtml(r.obra_nome||'—')}</td>
+        <td>${escHtml(r.local||'—')}</td>
+        <td>${escHtml(r.atividade||'—')} ${r.parou==='sim'?'<span class="badge-atraso">atraso</span>':''}</td>
+        <td>${formatarData(r.data_servico)}</td>
+      </tr>`).join('');
+  }
+
+  initFromStorage();
+})();
+</script>
+</body>
+</html>
