@@ -1,23 +1,6 @@
 // Servidor central do RDO de Campo — recebe sincronizações dos celulares
 // dos técnicos e serve os dados para o dashboard do gestor.
 //
-// Uso:
-//   npm install
-//   node server.js
-//
-// Variáveis de ambiente (opcionais):
-//   PORT             - porta HTTP (padrão 3000)
-//   API_KEY          - chave técnica que o app de campo envia no header
-//                       'x-api-key' pra sincronizar (se não definir, é
-//                       gerada automaticamente na 1a execução e salva em
-//                       api_key.txt)
-//   DASHBOARD_USERS  - contas de login do dashboard, formato
-//                       "Nome:senha,Nome2:senha2" (todas com a mesma
-//                       permissão — ver, atualizar e exportar). Se não
-//                       definir, duas contas padrão ("Engenheiro" e
-//                       "Estagiario") são geradas automaticamente na 1a
-//                       execução e salvas em dashboard_usuarios.json.
-//   DB_PATH          - caminho do arquivo do banco (padrão ./rdo_central.sqlite)
 
 const express = require('express');
 const cors = require('cors');
