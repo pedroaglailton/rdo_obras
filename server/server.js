@@ -6,11 +6,18 @@
 //   node server.js
 //
 // Variáveis de ambiente (opcionais):
-//   PORT      - porta HTTP (padrão 3000)
-//   API_KEY   - chave que os apps devem enviar no header 'x-api-key'
-//               (se não definir, uma chave é gerada automaticamente na
-//               primeira execução e salva em api_key.txt)
-//   DB_PATH   - caminho do arquivo do banco (padrão ./rdo_central.sqlite)
+//   PORT             - porta HTTP (padrão 3000)
+//   API_KEY          - chave técnica que o app de campo envia no header
+//                       'x-api-key' pra sincronizar (se não definir, é
+//                       gerada automaticamente na 1a execução e salva em
+//                       api_key.txt)
+//   DASHBOARD_USERS  - contas de login do dashboard, formato
+//                       "Nome:senha,Nome2:senha2" (todas com a mesma
+//                       permissão — ver, atualizar e exportar). Se não
+//                       definir, duas contas padrão ("Engenheiro" e
+//                       "Estagiario") são geradas automaticamente na 1a
+//                       execução e salvas em dashboard_usuarios.json.
+//   DB_PATH          - caminho do arquivo do banco (padrão ./rdo_central.sqlite)
 
 const express = require('express');
 const cors = require('cors');
@@ -18,10 +25,13 @@ const Database = require('better-sqlite3');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const ExcelJS = require('exceljs');
 
 const PORT = process.env.PORT || 3000;
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, 'rdo_central.sqlite');
 const API_KEY_FILE = path.join(__dirname, 'api_key.txt');
+const DASHBOARD_USERS_FILE = path.join(__dirname, 'dashboard_usuarios.json');
+const SESSAO_DURACAO_MS = 12 * 60 * 60 * 1000; // 12 horas
 
 let API_KEY = process.env.API_KEY;
 if (!API_KEY) {
@@ -30,10 +40,48 @@ if (!API_KEY) {
   } else {
     API_KEY = crypto.randomBytes(24).toString('hex');
     fs.writeFileSync(API_KEY_FILE, API_KEY);
-    console.log('>> Nova API_KEY gerada e salva em api_key.txt — configure essa mesma chave no app de campo e no dashboard.');
+    console.log('>> Nova API_KEY gerada e salva em api_key.txt — configure essa mesma chave no app de campo.');
   }
 }
-console.log('>> API_KEY ativa:', API_KEY);
+console.log('>> API_KEY ativa (uso técnico, app de campo):', API_KEY);
+
+// Contas do dashboard — separadas da API_KEY. Todo mundo aqui tem a mesma
+// permissão (ver dados + exportar Excel); o nome de usuário é só pra saber
+// quem é quem, não é um nível de acesso diferente. Pode ser fixado via
+// variável de ambiente DASHBOARD_USERS ("Nome:senha,Nome2:senha2"); senão,
+// duas contas padrão são geradas automaticamente na primeira execução.
+let DASHBOARD_USERS = {}; // { "Engenheiro": "senha123", "Estagiario": "senha456" }
+if (process.env.DASHBOARD_USERS) {
+  process.env.DASHBOARD_USERS.split(',').forEach(par => {
+    const [nome, senha] = par.split(':').map(s => (s || '').trim());
+    if (nome && senha) DASHBOARD_USERS[nome] = senha;
+  });
+} else if (fs.existsSync(DASHBOARD_USERS_FILE)) {
+  DASHBOARD_USERS = JSON.parse(fs.readFileSync(DASHBOARD_USERS_FILE, 'utf8'));
+} else {
+  DASHBOARD_USERS = {
+    Engenheiro: crypto.randomBytes(4).toString('hex'),
+    Estagiario: crypto.randomBytes(4).toString('hex'),
+  };
+  fs.writeFileSync(DASHBOARD_USERS_FILE, JSON.stringify(DASHBOARD_USERS, null, 2));
+  console.log('>> Contas do dashboard geradas e salvas em dashboard_usuarios.json — informe usuário+senha pra cada pessoa (ou defina DASHBOARD_USERS no ambiente pra escolher as suas).');
+}
+console.log('>> Contas do dashboard ativas:', Object.keys(DASHBOARD_USERS).map(n => `${n}:${DASHBOARD_USERS[n]}`).join('  |  '));
+
+// Sessões de dashboard em memória: token -> { usuario, expira }
+const sessoesDashboard = new Map();
+function criarSessao(usuario) {
+  const token = crypto.randomBytes(24).toString('hex');
+  sessoesDashboard.set(token, { usuario, expira: Date.now() + SESSAO_DURACAO_MS });
+  return token;
+}
+function limparSessoesExpiradas() {
+  const agora = Date.now();
+  for (const [token, s] of sessoesDashboard) {
+    if (s.expira < agora) sessoesDashboard.delete(token);
+  }
+}
+setInterval(limparSessoesExpiradas, 30 * 60000).unref();
 
 const db = new Database(DB_PATH);
 db.pragma('journal_mode = WAL');
@@ -89,6 +137,39 @@ function checkAuth(req, res, next) {
   if (key !== API_KEY) return res.status(401).json({ ok: false, erro: 'API key inválida' });
   next();
 }
+
+// Autenticação do dashboard: token de sessão obtido via /api/dashboard/login
+// (não usa a API_KEY técnica — cada pessoa só digita usuário + senha).
+function checkDashboardAuth(req, res, next) {
+  const token = req.header('x-dashboard-token');
+  const sessao = token && sessoesDashboard.get(token);
+  if (!sessao) {
+    return res.status(401).json({ ok: false, erro: 'Sessão inválida ou expirada. Faça login novamente.' });
+  }
+  if (sessao.expira < Date.now()) {
+    sessoesDashboard.delete(token);
+    return res.status(401).json({ ok: false, erro: 'Sessão expirada. Faça login novamente.' });
+  }
+  // renova a sessão a cada uso
+  sessao.expira = Date.now() + SESSAO_DURACAO_MS;
+  req.dashboardUsuario = sessao.usuario;
+  next();
+}
+
+// ---- Login do dashboard: troca usuário + senha por um token de sessão ----
+app.post('/api/dashboard/login', (req, res) => {
+  const { usuario, senha } = req.body || {};
+  if (!usuario || !senha || DASHBOARD_USERS[usuario] !== senha) {
+    return res.status(401).json({ ok: false, erro: 'Usuário ou senha incorretos.' });
+  }
+  const token = criarSessao(usuario);
+  res.json({ ok: true, token, usuario, expira_em: SESSAO_DURACAO_MS });
+});
+
+app.post('/api/dashboard/logout', checkDashboardAuth, (req, res) => {
+  sessoesDashboard.delete(req.header('x-dashboard-token'));
+  res.json({ ok: true });
+});
 
 // ---- Sincronização vinda do app de campo ----
 app.post('/api/sync', checkAuth, (req, res) => {
@@ -153,7 +234,7 @@ app.post('/api/heartbeat', checkAuth, (req, res) => {
 });
 
 // ---- Dados agregados para o dashboard ----
-app.get('/api/dashboard', checkAuth, (req, res) => {
+app.get('/api/dashboard', checkDashboardAuth, (req, res) => {
   const heartbeats = db.prepare('SELECT * FROM heartbeats ORDER BY atualizado_em DESC').all();
   const rdosRecentes = db.prepare('SELECT * FROM rdos ORDER BY recebido_em DESC LIMIT 100').all();
   const totalRdos = db.prepare('SELECT COUNT(*) c FROM rdos').get().c;
@@ -182,6 +263,107 @@ app.get('/api/dashboard', checkAuth, (req, res) => {
     indicadores: { totalRdos, totalObras, atrasosHoje, rdosHoje, rdosPorObra, materiaisTop },
     obras: db.prepare('SELECT * FROM obras ORDER BY nome').all()
   });
+});
+
+// ---- Exportação de relatório em Excel (puxa de todos os técnicos) ----
+// Filtros opcionais via querystring: ?obra=Nome&data_inicio=2026-01-01&data_fim=2026-01-31&tecnico=Nome
+app.get('/api/export/excel', checkDashboardAuth, async (req, res) => {
+  try {
+    const { obra, data_inicio, data_fim, tecnico } = req.query;
+
+    let sql = 'SELECT * FROM rdos WHERE 1=1';
+    const params = [];
+    if (obra) { sql += ' AND obra_nome = ?'; params.push(obra); }
+    if (tecnico) { sql += ' AND tecnico = ?'; params.push(tecnico); }
+    if (data_inicio) { sql += ' AND data_servico >= ?'; params.push(data_inicio); }
+    if (data_fim) { sql += ' AND data_servico <= ?'; params.push(data_fim); }
+    sql += ' ORDER BY data_servico DESC, recebido_em DESC';
+
+    const rdos = db.prepare(sql).all(...params);
+
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'RDO de Campo · IPQ Tecnologia';
+    wb.created = new Date();
+
+    // --- Aba 1: RDOs (uma linha por relatório) ---
+    const wsRdo = wb.addWorksheet('RDOs');
+    wsRdo.columns = [
+      { header: 'Data', key: 'data_servico', width: 12 },
+      { header: 'Técnico', key: 'tecnico', width: 20 },
+      { header: 'Obra', key: 'obra_nome', width: 22 },
+      { header: 'Local', key: 'local', width: 20 },
+      { header: 'Atividade', key: 'atividade', width: 28 },
+      { header: 'Equipe', key: 'equipe', width: 24 },
+      { header: 'Materiais usados', key: 'materiais', width: 34 },
+      { header: 'Entrada manhã', key: 'entrada_manha', width: 13 },
+      { header: 'Saída manhã', key: 'saida_manha', width: 13 },
+      { header: 'Entrada tarde', key: 'entrada_tarde', width: 13 },
+      { header: 'Saída tarde', key: 'saida_tarde', width: 13 },
+      { header: 'Parou/atrasou', key: 'parou', width: 13 },
+      { header: 'Motivo da parada', key: 'motivo_parada', width: 26 },
+      { header: 'Switch instalado', key: 'switch_instalado', width: 15 },
+      { header: 'Switch — nomenclatura', key: 'switch_nomenclatura', width: 20 },
+      { header: 'Switch — local', key: 'switch_local', width: 18 },
+      { header: 'Câmera instalada', key: 'camera_instalada', width: 15 },
+      { header: 'Câmera — nomenclatura', key: 'camera_nomenclatura', width: 20 },
+      { header: 'Câmera — local', key: 'camera_local', width: 18 },
+      { header: 'Qtd. fotos', key: 'qtd_fotos', width: 10 },
+      { header: 'Recebido em', key: 'recebido_em', width: 18 },
+    ];
+    wsRdo.getRow(1).font = { bold: true };
+    wsRdo.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE3E7ED' } };
+    wsRdo.autoFilter = { from: 'A1', to: 'U1' };
+
+    // --- Aba 2: Materiais (uma linha por material usado, melhor pra somar/filtrar) ---
+    const wsMat = wb.addWorksheet('Materiais utilizados');
+    wsMat.columns = [
+      { header: 'Data', key: 'data_servico', width: 12 },
+      { header: 'Técnico', key: 'tecnico', width: 20 },
+      { header: 'Obra', key: 'obra_nome', width: 22 },
+      { header: 'Local', key: 'local', width: 20 },
+      { header: 'Material', key: 'material', width: 30 },
+      { header: 'Quantidade', key: 'qtd', width: 12 },
+    ];
+    wsMat.getRow(1).font = { bold: true };
+    wsMat.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE3E7ED' } };
+
+    rdos.forEach(r => {
+      let equipeTxt = '';
+      let materiaisArr = [];
+      try { equipeTxt = JSON.parse(r.equipe || '[]').join(', '); } catch (e) { equipeTxt = r.equipe || ''; }
+      try { materiaisArr = JSON.parse(r.materiais_json || '[]'); } catch (e) { materiaisArr = []; }
+      const materiaisTxt = materiaisArr.map(m => `${m.nome} x${m.qtd}`).join('; ');
+
+      wsRdo.addRow({
+        data_servico: r.data_servico, tecnico: r.tecnico, obra_nome: r.obra_nome, local: r.local,
+        atividade: r.atividade, equipe: equipeTxt, materiais: materiaisTxt,
+        entrada_manha: r.entrada_manha, saida_manha: r.saida_manha,
+        entrada_tarde: r.entrada_tarde, saida_tarde: r.saida_tarde,
+        parou: r.parou === 'sim' ? 'Sim' : 'Não', motivo_parada: r.motivo_parada,
+        switch_instalado: r.switch_instalado === 'sim' ? 'Sim' : 'Não',
+        switch_nomenclatura: r.switch_nomenclatura, switch_local: r.switch_local,
+        camera_instalada: r.camera_instalada === 'sim' ? 'Sim' : 'Não',
+        camera_nomenclatura: r.camera_nomenclatura, camera_local: r.camera_local,
+        qtd_fotos: r.qtd_fotos, recebido_em: r.recebido_em,
+      });
+
+      materiaisArr.forEach(m => {
+        wsMat.addRow({
+          data_servico: r.data_servico, tecnico: r.tecnico, obra_nome: r.obra_nome,
+          local: r.local, material: m.nome, qtd: Number(m.qtd || 0),
+        });
+      });
+    });
+
+    const nomeArquivo = `rdo_relatorio_${new Date().toISOString().slice(0, 10)}.xlsx`;
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${nomeArquivo}"`);
+    await wb.xlsx.write(res);
+    res.end();
+  } catch (err) {
+    console.error('Erro ao gerar Excel:', err);
+    res.status(500).json({ ok: false, erro: 'Falha ao gerar o relatório em Excel.' });
+  }
 });
 
 app.get('/api/health', (req, res) => res.json({ ok: true, hora: new Date().toISOString() }));
