@@ -202,66 +202,41 @@
   }
   .conditional.show{display:block;}
 
-  /* Materiais */
-  .cat-tabs{
-    display:flex;
-    gap:6px;
-    overflow-x:auto;
-    padding-bottom:4px;
-    margin-bottom:10px;
-    -webkit-overflow-scrolling:touch;
-  }
-  .cat-tabs button{
-    flex:none;
-    padding:7px 12px;
-    border-radius:99px;
+  /* Materiais — busca com autocomplete */
+  .mat-search-wrap{ position:relative; margin-bottom:12px; }
+  .mat-search-wrap input{ margin:0; }
+  .mat-suggestions{
+    position:relative;
+    margin-top:6px;
     border:1.5px solid var(--line);
-    background:#fff;
-    font-size:12.5px;
-    font-weight:600;
-    color:var(--text);
-    white-space:nowrap;
-    cursor:pointer;
+    border-radius:10px;
+    overflow:hidden;
+    display:none;
+    max-height:260px;
+    overflow-y:auto;
   }
-  .cat-tabs button.active{
-    background:var(--primary);
-    border-color:var(--primary);
-    color:#fff;
-  }
-  .mat-grid{
-    display:grid;
-    grid-template-columns:1fr 1fr;
-    gap:8px;
-    margin-bottom:12px;
-  }
-  .mat-btn{
+  .mat-suggestions.show{ display:block; }
+  .mat-suggestions button{
+    display:block;
+    width:100%;
     text-align:left;
-    padding:10px;
-    border-radius:9px;
-    border:1.5px solid var(--line);
-    background:#fbfcfd;
-    font-size:12.5px;
-    line-height:1.3;
-    cursor:pointer;
-    color:var(--text);
-  }
-  .mat-btn:active{background:var(--ok-bg);border-color:var(--ok);}
-
-  .mat-custom{
-    display:flex;
-    gap:8px;
-    margin-bottom:14px;
-  }
-  .mat-custom input{flex:1;}
-  .mat-custom button{
-    background:var(--primary);
-    color:#fff;
+    padding:11px 12px;
     border:none;
-    border-radius:9px;
-    padding:0 16px;
-    font-weight:700;
-    font-size:20px;
+    border-bottom:1px solid var(--line);
+    background:#fff;
+    font-size:13px;
+    color:var(--text);
     cursor:pointer;
+  }
+  .mat-suggestions button:last-child{ border-bottom:none; }
+  .mat-suggestions button:active{ background:var(--ok-bg); }
+  .mat-suggestions button.novo{
+    color:var(--primary);
+    font-weight:700;
+    background:#f7fbff;
+  }
+  .mat-suggestions .sem-resultado{
+    padding:11px 12px;font-size:12.5px;color:var(--muted);
   }
 
   .mat-list{
@@ -279,7 +254,6 @@
     border:1px solid var(--line);
   }
   .mat-list li .mname{flex:1;font-size:13.5px;font-weight:600;}
-  .mat-list li .mcat{font-size:10.5px;color:var(--muted);display:block;font-weight:400;text-transform:uppercase;}
   .mat-list li input[type=number]{width:64px;padding:6px;text-align:center;}
   .mat-list li .rm{
     background:none;border:none;color:var(--danger);font-size:18px;cursor:pointer;padding:2px 4px;
@@ -519,18 +493,15 @@
       <div class="card">
         <h2><span class="n">2</span>Materiais utilizados</h2>
 
-        <div class="cat-tabs" id="catTabs"></div>
-        <div class="mat-grid" id="matGrid"></div>
-
-        <label for="matCustomInput">Adicionar material não listado</label>
-        <div class="mat-custom">
-          <input type="text" id="matCustomInput" placeholder="Nome do material...">
-          <button type="button" id="matCustomAdd">+</button>
+        <label for="matBuscaInput">Buscar material</label>
+        <div class="mat-search-wrap">
+          <input type="text" id="matBuscaInput" placeholder="Digite pra buscar (ex: abraçadeira, cabo cat6...)" autocomplete="off">
+          <div class="mat-suggestions" id="matSuggestions"></div>
         </div>
 
         <label style="margin-top:16px;">Materiais adicionados</label>
         <ul class="mat-list" id="matList"></ul>
-        <div class="empty-hint" id="matEmptyHint">Toque num material acima para adicionar à lista.</div>
+        <div class="empty-hint" id="matEmptyHint">Busque um material acima pra adicionar à lista.</div>
       </div>
 
       <div class="card">
@@ -876,36 +847,20 @@ else if (typeof exports === 'object'){
     exports["Module"] = initSqlJs;
 }
 
+const MATERIAIS_PADRAO = ["Abraçadeira De Aço Zincado", "Abraçadeira De Nylon 3,6 X 300 Mm", "Abracadeira Galv.C/Cunha 1\"", "Abraçadeira Tipo U Galv (2.1/2\")", "Acessórios De Instalação", "Adap. Óptico Com Shutter", "Adap. Para Caixa 1\"", "Adap. Para Condulete 1\"", "Aprafuso Com Porca", "Arruela Lisa", "Bandeja De Acomodação De Cordões 1U", "Bandeja Reforçada Para Rack P=400", "Bandeja Reforçada Para Rack P=570", "Bandeja Reforçada Para Rack P=870", "Box Reto 1\"", "Bucha De Acabamento 1\"", "Bucha De Nylon Nº 6", "Bucha De Nylon Nº 8", "Bucha De Nylon P/ Gesso", "Cabeamento Metálico (Cftv)", "Cabo De Alimentação 1.8M Nbr 14136 / Iec C13", "Cabo Optico Cfoa-Sm-Ddr-S 12 F (Pfv) Lszh", "Cabo Óptico 1Fo", "Cabo Utp 23Awgx4P Cat.6", "Cabo Utp 23Awgx4P Cat.6 Outdoor", "Caixa 40X40Cm De Sobrepor", "Caixa Metálica 15X15 Cm (Inox)", "Caixa Metálica 15X15 Cm (Pvc)", "Caixa Vdi 40X40Cm", "Câmera  Bullet Dahua", "Câmera  Lpr Dahua", "Câmera  Lpr Hikvision", "Câmera  Mini Dome Hikvision", "Câmera  Ptz Dahua", "Câmera Bullet Hikvision", "Câmera Ptz Hikvision", "Canaleta", "Olt Gpon Lw3008C", "Condulete Galvanizado 1\"", "Condulete Pvc Branco 1\"", "Conectores Opticos De Campo Sm Sc-Apc", "Cordao Mono Sc-Apc/Sc-Apc 2.5M -Bran", "Cordão Mono Sm Lc-Upc/Sc-Apc 2.5M - Lszh - Azul", "Curva 180° (Retorno) 1\"", "Curva 45° 1\"", "Curva 45° Roscável 1\"", "Curva 90° 1\"", "Curva 90° Roscável 1\"", "Eletroduto Galv. ∅ 1\"", "Extensao Mono Sm Bli  Sc-Apc 1.5M Com Adaptador 12F", "Fonte De Alimentacao Ac Para Olt Gpon Lw3008C", "Gbic 1,25G, Lx, 1310Nm, Sm, 20Km", "Gbic 10G, Lr, 1310Nm, Sm, 10Km", "Guia De Cabo 1U 19 Hrz Com Tampa Pr", "Joystick Hikvision", "Kit 02 Exaustores Teto Para Rack Piso", "Kit 3X Placas Lgx 08 Posicoes Lc/Sc", "Kit 3X Placas Lgx 12 Posições Lc/Sc - Plastico", "Kit Bandeja De Emenda Stack 12F", "Kit Porca Gaiola", "Luva Elet. Galv. 1\"", "Luva Eletroduto 1P  Branco Pvc", "Luva Pvc ∅ 1\"", "Modulo Basico - Dio Enterprise (12F)", "Modulo Basico - Dio Enterprise (24F)", "Modulo Basico - Dio Enterprise", "Módulo De Baterias 48V 36Ah", "Gbic Classe C+ 2.5Gbps Lr 1490Nm Sc-Upc", "Niple Roscável 1\"", "Nobreak  Lacerda", "Nobreak Sms", "Ont 4P Huawei", "Onu 1P Huawei", "Parafuso Drywall Brocante 3,5 × 25 Mm", "Parafuso N° 6 : 4,5 Mm X 50Mm", "Parafuso N° 8 : 5,0 Mm X 50Mm", "Patch Cord Cat.6 - 1.5M - Cinza", "Patch Panel Descarregado 24P Angular 1U", "Patch Panel Modular Lgx", "Prego De Aço", "Rack De Piso 16Ux570Mm Preto", "Rack Piso 12Ux570Mm Preto", "Rack Piso 44Ux870Mm Preto", "Régua De Tomadas 08Pos 2P+T 19\" Padrão Abnt 10A", "Roseta Óptica 2P 4X2 Sobrepor - Branco", "Roseta Óptica 1P 2X1 Sobrepor - Branco", "Sealtubo 1\"", "Splitter Óptico Modular Lgx 1X8 G.657A Sc-Apc/Sc-Apc", "Splitter Óptico PLC 1X8 Sc-Apc/Sc-Apc", "Switch 24 Portas Poe", "Switch 8 Portas Poe", "Switch De Agregação L2+ 4Rj45 20Sfp 4Sfp+", "Switch Hikvision 08P 02SFP", "Switch Huawei 24P", "Switch Tp-Link - 8P", "Tampa Cond.Alum.Cega 56117/007 1\"", "Tampa Condulete Galvanizado 1\"", "Tampa Condulete Pvc Branco 1\"", "Tampão  1\"", "Tampao Plastico Politileno 1''", "Tubo Pvc Rígido Leve Branco 1\" × 3 Metros", "Tubo Pvc Rígido Preto Roscável 1\" × 3 Metros", "Tubos E Conexões", "União Roscável 1\"", "Velcro", "Vertical Pole Mount"];
 (function(){
   "use strict";
 
   const $ = (id) => document.getElementById(id);
 
-  /* ================= Catálogo de materiais ================= */
-  const CATALOGO = {
-    "Infraestrutura": [
-      "ELETRODUTO PVC ∅ 1\" (BRANCO)","LUVA PVC ∅ 1\" (BRANCA)","CONDULETE PVC ∅ 1\" (BRANCA)",
-      "CURVA DE 90 (BRANCO)","BOXE RETO (BRANCO)","TAMPA CEGA PVC ∅ 1\"","TAMPÃO PVC ∅ 1\" (P/ POLIWETZEL)",
-      "ABRAÇADEIRA PVC ∅ 1\"","CAIXA VDI 40x40cm","PARAFUSO S6","PARAFUSO S8","BUCHA S6","BUCHA S8","SEALTUBO"
-    ],
-    "Cabeamento": [
-      "CABO DE DADOS CAT.6 U/UTP LSZH","CABO ÓPTICO CFOA-SM-DDR-S 12F (PFV) LSZH",
-      "CORDÃO MONOFIBRA CONECTORIZADO SC-APC/SC-APC 2.5m","CONECTOR RJ45 MACHO"
-    ],
-    "Câmeras": ["Câmera BULLET FIXA","Câmera DOME FIXA","Câmera PTZ"],
-    "Redes": ["SWITCH 8 PORTAS","SWITCH 24 PORTAS"],
-    "Controle de Acesso": ["Catraca PCD","Catraca Pivotante Balcão","Terminal Facial"]
-  };
-  const CATEGORIAS = Object.keys(CATALOGO);
-
   /* ================= Estado do formulário ================= */
-  let catAtiva = CATEGORIAS[0];
   let equipe = [];
   let materiais = [];
   let fotos = [];
   let editandoId = null, editandoUid = null, editandoCriadoEm = null;
 
   function escHtml(s){ const d=document.createElement('div'); d.textContent=String(s??''); return d.innerHTML; }
+  function normTxt(s){ return String(s??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim(); }
   function sanitizeFilename(s){ return String(s||'').replace(/[\\/:*?"<>|]+/g,'_').replace(/\s+/g,'_').slice(0,60); }
   function formatarData(iso){ if(!iso) return '—'; const [y,m,d]=iso.split('-'); return `${d}/${m}/${y}`; }
   function formatarDataHora(iso){
@@ -998,6 +953,20 @@ else if (typeof exports === 'object'){
       fotos_json TEXT,
       lat REAL, lon REAL, synced INTEGER NOT NULL DEFAULT 0
     );`);
+    run(`CREATE TABLE IF NOT EXISTS catalogo_materiais(
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      nome TEXT NOT NULL UNIQUE,
+      criado_em TEXT
+    );`);
+  }
+  function seedCatalogo(){
+    const count = all('SELECT COUNT(*) c FROM catalogo_materiais')[0].c;
+    if(count > 0) return;
+    const stmt = db.prepare('INSERT OR IGNORE INTO catalogo_materiais(nome, criado_em) VALUES (?,?)');
+    const agora = new Date().toISOString();
+    MATERIAIS_PADRAO.forEach(nome => stmt.run([nome, agora]));
+    stmt.free();
+    persist();
   }
   function ensureColumns(){
     // migração leve para bancos criados antes da sincronização existir
@@ -1014,6 +983,7 @@ else if (typeof exports === 'object'){
       if(saved){ db = new SQL.Database(new Uint8Array(saved)); createSchema(); }
       else { db = new SQL.Database(); createSchema(); }
       ensureColumns();
+      seedCatalogo();
       setStatus(true);
     }catch(err){
       console.error(err);
@@ -1147,29 +1117,10 @@ else if (typeof exports === 'object'){
     if(this.value.trim()){ equipe.push(this.value.trim()); this.value=''; renderEquipe(); }
   });
 
-  /* ================= Materiais ================= */
-  function renderCatTabs(){
-    const box = $('catTabs'); box.innerHTML='';
-    CATEGORIAS.forEach(cat=>{
-      const b = document.createElement('button');
-      b.type='button'; b.textContent=cat;
-      if(cat===catAtiva) b.classList.add('active');
-      b.addEventListener('click', ()=>{ catAtiva=cat; renderCatTabs(); renderMatGrid(); });
-      box.appendChild(b);
-    });
-  }
-  function renderMatGrid(){
-    const grid = $('matGrid'); grid.innerHTML='';
-    CATALOGO[catAtiva].forEach(nome=>{
-      const b = document.createElement('button');
-      b.type='button'; b.className='mat-btn'; b.textContent=nome;
-      b.addEventListener('click', ()=>addMaterial(nome, catAtiva));
-      grid.appendChild(b);
-    });
-  }
-  function addMaterial(nome, categoria){
-    const existente = materiais.find(m=>m.nome===nome);
-    if(existente) existente.qtd += 1; else materiais.push({nome, categoria, qtd:1});
+  /* ================= Materiais (busca com autocomplete + cadastro na hora) ================= */
+  function addMaterial(nome){
+    const existente = materiais.find(m=>normTxt(m.nome)===normTxt(nome));
+    if(existente) existente.qtd += 1; else materiais.push({nome, qtd:1});
     renderMatList();
   }
   function renderMatList(){
@@ -1177,7 +1128,7 @@ else if (typeof exports === 'object'){
     $('matEmptyHint').style.display = materiais.length? 'none':'block';
     materiais.forEach((m, idx)=>{
       const li = document.createElement('li');
-      li.innerHTML = `<div class="mname">${escHtml(m.nome)}<span class="mcat">${escHtml(m.categoria)}</span></div>
+      li.innerHTML = `<div class="mname">${escHtml(m.nome)}</div>
         <input type="number" min="1" value="${m.qtd}" data-idx="${idx}">
         <button type="button" class="rm" data-idx="${idx}">×</button>`;
       li.querySelector('input').addEventListener('input', function(){ materiais[idx].qtd = parseFloat(this.value)||1; });
@@ -1185,11 +1136,74 @@ else if (typeof exports === 'object'){
       ul.appendChild(li);
     });
   }
-  $('matCustomAdd').addEventListener('click', ()=>{
-    const val = $('matCustomInput').value.trim(); if(!val) return;
-    addMaterial(val, 'Outro'); $('matCustomInput').value='';
+
+  function cadastrarMaterialNoCatalogo(nome){
+    nome = nome.trim(); if(!nome) return;
+    try{ run('INSERT INTO catalogo_materiais(nome, criado_em) VALUES (?,?)', [nome, new Date().toISOString()]); persist(); }
+    catch(e){ /* já existe no catálogo (ignora, nome único) */ }
+  }
+  function buscarNoCatalogo(termo){
+    const alvo = normTxt(termo);
+    if(!alvo) return [];
+    const todos = all('SELECT nome FROM catalogo_materiais ORDER BY nome').map(r=>r.nome);
+    const comeca = [], contem = [];
+    todos.forEach(nome=>{
+      const n = normTxt(nome);
+      if(n.startsWith(alvo)) comeca.push(nome);
+      else if(n.includes(alvo)) contem.push(nome);
+    });
+    return [...comeca, ...contem].slice(0, 8);
+  }
+  function renderSugestoes(){
+    const termo = $('matBuscaInput').value;
+    const box = $('matSuggestions');
+    if(!termo.trim()){ box.classList.remove('show'); box.innerHTML=''; return; }
+    const resultados = buscarNoCatalogo(termo);
+    const existeExato = resultados.some(nome=>normTxt(nome)===normTxt(termo));
+    let html = '';
+    resultados.forEach(nome=>{
+      html += `<button type="button" data-nome="${escHtml(nome)}">${escHtml(nome)}</button>`;
+    });
+    if(!existeExato){
+      html += `<button type="button" class="novo" data-novo="${escHtml(termo.trim())}">➕ Cadastrar "${escHtml(termo.trim())}" e adicionar</button>`;
+    }
+    if(!resultados.length && existeExato){
+      html = html || '<div class="sem-resultado">Nenhum material encontrado.</div>';
+    }
+    box.innerHTML = html;
+    box.classList.add('show');
+    box.querySelectorAll('button[data-nome]').forEach(b=>{
+      b.addEventListener('click', ()=>{
+        addMaterial(b.dataset.nome);
+        $('matBuscaInput').value=''; box.classList.remove('show'); box.innerHTML='';
+        $('matBuscaInput').focus();
+      });
+    });
+    const novoBtn = box.querySelector('button[data-novo]');
+    if(novoBtn){
+      novoBtn.addEventListener('click', ()=>{
+        const nome = novoBtn.dataset.novo;
+        cadastrarMaterialNoCatalogo(nome);
+        addMaterial(nome);
+        toast('Material cadastrado no catálogo ✓');
+        $('matBuscaInput').value=''; box.classList.remove('show'); box.innerHTML='';
+        $('matBuscaInput').focus();
+      });
+    }
+  }
+  $('matBuscaInput').addEventListener('input', renderSugestoes);
+  $('matBuscaInput').addEventListener('focus', renderSugestoes);
+  $('matBuscaInput').addEventListener('keydown', e=>{
+    if(e.key==='Enter'){
+      e.preventDefault();
+      const box = $('matSuggestions');
+      const primeiro = box.querySelector('button');
+      if(primeiro) primeiro.click();
+    }
   });
-  $('matCustomInput').addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); $('matCustomAdd').click(); }});
+  document.addEventListener('click', e=>{
+    if(!e.target.closest('.mat-search-wrap')){ $('matSuggestions').classList.remove('show'); }
+  });
 
   /* ================= Toggles Sim/Não ================= */
   function setupToggle(groupId, condId){
@@ -1748,7 +1762,7 @@ else if (typeof exports === 'object'){
 
   /* ================= Boot ================= */
   function boot(){
-    renderCatTabs(); renderMatGrid(); renderEquipe(); renderMatList();
+    renderEquipe(); renderMatList();
     $('f_data').valueAsDate = new Date();
     populateObraSelects();
     populateLocaisForObra($('f_obra').value);
