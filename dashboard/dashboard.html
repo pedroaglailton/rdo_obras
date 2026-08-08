@@ -62,15 +62,19 @@
   </div>
   <div class="cfg-bar" id="cfgBar">
     <input type="text" id="cfgServidor" placeholder="https://rdo.ipqsistemas.com.br">
-    <input type="text" id="cfgChave" placeholder="Chave de API">
-    <button id="btnConectar">Conectar</button>
+    <input type="text" id="cfgUsuario" placeholder="Usuário" autocomplete="username">
+    <input type="password" id="cfgSenha" placeholder="Senha" autocomplete="current-password">
+    <button id="btnConectar">Entrar</button>
     <button class="ghost" id="btnAtualizar" style="display:none;">↻ Atualizar</button>
+    <button class="ghost" id="btnExportar" style="display:none;">⬇️ Exportar Excel</button>
+    <button class="ghost" id="btnSair" style="display:none;">Sair</button>
+    <span class="refresh-info" id="usuarioLogado"></span>
     <span class="refresh-info" id="refreshInfo"></span>
   </div>
 </header>
 
 <main>
-  <div id="semConexao" class="empty" style="display:none;">Configure o servidor e a chave de API acima para carregar o dashboard.</div>
+  <div id="semConexao" class="empty" style="display:none;">Informe o endereço do servidor e a senha do dashboard acima para entrar.</div>
   <div id="erroConexao" class="empty" style="display:none;color:var(--danger);"></div>
 
   <div id="conteudo" style="display:none;">
@@ -135,22 +139,62 @@
     return `${p(d.getDate())}/${p(d.getMonth()+1)} ${p(d.getHours())}:${p(d.getMinutes())}`;
   }
 
-  $('btnConectar').addEventListener('click', ()=>{
+  $('btnConectar').addEventListener('click', fazerLogin);
+  $('cfgSenha').addEventListener('keydown', e=>{ if(e.key==='Enter') fazerLogin(); });
+
+  async function fazerLogin(){
     const servidor = $('cfgServidor').value.trim().replace(/\/+$/,'');
-    const chave = $('cfgChave').value.trim();
-    if(!servidor || !chave){ alert('Preencha servidor e chave de API.'); return; }
-    setCfg({servidor, chave});
-    startDashboard();
-  });
+    const usuario = $('cfgUsuario').value.trim();
+    const senha = $('cfgSenha').value;
+    if(!servidor || !usuario || !senha){ alert('Preencha o endereço do servidor, o usuário e a senha.'); return; }
+    $('erroConexao').style.display='none';
+    try{
+      const resp = await fetch(servidor+'/api/dashboard/login', {
+        method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({usuario, senha})
+      });
+      const data = await resp.json();
+      if(!resp.ok || !data.ok) throw new Error(data.erro || ('HTTP '+resp.status));
+      setCfg({servidor, token: data.token, usuario: data.usuario});
+      $('cfgSenha').value = '';
+      startDashboard();
+    }catch(err){
+      $('erroConexao').style.display='block';
+      $('erroConexao').textContent = 'Não foi possível entrar: ' + err.message;
+    }
+  }
+
   $('btnAtualizar').addEventListener('click', carregarDados);
+  $('btnExportar').addEventListener('click', exportarExcel);
+  $('btnSair').addEventListener('click', sair);
+
+  function sair(){
+    const cfg = getCfg();
+    if(cfg && cfg.token){
+      fetch(cfg.servidor+'/api/dashboard/logout', { method:'POST', headers:{'x-dashboard-token':cfg.token} }).catch(()=>{});
+    }
+    localStorage.removeItem(CFG_KEY);
+    if(refreshTimer) clearInterval(refreshTimer);
+    $('conteudo').style.display='none';
+    $('btnAtualizar').style.display='none';
+    $('btnExportar').style.display='none';
+    $('btnSair').style.display='none';
+    $('usuarioLogado').textContent = '';
+    $('cfgUsuario').value = '';
+    $('semConexao').style.display='block';
+  }
 
   function initFromStorage(){
     const cfg = getCfg();
-    if(cfg){ $('cfgServidor').value = cfg.servidor; $('cfgChave').value = cfg.chave; startDashboard(); }
+    if(cfg && cfg.token){ $('cfgServidor').value = cfg.servidor; if(cfg.usuario) $('cfgUsuario').value = cfg.usuario; startDashboard(); }
+    else { $('semConexao').style.display='block'; }
   }
 
   function startDashboard(){
     $('btnAtualizar').style.display='inline-block';
+    $('btnExportar').style.display='inline-block';
+    $('btnSair').style.display='inline-block';
+    const cfg = getCfg();
+    $('usuarioLogado').textContent = cfg && cfg.usuario ? ('👤 ' + cfg.usuario) : '';
     carregarDados();
     if(refreshTimer) clearInterval(refreshTimer);
     refreshTimer = setInterval(carregarDados, 30000);
@@ -158,11 +202,12 @@
 
   async function carregarDados(){
     const cfg = getCfg();
-    if(!cfg){ $('semConexao').style.display='block'; return; }
+    if(!cfg || !cfg.token){ $('semConexao').style.display='block'; return; }
     $('erroConexao').style.display='none';
     try{
-      const resp = await fetch(cfg.servidor+'/api/dashboard', { headers:{'x-api-key':cfg.chave} });
-      if(!resp.ok) throw new Error('HTTP '+resp.status+(resp.status===401?' (chave de API inválida)':''));
+      const resp = await fetch(cfg.servidor+'/api/dashboard', { headers:{'x-dashboard-token':cfg.token} });
+      if(resp.status===401){ localStorage.removeItem(CFG_KEY); sair(); throw new Error('Sessão expirada. Faça login novamente.'); }
+      if(!resp.ok) throw new Error('HTTP '+resp.status);
       const data = await resp.json();
       $('semConexao').style.display='none';
       $('conteudo').style.display='block';
@@ -173,6 +218,29 @@
       $('conteudo').style.display='none';
       $('erroConexao').style.display='block';
       $('erroConexao').textContent = 'Não foi possível carregar: ' + err.message;
+    }
+  }
+
+  async function exportarExcel(){
+    const cfg = getCfg();
+    if(!cfg || !cfg.token) return;
+    const btn = $('btnExportar');
+    const textoOriginal = btn.textContent;
+    btn.textContent = 'Gerando...'; btn.disabled = true;
+    try{
+      const resp = await fetch(cfg.servidor+'/api/export/excel', { headers:{'x-dashboard-token':cfg.token} });
+      if(!resp.ok) throw new Error('HTTP '+resp.status);
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `rdo_relatorio_${new Date().toISOString().slice(0,10)}.xlsx`;
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+    }catch(err){
+      alert('Não foi possível gerar o Excel: ' + err.message);
+    }finally{
+      btn.textContent = textoOriginal; btn.disabled = false;
     }
   }
 
