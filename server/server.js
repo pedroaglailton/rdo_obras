@@ -78,6 +78,12 @@ const app = express();
 app.use(cors());
 app.use(express.json({ limit: '5mb' }));
 
+// Serve o app de campo e o dashboard como páginas estáticas, direto dessa
+// mesma URL — assim não precisa mandar o .html por WhatsApp pra cada técnico.
+app.use('/app-campo', express.static(path.join(__dirname, '..', 'app-campo')));
+app.use('/dashboard', express.static(path.join(__dirname, '..', 'dashboard')));
+app.get('/', (req, res) => res.redirect('/app-campo/rdo-campo.html'));
+
 function checkAuth(req, res, next) {
   const key = req.header('x-api-key');
   if (key !== API_KEY) return res.status(401).json({ ok: false, erro: 'API key inválida' });
