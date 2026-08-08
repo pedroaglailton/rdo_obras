@@ -1,10 +1,4 @@
-# Blueprint do Render — "New +" > "Blueprint" na raiz deste repositório.
-# O código do servidor mora em /server, por isso o rootDir abaixo.
-#
-# Sobe no plano Free, sem disco persistente (bom pra testar; o banco .sqlite
-# é apagado a cada novo deploy/reinício). Antes de usar com técnicos de
-# verdade em campo, suba pra um plano pago e descomente o bloco "disk"
-# abaixo — veja server/README.md, seção "Deploy no GitHub + Render".
+
 services:
   - type: web
     name: rdo-central
