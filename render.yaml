@@ -16,6 +16,11 @@ services:
     envVars:
       - key: API_KEY
         generateValue: true
+      - key: DASHBOARD_USERS
+        value: "Engenheiro:troque-esta-senha,Estagiario:troque-esta-tambem"
+        # ↑ formato "Nome:senha,Nome2:senha2" — depois do deploy, vá em
+        # "Environment" no painel do Render e troque pelos nomes e senhas
+        # reais. Todas as contas aqui têm a mesma permissão no dashboard.
     # disk:
     #   name: rdo-data
     #   mountPath: /var/data
