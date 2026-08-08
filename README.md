@@ -1,4 +1,4 @@
-# RDO de Campo — IPQ Tecnologia
+# RDO de Campo
 
 Sistema de registro diário de obra (RDO) para técnicos em campo.
 
