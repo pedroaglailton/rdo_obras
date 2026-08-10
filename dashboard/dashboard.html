@@ -104,7 +104,7 @@
     <section class="block">
       <h2>🕒 RDOs recentes</h2>
       <table id="tabelaRdos">
-        <thead><tr><th>Recebido</th><th>Técnico</th><th>Obra</th><th>Local</th><th>Atividade</th><th>Data</th></tr></thead>
+        <thead><tr><th>Recebido</th><th>Técnico</th><th>Obra</th><th>Local</th><th>Atividade</th><th>Data</th><th>Vistoria</th></tr></thead>
         <tbody></tbody>
       </table>
     </section>
@@ -260,9 +260,11 @@
       {val: ind.totalRdos, lbl:'RDOs no total'},
       {val: ind.rdosHoje, lbl:'RDOs hoje'},
       {val: ind.atrasosHoje, lbl:'Atrasos/paradas hoje'},
-      {val: data.tecnicos.filter(t=>Date.now()-new Date(t.atualizado_em).getTime() < 15*60000).length, lbl:'Técnicos ativos agora'}
+      {val: data.tecnicos.filter(t=>Date.now()-new Date(t.atualizado_em).getTime() < 15*60000).length, lbl:'Técnicos ativos agora'},
+      {val: ind.rdosPendentesVistoria, lbl:'RDOs sem vistoria', warn: ind.rdosPendentesVistoria>0},
+      {val: ind.vistoriasReprovadas, lbl:'Vistorias reprovadas', danger: ind.vistoriasReprovadas>0}
     ];
-    $('statsGrid').innerHTML = cards.map(c=>`<div class="stat-card"><div class="val">${c.val}</div><div class="lbl">${c.lbl}</div></div>`).join('');
+    $('statsGrid').innerHTML = cards.map(c=>`<div class="stat-card"><div class="val" style="${c.danger?'color:var(--danger)':c.warn?'color:var(--warn)':''}">${c.val}</div><div class="lbl">${c.lbl}</div></div>`).join('');
   }
 
   function renderTecnicos(data){
@@ -314,9 +316,20 @@
       </div>`).join('');
   }
 
+  function badgeVistoria(r){
+    const mapa = {
+      aprovado: ['var(--ok)','var(--ok-bg)','Aprovado'],
+      reprovado: ['var(--danger)','var(--danger-bg)','Reprovado'],
+      aprovado_com_ressalva: ['var(--warn)','var(--warn-bg)','C/ ressalva'],
+    };
+    if(!r.vistoria_status) return `<span style="color:var(--muted);font-size:12px;">— pendente</span>`;
+    const [cor, bg, txt] = mapa[r.vistoria_status] || ['var(--muted)','var(--bg)', r.vistoria_status];
+    return `<span style="color:${cor};background:${bg};padding:2px 8px;border-radius:99px;font-size:11px;font-weight:700;">${txt}</span>`;
+  }
+
   function renderTabela(rdos){
     const tbody = document.querySelector('#tabelaRdos tbody');
-    if(!rdos.length){ tbody.innerHTML = '<tr><td colspan="6" class="empty">Nenhum RDO recebido ainda.</td></tr>'; return; }
+    if(!rdos.length){ tbody.innerHTML = '<tr><td colspan="7" class="empty">Nenhum RDO recebido ainda.</td></tr>'; return; }
     tbody.innerHTML = rdos.map(r=>`
       <tr class="${r.parou==='sim'?'atraso':''}">
         <td>${formatarDataHora(r.recebido_em)}</td>
@@ -325,6 +338,7 @@
         <td>${escHtml(r.local||'—')}</td>
         <td>${escHtml(r.atividade||'—')} ${r.parou==='sim'?'<span class="badge-atraso">atraso</span>':''}</td>
         <td>${formatarData(r.data_servico)}</td>
+        <td>${badgeVistoria(r)}</td>
       </tr>`).join('');
   }
 
