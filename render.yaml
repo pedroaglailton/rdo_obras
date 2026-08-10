@@ -1,4 +1,10 @@
-
+# Blueprint do Render — "New +" > "Blueprint" na raiz deste repositório.
+# O código do servidor mora em /server, por isso o rootDir abaixo.
+#
+# Sobe no plano Free, sem disco persistente (bom pra testar; o banco .sqlite
+# é apagado a cada novo deploy/reinício). Antes de usar com técnicos de
+# verdade em campo, suba pra um plano pago e descomente o bloco "disk"
+# abaixo — veja server/README.md, seção "Deploy no GitHub + Render".
 services:
   - type: web
     name: rdo-central
@@ -15,6 +21,10 @@ services:
         # ↑ formato "Nome:senha,Nome2:senha2" — depois do deploy, vá em
         # "Environment" no painel do Render e troque pelos nomes e senhas
         # reais. Todas as contas aqui têm a mesma permissão no dashboard.
+      - key: FISCAL_USERS
+        value: "Fiscal:troque-esta-senha"
+        # ↑ mesmo formato, mas pro app de fiscalização (contas separadas
+        # do dashboard). Troque depois do deploy também.
     # disk:
     #   name: rdo-data
     #   mountPath: /var/data
