@@ -1,6 +1,29 @@
 // Servidor central do RDO de Campo — recebe sincronizações dos celulares
 // dos técnicos e serve os dados para o dashboard do gestor.
 //
+// Uso:
+//   npm install
+//   node server.js
+//
+// Variáveis de ambiente (opcionais):
+//   PORT             - porta HTTP (padrão 3000)
+//   API_KEY          - chave técnica que o app de campo envia no header
+//                       'x-api-key' pra sincronizar (se não definir, é
+//                       gerada automaticamente na 1a execução e salva em
+//                       api_key.txt)
+//   DASHBOARD_USERS  - contas de login do dashboard, formato
+//                       "Nome:senha,Nome2:senha2" (todas com a mesma
+//                       permissão — ver, atualizar e exportar). Se não
+//                       definir, duas contas padrão ("Engenheiro" e
+//                       "Estagiario") são geradas automaticamente na 1a
+//                       execução e salvas em dashboard_usuarios.json.
+//   FISCAL_USERS     - contas de login do app de fiscalização, mesmo
+//                       formato "Nome:senha,Nome2:senha2". Não têm acesso
+//                       ao dashboard nem à sincronização dos técnicos — só
+//                       ao app de fiscalização. Se não definir, uma conta
+//                       padrão ("Fiscal") é gerada e salva em
+//                       fiscal_usuarios.json.
+//   DB_PATH          - caminho do arquivo do banco (padrão ./rdo_central.sqlite)
 
 const express = require('express');
 const cors = require('cors');
@@ -14,6 +37,7 @@ const PORT = process.env.PORT || 3000;
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, 'rdo_central.sqlite');
 const API_KEY_FILE = path.join(__dirname, 'api_key.txt');
 const DASHBOARD_USERS_FILE = path.join(__dirname, 'dashboard_usuarios.json');
+const FISCAL_USERS_FILE = path.join(__dirname, 'fiscal_usuarios.json');
 const SESSAO_DURACAO_MS = 12 * 60 * 60 * 1000; // 12 horas
 
 let API_KEY = process.env.API_KEY;
@@ -51,6 +75,32 @@ if (process.env.DASHBOARD_USERS) {
 }
 console.log('>> Contas do dashboard ativas:', Object.keys(DASHBOARD_USERS).map(n => `${n}:${DASHBOARD_USERS[n]}`).join('  |  '));
 
+// Contas do app de fiscalização — separadas das do dashboard e da API_KEY.
+// Só dão acesso ao app de fiscalização (conferir o que foi declarado nos
+// RDOs), não ao dashboard nem à sincronização dos técnicos.
+let FISCAL_USERS = {};
+if (process.env.FISCAL_USERS) {
+  process.env.FISCAL_USERS.split(',').forEach(par => {
+    const [nome, senha] = par.split(':').map(s => (s || '').trim());
+    if (nome && senha) FISCAL_USERS[nome] = senha;
+  });
+} else if (fs.existsSync(FISCAL_USERS_FILE)) {
+  FISCAL_USERS = JSON.parse(fs.readFileSync(FISCAL_USERS_FILE, 'utf8'));
+} else {
+  FISCAL_USERS = { Fiscal: crypto.randomBytes(4).toString('hex') };
+  fs.writeFileSync(FISCAL_USERS_FILE, JSON.stringify(FISCAL_USERS, null, 2));
+  console.log('>> Conta do fiscal gerada e salva em fiscal_usuarios.json — informe usuário+senha pro fiscal (ou defina FISCAL_USERS no ambiente pra escolher as suas).');
+}
+console.log('>> Contas do fiscal ativas:', Object.keys(FISCAL_USERS).map(n => `${n}:${FISCAL_USERS[n]}`).join('  |  '));
+
+// Sessões do fiscal — separadas das do dashboard (roles diferentes).
+const sessoesFiscal = new Map();
+function criarSessaoFiscal(usuario) {
+  const token = crypto.randomBytes(24).toString('hex');
+  sessoesFiscal.set(token, { usuario, expira: Date.now() + SESSAO_DURACAO_MS });
+  return token;
+}
+
 // Sessões de dashboard em memória: token -> { usuario, expira }
 const sessoesDashboard = new Map();
 function criarSessao(usuario) {
@@ -62,6 +112,9 @@ function limparSessoesExpiradas() {
   const agora = Date.now();
   for (const [token, s] of sessoesDashboard) {
     if (s.expira < agora) sessoesDashboard.delete(token);
+  }
+  for (const [token, s] of sessoesFiscal) {
+    if (s.expira < agora) sessoesFiscal.delete(token);
   }
 }
 setInterval(limparSessoesExpiradas, 30 * 60000).unref();
@@ -103,6 +156,21 @@ CREATE TABLE IF NOT EXISTS heartbeats (
   lat REAL, lon REAL,
   atualizado_em TEXT
 );
+CREATE TABLE IF NOT EXISTS vistorias (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  uid TEXT UNIQUE NOT NULL,
+  rdo_uid TEXT NOT NULL,
+  fiscal TEXT,
+  data_vistoria TEXT,
+  local_confere TEXT,
+  switch_conferido TEXT, switch_ok TEXT,
+  camera_conferida TEXT, camera_ok TEXT,
+  observacoes TEXT,
+  qtd_fotos INTEGER DEFAULT 0,
+  status TEXT,
+  lat REAL, lon REAL,
+  recebido_em TEXT
+);
 `);
 
 const app = express();
@@ -113,6 +181,7 @@ app.use(express.json({ limit: '5mb' }));
 // mesma URL — assim não precisa mandar o .html por WhatsApp pra cada técnico.
 app.use('/app-campo', express.static(path.join(__dirname, '..', 'app-campo')));
 app.use('/dashboard', express.static(path.join(__dirname, '..', 'dashboard')));
+app.use('/fiscalizacao', express.static(path.join(__dirname, '..', 'fiscalizacao')));
 app.get('/', (req, res) => res.redirect('/app-campo/rdo-campo.html'));
 
 function checkAuth(req, res, next) {
@@ -151,6 +220,37 @@ app.post('/api/dashboard/login', (req, res) => {
 
 app.post('/api/dashboard/logout', checkDashboardAuth, (req, res) => {
   sessoesDashboard.delete(req.header('x-dashboard-token'));
+  res.json({ ok: true });
+});
+
+// Autenticação do app de fiscalização — mesmo esquema do dashboard, mas
+// completamente separada (contas diferentes, sessões diferentes).
+function checkFiscalAuth(req, res, next) {
+  const token = req.header('x-fiscal-token');
+  const sessao = token && sessoesFiscal.get(token);
+  if (!sessao) {
+    return res.status(401).json({ ok: false, erro: 'Sessão inválida ou expirada. Faça login novamente.' });
+  }
+  if (sessao.expira < Date.now()) {
+    sessoesFiscal.delete(token);
+    return res.status(401).json({ ok: false, erro: 'Sessão expirada. Faça login novamente.' });
+  }
+  sessao.expira = Date.now() + SESSAO_DURACAO_MS;
+  req.fiscalUsuario = sessao.usuario;
+  next();
+}
+
+app.post('/api/fiscal/login', (req, res) => {
+  const { usuario, senha } = req.body || {};
+  if (!usuario || !senha || FISCAL_USERS[usuario] !== senha) {
+    return res.status(401).json({ ok: false, erro: 'Usuário ou senha incorretos.' });
+  }
+  const token = criarSessaoFiscal(usuario);
+  res.json({ ok: true, token, usuario, expira_em: SESSAO_DURACAO_MS });
+});
+
+app.post('/api/fiscal/logout', checkFiscalAuth, (req, res) => {
+  sessoesFiscal.delete(req.header('x-fiscal-token'));
   res.json({ ok: true });
 });
 
@@ -216,16 +316,76 @@ app.post('/api/heartbeat', checkAuth, (req, res) => {
   res.json({ ok: true });
 });
 
-// ---- Dados agregados para o dashboard ----
+// ---- Lista de RDOs pro fiscal escolher o que vistoriar ----
+// Filtros opcionais: ?obra=Nome&local=Nome&pendentes=true (só sem vistoria)
+app.get('/api/fiscal/rdos', checkFiscalAuth, (req, res) => {
+  const { obra, local, pendentes } = req.query;
+  let sql = `
+    SELECT r.*,
+      v.uid AS vistoria_uid, v.status AS vistoria_status, v.fiscal AS vistoria_fiscal,
+      v.data_vistoria AS vistoria_data
+    FROM rdos r
+    LEFT JOIN vistorias v ON v.rdo_uid = r.uid
+    WHERE 1=1
+  `;
+  const params = [];
+  if (obra) { sql += ' AND r.obra_nome = ?'; params.push(obra); }
+  if (local) { sql += ' AND r.local = ?'; params.push(local); }
+  if (pendentes === 'true') { sql += ' AND v.uid IS NULL'; }
+  sql += ' ORDER BY r.data_servico DESC, r.recebido_em DESC LIMIT 200';
+  const rdos = db.prepare(sql).all(...params);
+  res.json({ ok: true, rdos, obras: db.prepare('SELECT * FROM obras ORDER BY nome').all() });
+});
+
+// ---- Sincronização vinda do app de fiscalização ----
+app.post('/api/fiscal/sync', checkFiscalAuth, (req, res) => {
+  const { vistorias = [] } = req.body || {};
+  const upsertVistoria = db.prepare(`
+    INSERT INTO vistorias (uid, rdo_uid, fiscal, data_vistoria, local_confere,
+      switch_conferido, switch_ok, camera_conferida, camera_ok, observacoes,
+      qtd_fotos, status, lat, lon, recebido_em)
+    VALUES (@uid, @rdo_uid, @fiscal, @data_vistoria, @local_confere,
+      @switch_conferido, @switch_ok, @camera_conferida, @camera_ok, @observacoes,
+      @qtd_fotos, @status, @lat, @lon, @recebido_em)
+    ON CONFLICT(uid) DO UPDATE SET
+      data_vistoria=@data_vistoria, local_confere=@local_confere,
+      switch_conferido=@switch_conferido, switch_ok=@switch_ok,
+      camera_conferida=@camera_conferida, camera_ok=@camera_ok,
+      observacoes=@observacoes, qtd_fotos=@qtd_fotos, status=@status,
+      lat=@lat, lon=@lon, recebido_em=@recebido_em
+  `);
+  const tx = db.transaction((vistorias) => {
+    vistorias.forEach(v => upsertVistoria.run({
+      uid: v.uid, rdo_uid: v.rdo_uid, fiscal: req.fiscalUsuario, data_vistoria: v.data_vistoria,
+      local_confere: v.local_confere, switch_conferido: v.switch_conferido || '', switch_ok: v.switch_ok || '',
+      camera_conferida: v.camera_conferida || '', camera_ok: v.camera_ok || '',
+      observacoes: v.observacoes || '', qtd_fotos: v.qtd_fotos || 0, status: v.status,
+      lat: v.lat ?? null, lon: v.lon ?? null, recebido_em: new Date().toISOString()
+    }));
+  });
+  tx(vistorias);
+  res.json({ ok: true, vistorias_recebidas: vistorias.length });
+});
+
+
 app.get('/api/dashboard', checkDashboardAuth, (req, res) => {
   const heartbeats = db.prepare('SELECT * FROM heartbeats ORDER BY atualizado_em DESC').all();
-  const rdosRecentes = db.prepare('SELECT * FROM rdos ORDER BY recebido_em DESC LIMIT 100').all();
+  const rdosRecentes = db.prepare(`
+    SELECT r.*, v.status AS vistoria_status, v.fiscal AS vistoria_fiscal, v.data_vistoria AS vistoria_data
+    FROM rdos r LEFT JOIN vistorias v ON v.rdo_uid = r.uid
+    ORDER BY r.recebido_em DESC LIMIT 100
+  `).all();
   const totalRdos = db.prepare('SELECT COUNT(*) c FROM rdos').get().c;
   const totalObras = db.prepare('SELECT COUNT(*) c FROM obras').get().c;
   const hoje = new Date().toISOString().slice(0, 10);
   const atrasosHoje = db.prepare(`SELECT COUNT(*) c FROM rdos WHERE parou='sim' AND data_servico=?`).get(hoje).c;
   const rdosPorObra = db.prepare(`SELECT obra_nome, COUNT(*) c FROM rdos GROUP BY obra_nome ORDER BY c DESC`).all();
   const rdosHoje = db.prepare(`SELECT COUNT(*) c FROM rdos WHERE data_servico=?`).get(hoje).c;
+  const totalVistorias = db.prepare('SELECT COUNT(*) c FROM vistorias').get().c;
+  const vistoriasReprovadas = db.prepare(`SELECT COUNT(*) c FROM vistorias WHERE status='reprovado'`).get().c;
+  const rdosPendentesVistoria = db.prepare(`
+    SELECT COUNT(*) c FROM rdos r LEFT JOIN vistorias v ON v.rdo_uid = r.uid WHERE v.uid IS NULL
+  `).get().c;
 
   // materiais mais usados (soma das quantidades, lendo o JSON de cada RDO)
   const contMateriais = {};
@@ -243,7 +403,7 @@ app.get('/api/dashboard', checkDashboardAuth, (req, res) => {
     ok: true,
     tecnicos: heartbeats,
     rdos_recentes: rdosRecentes,
-    indicadores: { totalRdos, totalObras, atrasosHoje, rdosHoje, rdosPorObra, materiaisTop },
+    indicadores: { totalRdos, totalObras, atrasosHoje, rdosHoje, rdosPorObra, materiaisTop, totalVistorias, vistoriasReprovadas, rdosPendentesVistoria },
     obras: db.prepare('SELECT * FROM obras ORDER BY nome').all()
   });
 });
@@ -310,6 +470,32 @@ app.get('/api/export/excel', checkDashboardAuth, async (req, res) => {
     wsMat.getRow(1).font = { bold: true };
     wsMat.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE3E7ED' } };
 
+    // --- Aba 3: Vistorias (fiscalização vinculada a cada RDO) ---
+    const wsVist = wb.addWorksheet('Vistorias');
+    wsVist.columns = [
+      { header: 'Data RDO', key: 'data_servico', width: 12 },
+      { header: 'Técnico', key: 'tecnico', width: 20 },
+      { header: 'Obra', key: 'obra_nome', width: 22 },
+      { header: 'Local', key: 'local', width: 20 },
+      { header: 'Status vistoria', key: 'status', width: 16 },
+      { header: 'Fiscal', key: 'fiscal', width: 18 },
+      { header: 'Data vistoria', key: 'data_vistoria', width: 14 },
+      { header: 'Local confere', key: 'local_confere', width: 13 },
+      { header: 'Switch conferido', key: 'switch_conferido', width: 15 },
+      { header: 'Switch OK', key: 'switch_ok', width: 11 },
+      { header: 'Câmera conferida', key: 'camera_conferida', width: 15 },
+      { header: 'Câmera OK', key: 'camera_ok', width: 11 },
+      { header: 'Observações', key: 'observacoes', width: 34 },
+      { header: 'Qtd. fotos', key: 'qtd_fotos', width: 10 },
+    ];
+    wsVist.getRow(1).font = { bold: true };
+    wsVist.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE3E7ED' } };
+    const rotuloStatus = s => s === 'aprovado' ? 'Aprovado' : s === 'reprovado' ? 'Reprovado' : s === 'aprovado_com_ressalva' ? 'Aprovado c/ ressalva' : 'Não vistoriado';
+    const rotuloSN = v => v === 'sim' ? 'Sim' : v === 'nao' ? 'Não' : '';
+
+    const vistoriasPorRdo = db.prepare('SELECT * FROM vistorias').all()
+      .reduce((acc, v) => { acc[v.rdo_uid] = v; return acc; }, {});
+
     rdos.forEach(r => {
       let equipeTxt = '';
       let materiaisArr = [];
@@ -335,6 +521,16 @@ app.get('/api/export/excel', checkDashboardAuth, async (req, res) => {
           data_servico: r.data_servico, tecnico: r.tecnico, obra_nome: r.obra_nome,
           local: r.local, material: m.nome, qtd: Number(m.qtd || 0),
         });
+      });
+
+      const v = vistoriasPorRdo[r.uid];
+      wsVist.addRow({
+        data_servico: r.data_servico, tecnico: r.tecnico, obra_nome: r.obra_nome, local: r.local,
+        status: rotuloStatus(v && v.status), fiscal: v ? v.fiscal : '',
+        data_vistoria: v ? v.data_vistoria : '', local_confere: v ? rotuloSN(v.local_confere) : '',
+        switch_conferido: v ? rotuloSN(v.switch_conferido) : '', switch_ok: v ? rotuloSN(v.switch_ok) : '',
+        camera_conferida: v ? rotuloSN(v.camera_conferida) : '', camera_ok: v ? rotuloSN(v.camera_ok) : '',
+        observacoes: v ? v.observacoes : '', qtd_fotos: v ? v.qtd_fotos : '',
       });
     });
 
