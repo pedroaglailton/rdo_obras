@@ -171,6 +171,14 @@ CREATE TABLE IF NOT EXISTS vistorias (
   lat REAL, lon REAL,
   recebido_em TEXT
 );
+CREATE TABLE IF NOT EXISTS obra_entregas (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  obra_nome TEXT NOT NULL,
+  locais TEXT DEFAULT '[]',
+  destinatario TEXT NOT NULL,
+  entregue INTEGER DEFAULT 0,
+  criado_em TEXT
+);
 `);
 
 const app = express();
@@ -298,7 +306,17 @@ app.post('/api/sync', checkAuth, (req, res) => {
   });
   tx(obras, rdos);
 
-  res.json({ ok: true, obras_recebidas: obras.length, rdos_recebidas: rdos.length });
+  // Entregas pendentes de obras criadas pelo dashboard
+  const pendentes = db.prepare(
+    'SELECT id, obra_nome, locais FROM obra_entregas WHERE destinatario = ? AND entregue = 0'
+  ).all(tecnico);
+  if (pendentes.length) {
+    const mark = db.prepare('UPDATE obra_entregas SET entregue = 1 WHERE id = ?');
+    const tx2 = db.transaction(() => { pendentes.forEach(p => mark.run(p.id)); });
+    tx2();
+  }
+
+  res.json({ ok: true, obras_recebidas: obras.length, rdos_recebidas: rdos.length, obras_pendentes: pendentes });
 });
 
 // ---- "Estou aqui" — pulso de status enviado pelo app enquanto está online ----
@@ -367,6 +385,52 @@ app.post('/api/fiscal/sync', checkFiscalAuth, (req, res) => {
   res.json({ ok: true, vistorias_recebidas: vistorias.length });
 });
 
+
+// ---- Cadastro de obras pelo dashboard (engenheiro) ----
+app.post('/api/dashboard/obra', checkDashboardAuth, (req, res) => {
+  const { nome, locais = [] } = req.body || {};
+  if (!nome || !nome.trim()) return res.status(400).json({ ok: false, erro: 'Nome da obra é obrigatório.' });
+  const nomeTrim = nome.trim();
+
+  try {
+    db.prepare('INSERT INTO obras (nome, locais, criado_em) VALUES (?, ?, ?)').run(
+      nomeTrim, JSON.stringify(locais), new Date().toISOString()
+    );
+  } catch (e) {
+    if (e.message && e.message.includes('UNIQUE')) {
+      return res.status(409).json({ ok: false, erro: 'Já existe uma obra com esse nome.' });
+    }
+    return res.status(500).json({ ok: false, erro: e.message });
+  }
+
+  const tecnicos = db.prepare('SELECT DISTINCT tecnico FROM heartbeats').all();
+  const stmtEntrega = db.prepare(
+    'INSERT OR IGNORE INTO obra_entregas (obra_nome, locais, destinatario, criado_em) VALUES (?, ?, ?, ?)'
+  );
+  const agora = new Date().toISOString();
+  const tx = db.transaction(() => {
+    tecnicos.forEach(t => {
+      stmtEntrega.run(nomeTrim, JSON.stringify(locais), t.tecnico, agora);
+    });
+  });
+  tx();
+
+  res.json({ ok: true, obra: { nome: nomeTrim, locais, criado_em: agora } });
+});
+
+app.get('/api/dashboard/obras', checkDashboardAuth, (req, res) => {
+  const obras = db.prepare('SELECT * FROM obras ORDER BY nome').all();
+  res.json({ ok: true, obras });
+});
+
+app.delete('/api/dashboard/obra/:id', checkDashboardAuth, (req, res) => {
+  const { id } = req.params;
+  const obra = db.prepare('SELECT * FROM obras WHERE id = ?').get(id);
+  if (!obra) return res.status(404).json({ ok: false, erro: 'Obra não encontrada.' });
+  db.prepare('DELETE FROM obras WHERE id = ?').run(id);
+  db.prepare('DELETE FROM obra_entregas WHERE obra_nome = ?').run(obra.nome);
+  res.json({ ok: true });
+});
 
 app.get('/api/dashboard', checkDashboardAuth, (req, res) => {
   const heartbeats = db.prepare('SELECT * FROM heartbeats ORDER BY atualizado_em DESC').all();

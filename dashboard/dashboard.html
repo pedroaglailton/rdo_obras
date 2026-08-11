@@ -51,6 +51,23 @@
   .badge-atraso{background:var(--danger-bg);color:var(--danger);padding:2px 8px;border-radius:99px;font-size:11px;font-weight:700;}
   .refresh-info{font-size:12px;color:var(--muted);}
   @media (max-width:800px){ .two-col{grid-template-columns:1fr;} }
+
+  .obra-mgmt-item{
+    display:flex;align-items:center;justify-content:space-between;gap:10px;
+    padding:11px 14px;border:1px solid var(--line);border-radius:10px;margin-bottom:8px;background:var(--bg);
+    font-size:13px;
+  }
+  .obra-mgmt-item .onome{font-weight:700;font-size:14px;}
+  .obra-mgmt-item .ometa{font-size:11.5px;color:var(--muted);margin-top:2px;}
+  .obra-mgmt-item .oact button{
+    border:none;background:var(--danger-bg);color:var(--danger);border-radius:8px;padding:6px 10px;
+    font-size:11.5px;font-weight:700;cursor:pointer;
+  }
+  .obra-mgmt-item .oact button:hover{background:var(--danger);color:#fff;}
+  .obra-mgmt-locais{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px;}
+  .obra-mgmt-locais span{
+    background:var(--card);border:1px solid var(--line);border-radius:99px;padding:2px 9px;font-size:11px;
+  }
 </style>
 </head>
 <body>
@@ -83,6 +100,18 @@
     <section class="block">
       <h2>👷 Técnicos</h2>
       <div class="tec-grid" id="tecGrid"></div>
+    </section>
+
+    <section class="block">
+      <h2>🏗️ Gerenciar Obras</h2>
+      <div id="obrasGerenciamento"></div>
+      <div style="margin-top:14px;">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <input type="text" id="inputNovaObra" placeholder="Nome da nova obra" style="flex:1;min-width:200px;padding:9px 11px;border:1.5px solid var(--line);border-radius:8px;font-size:13px;">
+          <button onclick="window.__adicionarObra()" style="padding:9px 15px;border:none;border-radius:8px;background:var(--primary);color:#fff;font-weight:700;font-size:12.5px;cursor:pointer;">+ Cadastrar Obra</button>
+        </div>
+        <div id="msgObra" style="display:none;margin-top:8px;padding:8px 10px;border-radius:8px;font-size:12.5px;"></div>
+      </div>
     </section>
 
     <section class="block">
@@ -251,6 +280,7 @@
     renderBars('materiaisBars', data.indicadores.materiaisTop.map(m=>({name:m.nome, val:m.qtd})));
     renderBars('obrasBars', data.indicadores.rdosPorObra.map(o=>({name:o.obra_nome||'sem obra', val:o.c})));
     renderTabela(data.rdos_recentes);
+    renderObrasGerenciamento(data.obras || []);
   }
 
   function renderStats(data){
@@ -340,6 +370,77 @@
         <td>${formatarData(r.data_servico)}</td>
         <td>${badgeVistoria(r)}</td>
       </tr>`).join('');
+  }
+
+  // ---------------- Obras: cadastro e gerenciamento pelo dashboard ----------------
+  function renderObrasGerenciamento(obras){
+    const box = $('obrasGerenciamento');
+    if(!obras.length){ box.innerHTML = '<div style="padding:12px;color:var(--muted);font-size:13px;border:1.5px dashed var(--line);border-radius:10px;">Nenhuma obra cadastrada. Use o campo acima para adicionar.</div>'; return; }
+    box.innerHTML = obras.map(o=>{
+      let locais = [];
+      try { locais = JSON.parse(o.locais || '[]'); } catch(e) {}
+      const locaisHtml = locais.length
+        ? `<div class="obra-mgmt-locais">${locais.map(l=>`<span>${escHtml(l)}</span>`).join('')}</div>`
+        : '';
+      return `<div class="obra-mgmt-item">
+        <div>
+          <div class="onome">${escHtml(o.nome)}</div>
+          <div class="ometa">ID: ${o.id}${o.criado_em ? ' · Criado em ' + formatarDataHora(o.criado_em) : ''}</div>
+          ${locaisHtml}
+        </div>
+        <div class="oact"><button onclick="window.__excluirObra(${o.id},'${escHtml(o.nome).replace(/'/g,"\\'")}')" title="Excluir obra">Excluir</button></div>
+      </div>`;
+    }).join('');
+  }
+
+  window.__adicionarObra = async function(){
+    const input = $('inputNovaObra');
+    const nome = input.value.trim();
+    if(!nome){ mostrarMsgObra('Informe o nome da obra.', true); return; }
+    const cfg = getCfg();
+    if(!cfg || !cfg.token){ mostrarMsgObra('Faça login primeiro.', true); return; }
+    try {
+      const resp = await fetch(cfg.servidor + '/api/dashboard/obra', {
+        method: 'POST',
+        headers: { 'Content-Type':'application/json', 'x-dashboard-token': cfg.token },
+        body: JSON.stringify({ nome, locais: [] })
+      });
+      const data = await resp.json();
+      if(!resp.ok || !data.ok) throw new Error(data.erro || ('HTTP '+resp.status));
+      input.value = '';
+      mostrarMsgObra('Obra "' + nome + '" cadastrada e enviada para os técnicos! ✓', false);
+      carregarDados();
+    } catch(err){
+      mostrarMsgObra('Erro: ' + err.message, true);
+    }
+  };
+
+  window.__excluirObra = async function(id, nome){
+    if(!confirm('Excluir a obra "' + nome + '"?')) return;
+    const cfg = getCfg();
+    if(!cfg || !cfg.token) return;
+    try {
+      const resp = await fetch(cfg.servidor + '/api/dashboard/obra/' + id, {
+        method: 'DELETE',
+        headers: { 'x-dashboard-token': cfg.token }
+      });
+      const data = await resp.json();
+      if(!resp.ok || !data.ok) throw new Error(data.erro || ('HTTP '+resp.status));
+      mostrarMsgObra('Obra excluída.', false);
+      carregarDados();
+    } catch(err){
+      mostrarMsgObra('Erro ao excluir: ' + err.message, true);
+    }
+  };
+
+  function mostrarMsgObra(msg, isErro){
+    const el = $('msgObra');
+    el.textContent = msg;
+    el.style.display = 'block';
+    el.style.background = isErro ? 'var(--danger-bg)' : 'var(--ok-bg)';
+    el.style.color = isErro ? 'var(--danger)' : 'var(--ok)';
+    el.style.border = '1px solid ' + (isErro ? 'var(--danger)' : 'var(--ok)');
+    setTimeout(()=>{ el.style.display = 'none'; }, 4000);
   }
 
   initFromStorage();
