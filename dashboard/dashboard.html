@@ -465,8 +465,8 @@
         const mesIdx = parseInt(d.data.slice(5,7)) - 1;
         const mes = meses[mesIdx];
         const isHoje = d.data === hoje;
-        let cls = d.status;
-        if(d.status === 'fds') cls = 'fds';
+        const statusMap = { com_rdo: 'com-rdo', sem_rdo: 'sem-rdo', feriado: 'feriado', fds: 'fds' };
+        const cls = statusMap[d.status] || d.status;
         const titles = {
           com_rdo: d.data + ' ✓ RDO registrado',
           sem_rdo: d.data + ' ✗ SEM RDO',
