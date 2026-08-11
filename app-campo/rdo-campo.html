@@ -597,16 +597,7 @@
       As obras aparecem aqui automaticamente quando você sincroniza. Se uma obra ainda não está listada, solicite ao engenheiro que cadastre no dashboard.
     </div>
     <div class="card">
-      <h2><span class="n">+</span>Nova obra</h2>
-      <label for="f_novaObra">Nome da obra</label>
-      <div class="obra-add-box">
-        <input type="text" id="f_novaObra" placeholder="Ex: SEPLAG, PAI, Fórum de Sobral...">
-        <button type="button" id="btnAddObra">Adicionar</button>
-      </div>
-      <div class="hint-box">Cada obra tem sua própria lista de locais (ex: "SEPLAG - 1° PAV"). Você cadastra os locais dentro de cada obra abaixo, ou simplesmente digita "Outro local..." no formulário do RDO — ele é salvo automaticamente na obra.</div>
-    </div>
-    <div class="card">
-      <h2><span class="n">☰</span>Obras cadastradas</h2>
+      <h2><span class="n">☰</span>Obras sincronizadas</h2>
       <div id="obrasContainer"></div>
     </div>
   </section>
@@ -927,7 +918,23 @@ const MATERIAIS_PADRAO = ["Abraçadeira De Aço Zincado", "Abraçadeira De Nylon
     const {columns, values} = res[0];
     return values.map(row=>{ const o={}; columns.forEach((c,i)=>o[c]=row[i]); return o; });
   }
+  let persistTimer = null;
+  let persistDirty = false;
   async function persist(){
+    persistDirty = true;
+    if(persistTimer) return;
+    persistTimer = setTimeout(async () => {
+      persistTimer = null;
+      if(!persistDirty) return;
+      persistDirty = false;
+      try{ await idbSet(IDB_KEY, db.export()); persistOk=true; }
+      catch(e){ persistOk=false; console.error('Falha ao salvar banco local', e); }
+      updateCountBadge();
+    }, 1500);
+  }
+  async function persistNow(){
+    if(persistTimer){ clearTimeout(persistTimer); persistTimer = null; }
+    persistDirty = false;
     try{ await idbSet(IDB_KEY, db.export()); persistOk=true; }
     catch(e){ persistOk=false; console.error('Falha ao salvar banco local', e); }
     updateCountBadge();
@@ -1004,26 +1011,6 @@ const MATERIAIS_PADRAO = ["Abraçadeira De Aço Zincado", "Abraçadeira De Nylon
 
   /* ================= Obras ================= */
   function getObras(){ return all('SELECT * FROM obras ORDER BY nome'); }
-  function addObra(nome){
-    nome = (nome||'').trim();
-    if(!nome) return false;
-    try{ run('INSERT INTO obras(nome, locais, criado_em) VALUES (?,?,?)', [nome, '[]', new Date().toISOString()]); }
-    catch(e){ toast('Já existe uma obra com esse nome.'); return false; }
-    persist(); return true;
-  }
-  function removeObra(id){ run('DELETE FROM obras WHERE id=?', [id]); persist(); }
-  function addLocalToObra(obraId, local){
-    local = (local||'').trim(); if(!local) return;
-    const o = all('SELECT * FROM obras WHERE id=?', [obraId])[0]; if(!o) return;
-    const locais = JSON.parse(o.locais||'[]');
-    if(!locais.includes(local)){ locais.push(local); run('UPDATE obras SET locais=? WHERE id=?', [JSON.stringify(locais), obraId]); persist(); }
-  }
-  function removeLocalFromObra(obraId, local){
-    const o = all('SELECT * FROM obras WHERE id=?', [obraId])[0]; if(!o) return;
-    const locais = JSON.parse(o.locais||'[]').filter(l=>l!==local);
-    run('UPDATE obras SET locais=? WHERE id=?', [JSON.stringify(locais), obraId]);
-    persist();
-  }
 
   function populateObraSelects(){
     const obras = getObras();
@@ -1053,53 +1040,18 @@ const MATERIAIS_PADRAO = ["Abraçadeira De Aço Zincado", "Abraçadeira De Nylon
   $('f_local').addEventListener('change', function(){ $('f_local_outro').style.display = this.value==='__outro' ? 'block':'none'; });
   $('f_atividade').addEventListener('change', function(){ $('f_atividade_outro').style.display = this.value==='__outro' ? 'block':'none'; });
 
-  $('btnAddObra').addEventListener('click', ()=>{
-    const v = $('f_novaObra').value.trim();
-    if(!v) return;
-    if(addObra(v)){ $('f_novaObra').value=''; populateObraSelects(); renderObras(); toast('Obra adicionada ✓'); }
-  });
-  $('f_novaObra').addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); $('btnAddObra').click(); }});
-
   function renderObras(){
     const box = $('obrasContainer');
     const obras = getObras();
-    if(!obras.length){ box.innerHTML = '<div class="empty-state"><span class="ic">🏗️</span>Nenhuma obra cadastrada ainda.</div>'; return; }
-    box.innerHTML = '';
-    obras.forEach(o=>{
+    if(!obras.length){ box.innerHTML = '<div class="empty-state"><span class="ic">🏗️</span>Nenhuma obra sincronizada ainda. Clique em "Sincronizar agora" para buscar obras do dashboard.</div>'; return; }
+    box.innerHTML = obras.map(o=>{
       const locais = JSON.parse(o.locais||'[]');
       const count = all('SELECT COUNT(*) c FROM rdos WHERE obra_id=?',[o.id])[0].c;
-      const div = document.createElement('div');
-      div.className='obra-row'; div.style.flexDirection='column'; div.style.alignItems='stretch';
-      div.innerHTML = `
-        <div style="display:flex;justify-content:space-between;align-items:center;">
-          <div><div class="oname">${escHtml(o.nome)}</div><div class="ometa">${count} RDO(s) registrados</div></div>
-          <div class="oact"><button type="button" class="del">Excluir obra</button></div>
-        </div>
-        <div class="locais-tags">
-          ${locais.map(l=>`<span class="tag">${escHtml(l)} <button type="button" data-local="${escHtml(l)}">×</button></span>`).join('') || '<span class="ometa">Nenhum local cadastrado ainda.</span>'}
-        </div>
-        <div class="obra-add-box" style="margin-top:8px;">
-          <input type="text" placeholder="Adicionar local...">
-          <button type="button">+</button>
-        </div>`;
-      div.querySelector('.del').addEventListener('click', ()=>{
-        const msg = count>0 ? `Essa obra tem ${count} RDO(s) salvos. Excluir mesmo assim? Os RDOs continuam salvos, só ficam sem obra vinculada.` : 'Excluir esta obra?';
-        if(!confirm(msg)) return;
-        removeObra(o.id); populateObraSelects(); renderObras(); renderLista();
-      });
-      div.querySelectorAll('.tag button').forEach(b=>{
-        b.addEventListener('click', ()=>{
-          removeLocalFromObra(o.id, b.dataset.local); renderObras();
-          if(String($('f_obra').value)===String(o.id)) populateLocaisForObra(o.id);
-        });
-      });
-      const addInput = div.querySelector('.obra-add-box input');
-      const addBtn = div.querySelector('.obra-add-box button');
-      const doAdd = ()=>{ const v=addInput.value.trim(); if(!v) return; addLocalToObra(o.id, v); addInput.value=''; renderObras(); if(String($('f_obra').value)===String(o.id)) populateLocaisForObra(o.id); };
-      addBtn.addEventListener('click', doAdd);
-      addInput.addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); doAdd(); }});
-      box.appendChild(div);
-    });
+      return `<div class="obra-row">
+        <div><div class="oname">${escHtml(o.nome)}</div><div class="ometa">${count} RDO(s) · ${locais.length} local(is)</div></div>
+        ${locais.length ? `<div class="locais-tags">${locais.map(l=>`<span class="tag">${escHtml(l)}</span>`).join('')}</div>` : ''}
+      </div>`;
+    }).join('');
   }
 
   /* ================= Equipe (chips) ================= */
@@ -1293,7 +1245,6 @@ const MATERIAIS_PADRAO = ["Abraçadeira De Aço Zincado", "Abraçadeira De Nylon
     if(local==='__outro'){
       local = $('f_local_outro').value.trim();
       if(!local){ toast('Informe o local.'); return; }
-      addLocalToObra(Number(obraId), local);
     }
     if(!local){ toast('Informe o local.'); return; }
     const atividade = $('f_atividade').value==='__outro' ? $('f_atividade_outro').value.trim() : $('f_atividade').value;
@@ -1322,7 +1273,7 @@ const MATERIAIS_PADRAO = ["Abraçadeira De Aço Zincado", "Abraçadeira De Nylon
       run(`INSERT INTO rdos(uid,criado_em,data_servico,obra_id,obra_nome,local,atividade,equipe,materiais_json,entrada_manha,saida_manha,entrada_tarde,saida_tarde,parou,motivo_parada,switch_instalado,switch_nomenclatura,switch_local,camera_instalada,camera_nomenclatura,camera_local,fotos_json,lat,lon,synced) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0)`,
         [p.uid,p.criado_em,p.data_servico,p.obra_id,p.obra_nome,p.local,p.atividade,p.equipe,p.materiais_json,p.entrada_manha,p.saida_manha,p.entrada_tarde,p.saida_tarde,p.parou,p.motivo_parada,p.switch_instalado,p.switch_nomenclatura,p.switch_local,p.camera_instalada,p.camera_nomenclatura,p.camera_local,p.fotos_json,p.lat,p.lon]);
     }
-    persist();
+    persistNow();
     toast(editandoId ? 'RDO atualizado ✓' : 'RDO salvo no banco local ✓');
     resetForm();
     trySyncSilently();
@@ -1640,7 +1591,7 @@ const MATERIAIS_PADRAO = ["Abraçadeira De Aço Zincado", "Abraçadeira De Nylon
         inserted++;
       });
       otherDb.close();
-      persist(); populateObraSelects(); renderObras(); renderLista(); renderDbInfo();
+      persistNow(); populateObraSelects(); renderObras(); renderLista(); renderDbInfo();
       toast(`Mesclado: ${inserted} novo(s) RDO(s), ${skipped} já existiam.`);
     }catch(err){
       console.error(err);
@@ -1720,7 +1671,7 @@ const MATERIAIS_PADRAO = ["Abraçadeira De Aço Zincado", "Abraçadeira De Nylon
         const stmt = db.prepare('UPDATE rdos SET synced=1 WHERE id=?');
         idsPend.forEach(id=>stmt.run([id]));
         stmt.free();
-        persist();
+        persistNow();
       }
       // Receber obras enviadas pelo dashboard (centralizadas)
       if(data.obras_pendentes && data.obras_pendentes.length){
@@ -1734,7 +1685,7 @@ const MATERIAIS_PADRAO = ["Abraçadeira De Aço Zincado", "Abraçadeira De Nylon
           } catch(e) { /* obra já existe localmente, ignora */ }
         });
         if(recebidas > 0){
-          persist();
+          persistNow();
           populateObraSelects();
           toast(recebidas + ' obra(s) recebida(s) do servidor ✓');
         }
@@ -1749,7 +1700,7 @@ const MATERIAIS_PADRAO = ["Abraçadeira De Aço Zincado", "Abraçadeira De Nylon
           } catch(e) { /* ignora erro */ }
         });
         if(excluidas > 0){
-          persist();
+          persistNow();
           populateObraSelects();
           renderObras();
           toast(excluidas + ' obra(s) excluída(s) pelo dashboard ✓');
