@@ -272,7 +272,7 @@
   }
   function formatarData(iso){ if(!iso) return '—'; const [y,m,d]=iso.split('-'); return `${d}/${m}/${y}`; }
   function formatarDataHora(iso){
-    if(!iso) return '—'; const d = new Date(iso); if(isaN(d)) return iso;
+    if(!iso) return '—'; const d = new Date(iso); if(isNaN(d)) return iso;
     const p = n=>String(n).padStart(2,'0');
     return `${p(d.getDate())}/${p(d.getMonth()+1)} ${p(d.getHours())}:${p(d.getMinutes())}`;
   }
