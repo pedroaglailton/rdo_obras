@@ -346,7 +346,8 @@ app.post('/api/sync', checkAuth, (req, res) => {
 
   res.json({
     ok: true, obras_recebidas: obras.length, rdos_recebidas: rdos.length,
-    obras_pendentes: pendentes, exclusoes_pendentes: exclusoesPendentes
+    obras_pendentes: pendentes, exclusoes_pendentes: exclusoesPendentes,
+    todas_obras: db.prepare('SELECT nome, locais FROM obras ORDER BY nome').all()
   });
 });
 
@@ -723,6 +724,12 @@ app.get('/api/export/excel', checkDashboardAuth, async (req, res) => {
 });
 
 app.get('/api/health', (req, res) => res.json({ ok: true, hora: new Date().toISOString() }));
+
+// Keep-alive: ping a cada 10 min pra Render free tier não dormir
+setInterval(() => {
+  const url = process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`;
+  fetch(`${url}/api/health`).catch(() => {});
+}, 10 * 60 * 1000).unref();
 
 app.listen(PORT, () => {
   console.log(`>> RDO Central rodando em http://localhost:${PORT}`);

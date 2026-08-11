@@ -1673,8 +1673,43 @@ const MATERIAIS_PADRAO = ["Abraçadeira De Aço Zincado", "Abraçadeira De Nylon
         stmt.free();
         persistNow();
       }
-      // Receber obras enviadas pelo dashboard (centralizadas)
-      if(data.obras_pendentes && data.obras_pendentes.length){
+      // Sincronizar lista completa de obras do servidor
+      if(data.todas_obras && data.todas_obras.length){
+        const obrasLocais = getObras();
+        const nomesServidor = new Set(data.todas_obras.map(o => o.nome));
+        let alteradas = 0;
+
+        // Remover obras que não existem mais no servidor
+        obrasLocais.forEach(o => {
+          if(!nomesServidor.has(o.nome)){
+            run('DELETE FROM obras WHERE id = ?', [o.id]);
+            alteradas++;
+          }
+        });
+
+        // Adicionar ou atualizar obras do servidor
+        data.todas_obras.forEach(o => {
+          try {
+            const locaisArr = typeof o.locais === 'string' ? JSON.parse(o.locais) : (o.locais || []);
+            const existente = all('SELECT id FROM obras WHERE nome = ?', [o.nome])[0];
+            if(existente){
+              run('UPDATE obras SET locais = ? WHERE id = ?', [JSON.stringify(locaisArr), existente.id]);
+            } else {
+              run('INSERT INTO obras(nome, locais, criado_em) VALUES (?,?,?)',
+                [o.nome, JSON.stringify(locaisArr), new Date().toISOString()]);
+            }
+            alteradas++;
+          } catch(e) { /* ignora erro */ }
+        });
+
+        if(alteradas > 0){
+          persistNow();
+          populateObraSelects();
+          renderObras();
+        }
+      }
+      // Fallback: obras_pendentes (compatibilidade)
+      else if(data.obras_pendentes && data.obras_pendentes.length){
         let recebidas = 0;
         data.obras_pendentes.forEach(op => {
           try {
@@ -1682,29 +1717,21 @@ const MATERIAIS_PADRAO = ["Abraçadeira De Aço Zincado", "Abraçadeira De Nylon
             run('INSERT OR IGNORE INTO obras(nome, locais, criado_em) VALUES (?,?,?)',
               [op.obra_nome, JSON.stringify(locaisArr), new Date().toISOString()]);
             recebidas++;
-          } catch(e) { /* obra já existe localmente, ignora */ }
+          } catch(e) { /* ignora */ }
         });
         if(recebidas > 0){
           persistNow();
           populateObraSelects();
-          toast(recebidas + ' obra(s) recebida(s) do servidor ✓');
         }
       }
       // Exclusões de obras enviadas pelo dashboard
       if(data.exclusoes_pendentes && data.exclusoes_pendentes.length){
-        let excluidas = 0;
         data.exclusoes_pendentes.forEach(exc => {
-          try {
-            run('DELETE FROM obras WHERE nome = ?', [exc.obra_nome]);
-            excluidas++;
-          } catch(e) { /* ignora erro */ }
+          try { run('DELETE FROM obras WHERE nome = ?', [exc.obra_nome]); } catch(e) {}
         });
-        if(excluidas > 0){
-          persistNow();
-          populateObraSelects();
-          renderObras();
-          toast(excluidas + ' obra(s) excluída(s) pelo dashboard ✓');
-        }
+        persistNow();
+        populateObraSelects();
+        renderObras();
       }
       if(manual) toast(`Sincronizado ✓`);
       renderSyncStatus();
