@@ -1700,7 +1700,6 @@ const MATERIAIS_PADRAO = ["Abraçadeira De Aço Zincado", "Abraçadeira De Nylon
     if(!navigator.onLine){ if(manual) toast('Sem conexão agora — tentaremos automaticamente quando voltar.'); return; }
     const pendentes = all('SELECT * FROM rdos WHERE synced=0');
     if(!pendentes.length && !manual){ renderSyncStatus(); return; }
-    if(!pendentes.length && manual){ toast('Nada pendente — tudo sincronizado.'); return; }
     const payloadRdos = pendentes.map(r=>({
       uid:r.uid, criado_em:r.criado_em, data_servico:r.data_servico, obra_nome:r.obra_nome, local:r.local, atividade:r.atividade,
       equipe:r.equipe, materiais_json:r.materiais_json, entrada_manha:r.entrada_manha, saida_manha:r.saida_manha,
@@ -1756,7 +1755,7 @@ const MATERIAIS_PADRAO = ["Abraçadeira De Aço Zincado", "Abraçadeira De Nylon
           toast(excluidas + ' obra(s) excluída(s) pelo dashboard ✓');
         }
       }
-      if(manual) toast(`Sincronizado: ${pendentes.length} RDO(s) enviado(s) ✓`);
+      if(manual) toast(`Sincronizado ✓`);
       renderSyncStatus();
     }catch(err){
       console.error('Erro na sincronização', err);
