@@ -1699,7 +1699,7 @@ const MATERIAIS_PADRAO = ["Abraçadeira De Aço Zincado", "Abraçadeira De Nylon
     if(!cfg){ if(manual) toast('Configure a sincronização primeiro.'); return; }
     if(!navigator.onLine){ if(manual) toast('Sem conexão agora — tentaremos automaticamente quando voltar.'); return; }
     const pendentes = all('SELECT * FROM rdos WHERE synced=0');
-    const obras = getObras().map(o=>({nome:o.nome, locais: JSON.parse(o.locais||'[]'), criado_em:o.criado_em}));
+    if(!pendentes.length && !manual){ renderSyncStatus(); return; }
     if(!pendentes.length && manual){ toast('Nada pendente — tudo sincronizado.'); return; }
     const payloadRdos = pendentes.map(r=>({
       uid:r.uid, criado_em:r.criado_em, data_servico:r.data_servico, obra_nome:r.obra_nome, local:r.local, atividade:r.atividade,
@@ -1712,7 +1712,7 @@ const MATERIAIS_PADRAO = ["Abraçadeira De Aço Zincado", "Abraçadeira De Nylon
     try{
       const resp = await fetch(cfg.servidor+'/api/sync', {
         method:'POST', headers:{'Content-Type':'application/json','x-api-key':cfg.chave},
-        body: JSON.stringify({tecnico:cfg.tecnico, obras, rdos: payloadRdos})
+        body: JSON.stringify({tecnico:cfg.tecnico, rdos: payloadRdos})
       });
       if(!resp.ok) throw new Error('HTTP '+resp.status);
       const data = await resp.json();
