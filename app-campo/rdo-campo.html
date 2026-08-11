@@ -1740,6 +1740,22 @@ const MATERIAIS_PADRAO = ["Abraçadeira De Aço Zincado", "Abraçadeira De Nylon
           toast(recebidas + ' obra(s) recebida(s) do servidor ✓');
         }
       }
+      // Exclusões de obras enviadas pelo dashboard
+      if(data.exclusoes_pendentes && data.exclusoes_pendentes.length){
+        let excluidas = 0;
+        data.exclusoes_pendentes.forEach(exc => {
+          try {
+            run('DELETE FROM obras WHERE nome = ?', [exc.obra_nome]);
+            excluidas++;
+          } catch(e) { /* ignora erro */ }
+        });
+        if(excluidas > 0){
+          persist();
+          populateObraSelects();
+          renderObras();
+          toast(excluidas + ' obra(s) excluída(s) pelo dashboard ✓');
+        }
+      }
       if(manual) toast(`Sincronizado: ${pendentes.length} RDO(s) enviado(s) ✓`);
       renderSyncStatus();
     }catch(err){

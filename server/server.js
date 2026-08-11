@@ -179,6 +179,13 @@ CREATE TABLE IF NOT EXISTS obra_entregas (
   entregue INTEGER DEFAULT 0,
   criado_em TEXT
 );
+CREATE TABLE IF NOT EXISTS obra_exclusoes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  obra_nome TEXT NOT NULL,
+  destinatario TEXT NOT NULL,
+  entregue INTEGER DEFAULT 0,
+  criado_em TEXT
+);
 `);
 
 const app = express();
@@ -316,7 +323,20 @@ app.post('/api/sync', checkAuth, (req, res) => {
     tx2();
   }
 
-  res.json({ ok: true, obras_recebidas: obras.length, rdos_recebidas: rdos.length, obras_pendentes: pendentes });
+  // Exclusões pendentes de obras removidas pelo dashboard
+  const exclusoesPendentes = db.prepare(
+    'SELECT id, obra_nome FROM obra_exclusoes WHERE destinatario = ? AND entregue = 0'
+  ).all(tecnico);
+  if (exclusoesPendentes.length) {
+    const markExc = db.prepare('UPDATE obra_exclusoes SET entregue = 1 WHERE id = ?');
+    const tx3 = db.transaction(() => { exclusoesPendentes.forEach(e => markExc.run(e.id)); });
+    tx3();
+  }
+
+  res.json({
+    ok: true, obras_recebidas: obras.length, rdos_recebidas: rdos.length,
+    obras_pendentes: pendentes, exclusoes_pendentes: exclusoesPendentes
+  });
 });
 
 // ---- "Estou aqui" — pulso de status enviado pelo app enquanto está online ----
@@ -427,6 +447,20 @@ app.delete('/api/dashboard/obra/:id', checkDashboardAuth, (req, res) => {
   const { id } = req.params;
   const obra = db.prepare('SELECT * FROM obras WHERE id = ?').get(id);
   if (!obra) return res.status(404).json({ ok: false, erro: 'Obra não encontrada.' });
+
+  // Cria exclusões pendentes para todos os técnicos conhecidos
+  const tecnicos = db.prepare('SELECT DISTINCT tecnico FROM heartbeats').all();
+  const stmtExc = db.prepare(
+    'INSERT OR IGNORE INTO obra_exclusoes (obra_nome, destinatario, criado_em) VALUES (?, ?, ?)'
+  );
+  const agora = new Date().toISOString();
+  const tx = db.transaction(() => {
+    tecnicos.forEach(t => {
+      stmtExc.run(obra.nome, t.tecnico, agora);
+    });
+  });
+  tx();
+
   db.prepare('DELETE FROM obras WHERE id = ?').run(id);
   db.prepare('DELETE FROM obra_entregas WHERE obra_nome = ?').run(obra.nome);
   res.json({ ok: true });
