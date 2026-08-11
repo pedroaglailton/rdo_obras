@@ -428,6 +428,35 @@
   .file-import-label input{display:none;}
   .hint-box{font-size:12px;color:var(--muted);background:var(--bg);border-radius:9px;padding:10px 12px;margin-top:10px;line-height:1.5;}
   .empty-hint{font-size:12px;color:var(--muted);margin-top:6px;}
+
+  /* Tracking diário */
+  .tracking-obra{border:1px solid var(--line);border-radius:10px;padding:14px;margin-bottom:12px;background:#fff;}
+  .tracking-obra .t-obra-name{font-weight:700;font-size:15px;margin-bottom:10px;display:flex;align-items:center;gap:8px;}
+  .tracking-obra .t-stats{display:flex;gap:12px;margin-bottom:12px;font-size:12px;flex-wrap:wrap;}
+  .tracking-obra .t-stat{padding:4px 10px;border-radius:6px;font-weight:600;}
+  .tracking-obra .t-stat.ok{background:#e8f5e9;color:#2e7d32;}
+  .tracking-obra .t-stat.falta{background:#ffebee;color:#c62828;}
+  .tracking-obra .t-stat.feriado{background:#fff3e0;color:#e65100;}
+  .tracking-obra .t-stat.total{background:var(--bg);color:var(--muted);}
+  .tracking-days{display:flex;gap:4px;flex-wrap:wrap;}
+  .tracking-day{
+    width:36px;height:36px;border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    font-size:10px;font-weight:700;cursor:pointer;border:2px solid transparent;transition:all .15s;position:relative;
+  }
+  .tracking-day .td-dia{font-size:13px;line-height:1;}
+  .tracking-day .td-mes{font-size:8px;opacity:.7;text-transform:uppercase;}
+  .tracking-day.com-rdo{background:#c8e6c9;color:#1b5e20;border-color:#4caf50;}
+  .tracking-day.sem-rdo{background:#ffcdd2;color:#b71c1c;border-color:#f44336;animation:pulse-alert 2s infinite;}
+  .tracking-day.feriado{background:#ffe0b2;color:#e65100;border-color:#ff9800;}
+  .tracking-day.fim-semana{background:#f5f5f5;color:#9e9e9e;border-color:#e0e0e0;}
+  .tracking-day.hoje{box-shadow:0 0 0 2px var(--primary);}
+  .tracking-day:hover{transform:scale(1.1);}
+  @keyframes pulse-alert{0%,100%{opacity:1;}50%{opacity:.7;}}
+  .tracking-legend{display:flex;gap:12px;margin-top:10px;font-size:11px;flex-wrap:wrap;}
+  .tracking-legend span{display:flex;align-items:center;gap:4px;}
+  .tracking-legend .dot{width:10px;height:10px;border-radius:3px;}
+  .tracking-period{display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap;}
+  .tracking-period select{padding:6px 8px;border:1.5px solid var(--line);border-radius:6px;font-size:12px;}
 </style>
 </head>
 
@@ -595,6 +624,14 @@
     <div class="hint-box" style="background:#f0f7ff;border:1px solid #b3d4f0;color:#1a5276;margin-bottom:12px;">
       <strong>ℹ️ Obras são cadastradas pelo engenheiro no dashboard.</strong><br>
       As obras aparecem aqui automaticamente quando você sincroniza. Se uma obra ainda não está listada, solicite ao engenheiro que cadastre no dashboard.
+    </div>
+    <div class="card">
+      <h2><span class="n">📅</span>Acompanhamento diário de RDOs</h2>
+      <div class="hint-box" style="background:#fff8e1;border:1px solid #ffe082;color:#f57f17;margin-bottom:12px;">
+        <strong>⚠️ Dias sem RDO:</strong> Sábados, domingos e feriados são automaticamente desconsiderados.<br>
+        Para marcar um dia como feriado, clique nele no calendário abaixo.
+      </div>
+      <div id="obrasTrackingContainer"></div>
     </div>
     <div class="card">
       <h2><span class="n">☰</span>Obras sincronizadas</h2>
@@ -1040,6 +1077,211 @@ const MATERIAIS_PADRAO = ["Abraçadeira De Aço Zincado", "Abraçadeira De Nylon
   $('f_obra').addEventListener('change', function(){ populateLocaisForObra(this.value); });
   $('f_local').addEventListener('change', function(){ $('f_local_outro').style.display = this.value==='__outro' ? 'block':'none'; });
   $('f_atividade').addEventListener('change', function(){ $('f_atividade_outro').style.display = this.value==='__outro' ? 'block':'none'; });
+
+  /* ================= Acompanhamento diário de RDOs ================= */
+  const FERIADOS_KEY = 'rdo_feridos_locais';
+  function getFeridosLocais(){
+    try{ return JSON.parse(localStorage.getItem(FERIADOS_KEY)||'[]'); }catch(e){ return []; }
+  }
+  function setFeridosLocais(arr){ localStorage.setItem(FERIADOS_KEY, JSON.stringify(arr)); }
+
+  // Feriados nacionais fixos (mês/dia)
+  const FERIADOS_FIXOS = [
+    '01-01', // Ano Novo
+    '04-21', // Tiradentes
+    '05-01', // Dia do Trabalho
+    '09-07', // Independência
+    '10-12', // Padroeira
+    '11-02', // Finados
+    '11-15', // Proclamação
+    '12-25', // Natal
+  ];
+
+  function isFeriadoFixo(dataStr){
+    const mmdd = dataStr.slice(5);
+    return FERIADOS_FIXOS.includes(mmdd);
+  }
+
+  function isFeriadoMovel(data){
+    // Páscoa (algoritmo de Meeus/Jones/Butcher)
+    const ano = data.getFullYear();
+    const a = ano % 19;
+    const b = Math.floor(ano / 100);
+    const c = ano % 100;
+    const d = Math.floor(b / 4);
+    const e = b % 4;
+    const f = Math.floor((b + 8) / 25);
+    const g = Math.floor((b - f + 1) / 3);
+    const h = (19*a + b - d - g + 15) % 30;
+    const i = Math.floor(c / 4);
+    const k = c % 4;
+    const l = (32 + 2*e + 2*i - h - k) % 7;
+    const m = Math.floor((a + 11*h + 22*l) / 451);
+    const mes = Math.floor((h + l - 7*m + 114) / 31) - 1;
+    const dia = ((h + l - 7*m + 114) % 31) + 1;
+    const pascoa = new Date(ano, mes, dia);
+
+    const datas = [
+      new Date(pascoa), // Páscoa
+      new Date(pascoa.getTime() - 2*86400000), // Sexta-feira Santa
+      new Date(pascoa.getTime() + 60*86400000), // Corpus Christi
+    ];
+    return datas.some(d => d.getTime() === data.getTime());
+  }
+
+  function isFimDeSemana(data){
+    const d = data.getDay();
+    return d === 0 || d === 6;
+  }
+
+  function isFeriadoLocal(dataStr){
+    return getFeridosLocais().includes(dataStr);
+  }
+
+  function isDiaUtil(dataStr){
+    if(isFimDeSemana(new Date(dataStr + 'T12:00:00'))) return false;
+    if(isFeriadoFixo(dataStr)) return false;
+    if(isFeriadoMovel(new Date(dataStr + 'T12:00:00'))) return false;
+    if(isFeriadoLocal(dataStr)) return false;
+    return true;
+  }
+
+  function formatarDiaCurto(dataStr){
+    if(!dataStr) return '';
+    const [y,m,d] = dataStr.split('-');
+    const meses = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+    return { dia: parseInt(d), mes: meses[parseInt(m)-1] };
+  }
+
+  let trackingPeriod = 7;
+  let trackingObraFiltro = '';
+
+  function renderTracking(){
+    const box = $('obrasTrackingContainer');
+    const obras = getObras();
+    if(!obras.length){ box.innerHTML = ''; return; }
+
+    // Gerar lista de dias
+    const hoje = new Date();
+    const dias = [];
+    for(let i = trackingPeriod - 1; i >= 0; i--){
+      const d = new Date(hoje);
+      d.setDate(d.getDate() - i);
+      dias.push(d.toISOString().slice(0,10));
+    }
+
+    const obrasParaMostrar = trackingObraFiltro
+      ? obras.filter(o => String(o.id) === String(trackingObraFiltro))
+      : obras;
+
+    let html = `
+      <div class="tracking-period">
+        <label style="font-size:12px;font-weight:600;">Período:</label>
+        <select id="trackingPeriodSelect">
+          <option value="7" ${trackingPeriod===7?'selected':''}>Últimos 7 dias</option>
+          <option value="14" ${trackingPeriod===14?'selected':''}>Últimos 14 dias</option>
+          <option value="30" ${trackingPeriod===30?'selected':''}>Últimos 30 dias</option>
+        </select>
+        <label style="font-size:12px;font-weight:600;margin-left:12px;">Obra:</label>
+        <select id="trackingObraSelect">
+          <option value="">Todas</option>
+          ${obras.map(o=>`<option value="${o.id}" ${trackingObraFiltro==String(o.id)?'selected':''}>${escHtml(o.nome)}</option>`).join('')}
+        </select>
+      </div>
+    `;
+
+    if(!obrasParaMostrar.length){
+      box.innerHTML = html + '<div class="empty-state">Nenhuma obra para exibir.</div>';
+      return;
+    }
+
+    obrasParaMostrar.forEach(o => {
+      const rdos = all('SELECT data_servico FROM rdos WHERE obra_id=?',[o.id]);
+      const datasComRdo = new Set(rdos.map(r => r.data_servico).filter(Boolean));
+
+      let comRdo = 0, semRdo = 0, feriados = 0, fds = 0, diasUteis = 0;
+      const diasHtml = dias.map(dataStr => {
+        const info = formatarDiaCurto(dataStr);
+        const hojeStr = hoje.toISOString().slice(0,10);
+        const isHoje = dataStr === hojeStr;
+
+        if(isFimDeSemana(new Date(dataStr + 'T12:00:00'))){
+          fds++;
+          return `<div class="tracking-day fim-semana ${isHoje?'hoje':''}" title="${dataStr} (fim de semana)">
+            <span class="td-dia">${info.dia}</span><span class="td-mes">${info.mes}</span></div>`;
+        }
+        if(isFeriadoFixo(dataStr) || isFeriadoMovel(new Date(dataStr + 'T12:00:00'))){
+          feriados++;
+          return `<div class="tracking-day feriado ${isHoje?'hoje':''}" title="${dataStr} (feriado nacional)">
+            <span class="td-dia">${info.dia}</span><span class="td-mes">${info.mes}</span></div>`;
+        }
+        if(isFeriadoLocal(dataStr)){
+          feriados++;
+          return `<div class="tracking-day feriado ${isHoje?'hoje':''}" title="${dataStr} (feriado local - clique para desmarcar)" onclick="window.__toggleFeriado('${dataStr}')">
+            <span class="td-dia">${info.dia}</span><span class="td-mes">${info.mes}</span></div>`;
+        }
+
+        diasUteis++;
+        if(datasComRdo.has(dataStr)){
+          comRdo++;
+          return `<div class="tracking-day com-rdo ${isHoje?'hoje':''}" title="${dataStr} ✓ RDO registrado">
+            <span class="td-dia">${info.dia}</span><span class="td-mes">${info.mes}</span></div>`;
+        } else {
+          semRdo++;
+          return `<div class="tracking-day sem-rdo ${isHoje?'hoje':''}" title="${dataStr} ✗ SEM RDO - clique para marcar feriado" onclick="window.__toggleFeriado('${dataStr}')">
+            <span class="td-dia">${info.dia}</span><span class="td-mes">${info.mes}</span></div>`;
+        }
+      }).join('');
+
+      const perc = diasUteis > 0 ? Math.round((comRdo / diasUteis) * 100) : 0;
+
+      html += `
+        <div class="tracking-obra">
+          <div class="t-obra-name">🏗️ ${escHtml(o.nome)}</div>
+          <div class="t-stats">
+            <span class="t-stat ok">✓ ${comRdo} com RDO</span>
+            <span class="t-stat falta">✗ ${semRdo} sem RDO</span>
+            <span class="t-stat feriado">📅 ${feriados} feriado(s)</span>
+            <span class="t-stat total">📊 ${diasUteis} dia(s) útil(is) · ${perc}%</span>
+          </div>
+          <div class="tracking-days">${diasHtml}</div>
+          <div class="tracking-legend">
+            <span><span class="dot" style="background:#c8e6c9;border:1px solid #4caf50;"></span> Com RDO</span>
+            <span><span class="dot" style="background:#ffcdd2;border:1px solid #f44336;"></span> Sem RDO</span>
+            <span><span class="dot" style="background:#ffe0b2;border:1px solid #ff9800;"></span> Feriado</span>
+            <span><span class="dot" style="background:#f5f5f5;border:1px solid #e0e0e0;"></span> Fim de semana</span>
+          </div>
+        </div>`;
+    });
+
+    box.innerHTML = html;
+
+    // Event listeners
+    const periodSelect = $('trackingPeriodSelect');
+    if(periodSelect) periodSelect.addEventListener('change', function(){
+      trackingPeriod = parseInt(this.value);
+      renderTracking();
+    });
+    const obraSelect = $('trackingObraSelect');
+    if(obraSelect) obraSelect.addEventListener('change', function(){
+      trackingObraFiltro = this.value;
+      renderTracking();
+    });
+  }
+
+  window.__toggleFeriado = function(dataStr){
+    const feriados = getFeridosLocais();
+    const idx = feriados.indexOf(dataStr);
+    if(idx >= 0){
+      feriados.splice(idx, 1);
+      toast(dataStr + ' removido dos feriados.');
+    } else {
+      feriados.push(dataStr);
+      toast(dataStr + ' marcado como feriado local.');
+    }
+    setFeridosLocais(feriados);
+    renderTracking();
+  };
 
   function renderObras(){
     const box = $('obrasContainer');
@@ -1817,7 +2059,7 @@ const MATERIAIS_PADRAO = ["Abraçadeira De Aço Zincado", "Abraçadeira De Nylon
       document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
       $('view-'+btn.dataset.view).classList.add('active');
       if(btn.dataset.view==='lista') renderLista();
-      if(btn.dataset.view==='obras') renderObras();
+      if(btn.dataset.view==='obras'){ renderObras(); renderTracking(); }
       if(btn.dataset.view==='dados'){ renderDbInfo(); renderSyncStatus(); }
     });
   });

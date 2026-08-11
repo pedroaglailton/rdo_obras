@@ -104,6 +104,27 @@
   }
   @media (max-width:800px){ .two-col{grid-template-columns:1fr;} }
 
+  /* Tracking diário */
+  .tracking-obra{border:1px solid var(--line);border-radius:10px;padding:14px;margin-bottom:12px;background:var(--card);}
+  .tracking-obra .t-obra-name{font-weight:700;font-size:14px;margin-bottom:10px;font-family:var(--font-display);}
+  .tracking-obra .t-stats{display:flex;gap:10px;margin-bottom:10px;font-size:12px;flex-wrap:wrap;}
+  .tracking-obra .t-stat{padding:4px 10px;border-radius:6px;font-weight:600;font-family:var(--font-mono);}
+  .tracking-obra .t-stat.ok{background:#e8f5e9;color:#2e7d32;}
+  .tracking-obra .t-stat.falta{background:#ffebee;color:#c62828;}
+  .tracking-obra .t-stat.feriado{background:#fff3e0;color:#e65100;}
+  .tracking-obra .t-stat.total{background:var(--bg);color:var(--muted);}
+  .tracking-days{display:flex;gap:3px;flex-wrap:wrap;}
+  .tracking-day{
+    width:32px;height:32px;border-radius:6px;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    font-size:9px;font-weight:700;font-family:var(--font-mono);border:1.5px solid transparent;
+  }
+  .tracking-day .td-dia{font-size:12px;line-height:1;}
+  .tracking-day .td-mes{font-size:7px;opacity:.7;text-transform:uppercase;}
+  .tracking-day.com-rdo{background:#c8e6c9;color:#1b5e20;border-color:#4caf50;}
+  .tracking-day.sem-rdo{background:#ffcdd2;color:#b71c1c;border-color:#f44336;}
+  .tracking-day.feriado{background:#ffe0b2;color:#e65100;border-color:#ff9800;}
+  .tracking-day.fds{background:#f5f5f5;color:#9e9e9e;border-color:#e0e0e0;}
+
   .clickable{
     cursor:pointer;font-family:var(--font-mono);text-transform:uppercase;letter-spacing:.03em;
     border:1px solid currentColor;transition:transform .12s,box-shadow .12s;display:inline-block;
@@ -213,6 +234,26 @@
     </section>
 
     <section class="block">
+      <h2>📅 Acompanhamento diário de RDOs por obra</h2>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap;">
+        <label style="font-size:12px;font-weight:600;color:var(--muted);">Período:</label>
+        <select id="trackingPeriod" style="padding:6px 10px;border:1.5px solid var(--line);border-radius:8px;font-size:12px;">
+          <option value="7">Últimos 7 dias</option>
+          <option value="14" selected>Últimos 14 dias</option>
+          <option value="30">Últimos 30 dias</option>
+        </select>
+        <span id="trackingInfo" style="font-size:11px;color:var(--muted);font-family:var(--font-mono);"></span>
+      </div>
+      <div id="trackingContainer"></div>
+      <div style="display:flex;gap:12px;margin-top:10px;font-size:11px;flex-wrap:wrap;">
+        <span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:#c8e6c9;border:1px solid #4caf50;"></span> Com RDO</span>
+        <span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:#ffcdd2;border:1px solid #f44336;"></span> Sem RDO</span>
+        <span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:#ffe0b2;border:1px solid #ff9800;"></span> Feriado</span>
+        <span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:#f5f5f5;border:1px solid #e0e0e0;"></span> Fim de semana</span>
+      </div>
+    </section>
+
+    <section class="block">
       <h2>🗺️ Mapa</h2>
       <div id="map"></div>
     </section>
@@ -304,6 +345,7 @@
   $('btnAtualizar').addEventListener('click', carregarDados);
   $('btnExportar').addEventListener('click', exportarExcel);
   $('btnSair').addEventListener('click', sair);
+  if($('trackingPeriod')) $('trackingPeriod').addEventListener('change', carregarTracking);
 
   function sair(){
     const cfg = getCfg();
@@ -391,6 +433,63 @@
     renderBars('obrasBars', data.indicadores.rdosPorObra.map(o=>({name:o.obra_nome||'sem obra', val:o.c})));
     renderTabela(data.rdos_recentes);
     renderObrasGerenciamento(data.obras || []);
+    carregarTracking();
+  }
+
+  async function carregarTracking(){
+    const cfg = getCfg();
+    if(!cfg || !cfg.token) return;
+    const periodSelect = $('trackingPeriod');
+    const dias = periodSelect ? periodSelect.value : 14;
+    try{
+      const resp = await fetch(cfg.servidor+'/api/dashboard/tracking?dias='+dias, {
+        headers:{'x-dashboard-token':cfg.token}
+      });
+      if(!resp.ok) return;
+      const data = await resp.json();
+      if(!data.ok) return;
+      renderTracking(data);
+    }catch(e){ console.error('Erro ao carregar tracking', e); }
+  }
+
+  function renderTracking(data){
+    const box = $('trackingContainer');
+    if(!box || !data.obras.length){ if(box) box.innerHTML = '<div class="empty">Nenhuma obra cadastrada.</div>'; return; }
+
+    const hoje = new Date().toISOString().slice(0,10);
+    const meses = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+
+    box.innerHTML = data.obras.map(o => {
+      const diasHtml = o.dias.map(d => {
+        const info = d.data.slice(8);
+        const mesIdx = parseInt(d.data.slice(5,7)) - 1;
+        const mes = meses[mesIdx];
+        const isHoje = d.data === hoje;
+        let cls = d.status;
+        if(d.status === 'fds') cls = 'fds';
+        const titles = {
+          com_rdo: d.data + ' ✓ RDO registrado',
+          sem_rdo: d.data + ' ✗ SEM RDO',
+          feriado: d.data + ' (feriado)',
+          fds: d.data + ' (fim de semana)'
+        };
+        return `<div class="tracking-day ${cls}" title="${titles[d.status]||d.data}">
+          <span class="td-dia">${parseInt(info)}</span><span class="td-mes">${mes}</span></div>`;
+      }).join('');
+
+      return `<div class="tracking-obra">
+        <div class="t-obra-name">🏗️ ${escHtml(o.obra_nome)}</div>
+        <div class="t-stats">
+          <span class="t-stat ok">✓ ${o.com_rdo} com RDO</span>
+          <span class="t-stat falta">✗ ${o.sem_rdo} sem RDO</span>
+          <span class="t-stat feriado">📅 ${o.feriados} feriado(s)</span>
+          <span class="t-stat total">📊 ${o.dias_uiteis} dia(s) útil(is) · ${o.percentual}%</span>
+        </div>
+        <div class="tracking-days">${diasHtml}</div>
+      </div>`;
+    }).join('');
+
+    $('trackingInfo').textContent = `${data.dias} dias · ${data.obras.length} obra(s)`;
   }
 
   function renderStats(data){

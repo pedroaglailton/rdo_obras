@@ -725,6 +725,91 @@ app.get('/api/export/excel', checkDashboardAuth, async (req, res) => {
 
 app.get('/api/health', (req, res) => res.json({ ok: true, hora: new Date().toISOString() }));
 
+// ---- Acompanhamento diário de RDOs por obra ----
+app.get('/api/dashboard/tracking', checkDashboardAuth, (req, res) => {
+  const { dias = 7 } = req.query;
+  const numDias = Math.min(Math.max(parseInt(dias) || 7, 1), 90);
+
+  // Gerar lista de dias
+  const hoje = new Date();
+  const diasLista = [];
+  for(let i = numDias - 1; i >= 0; i--){
+    const d = new Date(hoje);
+    d.setDate(d.getDate() - i);
+    diasLista.push(d.toISOString().slice(0,10));
+  }
+
+  // Feriados nacionais fixos
+  const FERIADOS_FIXOS = ['01-01','04-21','05-01','09-07','10-12','11-02','11-15','12-25'];
+
+  function isFimDeSemana(dataStr){
+    const d = new Date(dataStr + 'T12:00:00');
+    const day = d.getDay();
+    return day === 0 || day === 6;
+  }
+
+  function isFeriadoFixo(dataStr){
+    return FERIADOS_FIXOS.includes(dataStr.slice(5));
+  }
+
+  function isFeriadoMovel(dataStr){
+    const ano = parseInt(dataStr.slice(0,4));
+    const a = ano % 19;
+    const b = Math.floor(ano / 100);
+    const c = ano % 100;
+    const d = Math.floor(b / 4);
+    const e = b % 4;
+    const f = Math.floor((b + 8) / 25);
+    const g = Math.floor((b - f + 1) / 3);
+    const h = (19*a + b - d - g + 15) % 30;
+    const i = Math.floor(c / 4);
+    const k = c % 4;
+    const l = (32 + 2*e + 2*i - h - k) % 7;
+    const m = Math.floor((a + 11*h + 22*l) / 451);
+    const mes = Math.floor((h + l - 7*m + 114) / 31) - 1;
+    const dia = ((h + l - 7*m + 114) % 31) + 1;
+    const pascoa = new Date(ano, mes, dia);
+    const datas = [
+      pascoa.getTime(),
+      pascoa.getTime() - 2*86400000,
+      pascoa.getTime() + 60*86400000,
+    ];
+    const dataMs = new Date(dataStr + 'T12:00:00').getTime();
+    return datas.includes(dataMs);
+  }
+
+  const obras = db.prepare('SELECT id, nome FROM obras ORDER BY nome').all();
+  const resultado = obras.map(obra => {
+    const rdos = db.prepare('SELECT data_servico FROM rdos WHERE obra_nome = ?').all(obra.nome);
+    const datasComRdo = new Set(rdos.map(r => r.data_servico).filter(Boolean));
+
+    let comRdo = 0, semRdo = 0, feriados = 0, fds = 0, diasUteis = 0;
+    const dias = diasLista.map(dataStr => {
+      if(isFimDeSemana(dataStr)){ fds++; return { data: dataStr, status: 'fds' }; }
+      if(isFeriadoFixo(dataStr)){ feriados++; return { data: dataStr, status: 'feriado' }; }
+      if(isFeriadoMovel(dataStr)){ feriados++; return { data: dataStr, status: 'feriado' }; }
+      diasUteis++;
+      if(datasComRdo.has(dataStr)){ comRdo++; return { data: dataStr, status: 'com_rdo' }; }
+      semRdo++; return { data: dataStr, status: 'sem_rdo' };
+    });
+
+    return {
+      obra_id: obra.id,
+      obra_nome: obra.nome,
+      total_rdos: rdos.length,
+      dias_uiteis: diasUteis,
+      com_rdo: comRdo,
+      sem_rdo: semRdo,
+      feriados,
+      fds,
+      percentual: diasUteis > 0 ? Math.round((comRdo / diasUteis) * 100) : 0,
+      dias
+    };
+  });
+
+  res.json({ ok: true, dias: numDias, obras: resultado });
+});
+
 // Keep-alive: ping a cada 10 min pra Render free tier não dormir
 setInterval(() => {
   const url = process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`;
