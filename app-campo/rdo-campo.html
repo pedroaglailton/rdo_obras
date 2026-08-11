@@ -641,6 +641,7 @@
       <label for="cfgChave">Chave de API</label>
       <input type="text" id="cfgChave" placeholder="Cole a chave fornecida pela IPQ">
       <button type="button" class="btn-primary" id="btnSalvarConfig" style="margin-top:10px;">Salvar configuração</button>
+      <button type="button" id="btnLogout" style="margin-top:10px;background:var(--danger);color:#fff;border:none;padding:8px 16px;border-radius:8px;font-weight:700;cursor:pointer;display:none;">Sair / Limpar dados</button>
       <div id="syncStatusBox" class="hint-box" style="margin-top:10px;">Configuração de sincronização não definida.</div>
       <button type="button" class="btn-primary" id="btnSyncAgora" style="margin-top:10px;">⇅ Sincronizar agora</button>
     </div>
@@ -1619,6 +1620,7 @@ const MATERIAIS_PADRAO = ["Abraçadeira De Aço Zincado", "Abraçadeira De Nylon
     const cfg = getSyncConfig();
     if(cfg){ $('cfgTecnico').value=cfg.tecnico||''; $('cfgServidor').value=cfg.servidor||''; $('cfgChave').value=cfg.chave||''; }
     renderSyncStatus();
+    $('btnLogout').style.display = cfg ? 'inline-block' : 'none';
   }
   $('btnSalvarConfig').addEventListener('click', ()=>{
     const tecnico = $('cfgTecnico').value.trim();
@@ -1628,7 +1630,23 @@ const MATERIAIS_PADRAO = ["Abraçadeira De Aço Zincado", "Abraçadeira De Nylon
     setSyncConfig({tecnico, servidor, chave});
     toast('Configuração salva ✓');
     renderSyncStatus();
+    $('btnLogout').style.display = 'inline-block';
     trySyncSilently();
+  });
+
+  $('btnLogout').addEventListener('click', async ()=>{
+    if(!confirm('Sair vai limpar TODOS os dados locais (obras, RDOs, configurações). Tem certeza?')) return;
+    if(!confirm('Última chance: os dados não sincronizados serão PERDIDOS. Continuar?')) return;
+    // Limpar IndexedDB
+    try{
+      const keys = await indexedDB.databases();
+      for(const db of keys){ indexedDB.deleteDatabase(db.name); }
+    }catch(e){}
+    // Limpar localStorage (exceto coisas do browser)
+    localStorage.removeItem(CFG_KEY);
+    // Recarregar
+    toast('Dados limpos. Recarregando...');
+    setTimeout(()=> location.reload(), 800);
   });
 
   function pendentesCount(){
@@ -1651,6 +1669,35 @@ const MATERIAIS_PADRAO = ["Abraçadeira De Aço Zincado", "Abraçadeira De Nylon
     if(!navigator.onLine){ if(manual) toast('Sem conexão agora — tentaremos automaticamente quando voltar.'); return; }
     const pendentes = all('SELECT * FROM rdos WHERE synced=0');
     if(!pendentes.length && !manual){ renderSyncStatus(); return; }
+
+    // Modal de confirmação (estilo commit) — só no sync manual
+    if(manual && pendentes.length){
+      const resumo = pendentes.map(r => {
+        const d = r.data_servico || '—';
+        return `<div style="padding:6px 0;border-bottom:1px solid var(--line);font-size:13px;">
+          <strong>${escHtml(r.obra_nome||'—')}</strong> · ${escHtml(r.local||'—')}<br>
+          <span style="color:var(--muted);font-size:12px;">${d} — ${escHtml(r.atividade||'—')}</span>
+        </div>`;
+      }).join('');
+
+      const confirmado = await new Promise(resolve => {
+        $('modalBody').innerHTML = `
+          <div style="padding:20px;">
+            <h3 style="margin:0 0 12px;">📋 Confirmar sincronização</h3>
+            <p style="font-size:13px;color:var(--muted);margin:0 0 12px;">${pendentes.length} RDO(s) serão enviados ao servidor:</p>
+            <div style="max-height:300px;overflow-y:auto;border:1px solid var(--line);border-radius:8px;padding:8px;">${resumo}</div>
+            <div style="display:flex;gap:10px;margin-top:16px;">
+              <button type="button" id="modalCancel" style="flex:1;padding:10px;border:1.5px solid var(--line);border-radius:8px;background:var(--bg);cursor:pointer;font-weight:700;">Cancelar</button>
+              <button type="button" id="modalConfirm" style="flex:1;padding:10px;border:none;border-radius:8px;background:var(--primary);color:#fff;cursor:pointer;font-weight:700;">Enviar ✓</button>
+            </div>
+          </div>`;
+        $('modalBg').style.display = 'flex';
+        $('modalCancel').onclick = ()=>{ $('modalBg').style.display='none'; resolve(false); };
+        $('modalConfirm').onclick = ()=>{ $('modalBg').style.display='none'; resolve(true); };
+      });
+      if(!confirmado) return;
+    }
+
     const payloadRdos = pendentes.map(r=>({
       uid:r.uid, criado_em:r.criado_em, data_servico:r.data_servico, obra_nome:r.obra_nome, local:r.local, atividade:r.atividade,
       equipe:r.equipe, materiais_json:r.materiais_json, entrada_manha:r.entrada_manha, saida_manha:r.saida_manha,
