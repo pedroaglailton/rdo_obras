@@ -122,6 +122,14 @@ setInterval(limparSessoesExpiradas, 30 * 60000).unref();
 const db = new Database(DB_PATH);
 db.pragma('journal_mode = WAL');
 
+function ensureColumn(table, column, type) {
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all();
+  if (!cols.some(c => c.name === column)) {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
+    console.log(`>> Coluna ${column} adicionada na tabela ${table}`);
+  }
+}
+
 db.exec(`
 CREATE TABLE IF NOT EXISTS obras (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -187,6 +195,9 @@ CREATE TABLE IF NOT EXISTS obra_exclusoes (
   criado_em TEXT
 );
 `);
+
+ensureColumn('vistorias', 'editado_por', 'TEXT');
+ensureColumn('vistorias', 'editado_em', 'TEXT');
 
 const app = express();
 app.use(cors());
@@ -405,6 +416,37 @@ app.post('/api/fiscal/sync', checkFiscalAuth, (req, res) => {
   res.json({ ok: true, vistorias_recebidas: vistorias.length });
 });
 
+// ---- Edição de vistoria pelo dashboard (gestor) ----
+app.put('/api/dashboard/vistoria/:uid', checkDashboardAuth, (req, res) => {
+  const { uid } = req.params;
+  const { status, observacoes, local_confere, switch_conferido, switch_ok, camera_conferida, camera_ok } = req.body || {};
+
+  const vistoria = db.prepare('SELECT * FROM vistorias WHERE uid = ?').get(uid);
+  if (!vistoria) return res.status(404).json({ ok: false, erro: 'Vistoria não encontrada.' });
+
+  const updates = [];
+  const params = {};
+
+  if (status !== undefined) { updates.push('status = @status'); params.status = status; }
+  if (observacoes !== undefined) { updates.push('observacoes = @observacoes'); params.observacoes = observacoes; }
+  if (local_confere !== undefined) { updates.push('local_confere = @local_confere'); params.local_confere = local_confere; }
+  if (switch_conferido !== undefined) { updates.push('switch_conferido = @switch_conferido'); params.switch_conferido = switch_conferido; }
+  if (switch_ok !== undefined) { updates.push('switch_ok = @switch_ok'); params.switch_ok = switch_ok; }
+  if (camera_conferida !== undefined) { updates.push('camera_conferida = @camera_conferida'); params.camera_conferida = camera_conferida; }
+  if (camera_ok !== undefined) { updates.push('camera_ok = @camera_ok'); params.camera_ok = camera_ok; }
+
+  if (updates.length === 0) return res.status(400).json({ ok: false, erro: 'Nenhum campo para atualizar.' });
+
+  updates.push('editado_por = @editado_por');
+  updates.push('editado_em = @editado_em');
+  params.uid = uid;
+  params.editado_por = req.dashboardUsuario;
+  params.editado_em = new Date().toISOString();
+
+  db.prepare(`UPDATE vistorias SET ${updates.join(', ')} WHERE uid = @uid`).run(params);
+  res.json({ ok: true });
+});
+
 
 // ---- Cadastro de obras pelo dashboard (engenheiro) ----
 app.post('/api/dashboard/obra', checkDashboardAuth, (req, res) => {
@@ -466,10 +508,47 @@ app.delete('/api/dashboard/obra/:id', checkDashboardAuth, (req, res) => {
   res.json({ ok: true });
 });
 
+// ---- Locais por obra (CRUD) ----
+app.get('/api/dashboard/obra/:id/locais', checkDashboardAuth, (req, res) => {
+  const obra = db.prepare('SELECT locais FROM obras WHERE id = ?').get(req.params.id);
+  if (!obra) return res.status(404).json({ ok: false, erro: 'Obra não encontrada.' });
+  res.json({ ok: true, locais: JSON.parse(obra.locais || '[]') });
+});
+
+app.post('/api/dashboard/obra/:id/local', checkDashboardAuth, (req, res) => {
+  const obra = db.prepare('SELECT * FROM obras WHERE id = ?').get(req.params.id);
+  if (!obra) return res.status(404).json({ ok: false, erro: 'Obra não encontrada.' });
+  const { local } = req.body || {};
+  if (!local || !local.trim()) return res.status(400).json({ ok: false, erro: 'Nome do local é obrigatório.' });
+
+  const locais = JSON.parse(obra.locais || '[]');
+  if (locais.includes(local.trim())) return res.status(409).json({ ok: false, erro: 'Local já existe nesta obra.' });
+  locais.push(local.trim());
+  db.prepare('UPDATE obras SET locais = ? WHERE id = ?').run(JSON.stringify(locais), obra.id);
+  res.json({ ok: true, locais });
+});
+
+app.delete('/api/dashboard/obra/:id/local', checkDashboardAuth, (req, res) => {
+  const obra = db.prepare('SELECT * FROM obras WHERE id = ?').get(req.params.id);
+  if (!obra) return res.status(404).json({ ok: false, erro: 'Obra não encontrada.' });
+  const { local } = req.body || {};
+  if (!local) return res.status(400).json({ ok: false, erro: 'Nome do local é obrigatório.' });
+
+  let locais = JSON.parse(obra.locais || '[]');
+  locais = locais.filter(l => l !== local.trim());
+  db.prepare('UPDATE obras SET locais = ? WHERE id = ?').run(JSON.stringify(locais), obra.id);
+  res.json({ ok: true, locais });
+});
+
 app.get('/api/dashboard', checkDashboardAuth, (req, res) => {
   const heartbeats = db.prepare('SELECT * FROM heartbeats ORDER BY atualizado_em DESC').all();
-  const rdosRecentes = db.prepare(`
-    SELECT r.*, v.status AS vistoria_status, v.fiscal AS vistoria_fiscal, v.data_vistoria AS vistoria_data
+    const rdosRecentes = db.prepare(`
+    SELECT r.*, v.uid AS vistoria_uid, v.status AS vistoria_status, v.fiscal AS vistoria_fiscal,
+      v.data_vistoria AS vistoria_data, v.local_confere AS vistoria_local_confere,
+      v.switch_conferido AS vistoria_switch_conferido, v.switch_ok AS vistoria_switch_ok,
+      v.camera_conferida AS vistoria_camera_conferida, v.camera_ok AS vistoria_camera_ok,
+      v.observacoes AS vistoria_observacoes, v.editado_por AS vistoria_editado_por,
+      v.editado_em AS vistoria_editado_em
     FROM rdos r LEFT JOIN vistorias v ON v.rdo_uid = r.uid
     ORDER BY r.recebido_em DESC LIMIT 100
   `).all();

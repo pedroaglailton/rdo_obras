@@ -4,53 +4,137 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Dashboard RDO de Campo · IPQ Tecnologia</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
   :root{
-    --primary:#1e6fd9; --bg:#f4f6f9; --card:#fff; --line:#e3e7ed; --text:#1c2530; --muted:#6b7684;
-    --ok:#1f9d55; --ok-bg:#e6f7ec; --danger:#c6392f; --danger-bg:#fdecea; --warn:#b8860b; --warn-bg:#fff6e0;
+    --primary:#0B5FA5; --primary-dk:#084A83;
+    --bg:#EEF3F2; --card:#fff; --line:#DCE4E2; --text:#151E27; --muted:#5B6B72;
+    --ok:#1C7A46; --ok-bg:#E3F3E9; --danger:#B23A2E; --danger-bg:#FBEAE8; --warn:#C2660D; --warn-bg:#FCEEDD;
+    --ink:#0D131A; --ink-2:#1A2530; --grid-line:rgba(11,95,165,.055);
+    --font-display:'Space Grotesk',system-ui,sans-serif;
+    --font-body:'Inter',-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
+    --font-mono:'IBM Plex Mono',ui-monospace,Menlo,Consolas,monospace;
   }
   *{box-sizing:border-box;}
-  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;background:var(--bg);color:var(--text);}
-  header{background:var(--card);border-bottom:1px solid var(--line);padding:16px 24px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;position:sticky;top:0;z-index:10;}
-  header h1{font-size:19px;margin:0;}
-  header .sub{font-size:12.5px;color:var(--muted);margin-top:2px;}
+  body{
+    margin:0;font-family:var(--font-body);background:var(--bg);color:var(--text);
+    background-image:linear-gradient(var(--grid-line) 1px,transparent 1px),linear-gradient(90deg,var(--grid-line) 1px,transparent 1px);
+    background-size:30px 30px;
+  }
+  h1,h2,h3{font-family:var(--font-display);}
+  header{
+    background:var(--ink);color:#fff;border-bottom:3px solid var(--primary);
+    padding:16px 24px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;
+    position:sticky;top:0;z-index:10;box-shadow:0 2px 14px rgba(0,0,0,.18);
+  }
+  header h1{font-size:19px;margin:0;font-weight:700;letter-spacing:-.01em;display:flex;align-items:center;gap:9px;}
+  header h1 .tag{
+    font-family:var(--font-mono);font-size:10px;font-weight:600;letter-spacing:.08em;
+    background:var(--primary);color:#fff;padding:2px 7px;border-radius:4px;text-transform:uppercase;
+  }
+  header .sub{font-size:12px;color:rgba(255,255,255,.55);margin-top:3px;letter-spacing:.01em;}
   .cfg-bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
-  .cfg-bar input{padding:8px 10px;border:1.5px solid var(--line);border-radius:8px;font-size:13px;min-width:160px;}
-  .cfg-bar button{padding:8px 14px;border:none;border-radius:8px;background:var(--primary);color:#fff;font-weight:600;font-size:13px;cursor:pointer;}
-  .cfg-bar button.ghost{background:var(--line);color:var(--text);}
-  main{max-width:1280px;margin:0 auto;padding:22px 20px 60px;}
-  .grid{display:grid;gap:16px;}
-  .grid.stats{grid-template-columns:repeat(auto-fit,minmax(150px,1fr));margin-bottom:20px;}
-  .stat-card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;}
-  .stat-card .val{font-size:26px;font-weight:800;}
-  .stat-card .lbl{font-size:12.5px;color:var(--muted);margin-top:2px;}
-  section.block{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;margin-bottom:20px;}
-  section.block h2{font-size:15px;margin:0 0 14px;display:flex;align-items:center;gap:8px;}
+  .cfg-bar input{
+    padding:9px 11px;border:1.5px solid rgba(255,255,255,.14);border-radius:8px;font-size:13px;min-width:160px;
+    background:rgba(255,255,255,.06);color:#fff;font-family:var(--font-body);
+  }
+  .cfg-bar input::placeholder{color:rgba(255,255,255,.4);}
+  .cfg-bar input:focus{outline:none;border-color:var(--primary);background:rgba(255,255,255,.1);}
+  .cfg-bar button{
+    padding:9px 15px;border:none;border-radius:8px;background:var(--primary);color:#fff;font-weight:700;
+    font-size:12.5px;cursor:pointer;letter-spacing:.01em;transition:background .12s;
+  }
+  .cfg-bar button:hover{background:var(--primary-dk);}
+  .cfg-bar button.ghost{background:rgba(255,255,255,.09);color:#fff;border:1px solid rgba(255,255,255,.14);}
+  .cfg-bar button.ghost:hover{background:rgba(255,255,255,.16);}
+  .refresh-info{font-size:11.5px;color:rgba(255,255,255,.5);font-family:var(--font-mono);}
+
+  main{max-width:1280px;margin:0 auto;padding:24px 20px 60px;}
+  .grid{display:grid;gap:14px;}
+  .grid.stats{grid-template-columns:repeat(auto-fit,minmax(150px,1fr));margin-bottom:22px;}
+  .stat-card{
+    background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 16px 16px 20px;
+    position:relative;overflow:hidden;box-shadow:0 1px 2px rgba(13,19,26,.04);
+  }
+  .stat-card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--primary);}
+  .stat-card:nth-child(4)::before,.stat-card:nth-child(6)::before{background:var(--warn);}
+  .stat-card:nth-child(7)::before{background:var(--danger);}
+  .stat-card .val{font-family:var(--font-mono);font-size:27px;font-weight:600;letter-spacing:-.02em;}
+  .stat-card .lbl{font-size:11px;color:var(--muted);margin-top:4px;text-transform:uppercase;letter-spacing:.05em;font-weight:600;}
+
+  section.block{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px;margin-bottom:20px;box-shadow:0 1px 2px rgba(13,19,26,.04);}
+  section.block h2{
+    font-size:14.5px;margin:0 0 16px;display:flex;align-items:center;gap:9px;font-weight:600;
+    text-transform:uppercase;letter-spacing:.04em;color:var(--ink-2);padding-bottom:10px;border-bottom:1px solid var(--line);
+  }
+
   .tec-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px;}
-  .tec-card{border:1.5px solid var(--line);border-radius:12px;padding:13px;position:relative;}
+  .tec-card{border:1.5px solid var(--line);border-radius:10px;padding:13px;position:relative;transition:box-shadow .12s,border-color .12s;}
+  .tec-card:hover{box-shadow:0 3px 10px rgba(13,19,26,.08);border-color:#c9d3d1;}
   .tec-card .dot{width:9px;height:9px;border-radius:50%;display:inline-block;margin-right:6px;}
   .tec-card.online .dot{background:var(--ok);box-shadow:0 0 0 3px var(--ok-bg);}
   .tec-card.recent .dot{background:var(--warn);box-shadow:0 0 0 3px var(--warn-bg);}
   .tec-card.offline .dot{background:var(--muted);box-shadow:0 0 0 3px #eee;}
-  .tec-card .nome{font-weight:700;font-size:14.5px;}
+  .tec-card .nome{font-weight:700;font-size:14.5px;font-family:var(--font-display);}
   .tec-card .info{font-size:12.5px;color:var(--muted);margin-top:6px;line-height:1.5;}
-  #map{height:380px;border-radius:12px;}
+
+  #map{height:380px;border-radius:10px;border:1px solid var(--line);}
   .two-col{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
-  .bar-row{display:flex;align-items:center;gap:10px;margin-bottom:8px;font-size:13px;}
+  .bar-row{display:flex;align-items:center;gap:10px;margin-bottom:9px;font-size:13px;}
   .bar-row .name{width:150px;flex-shrink:0;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-  .bar-track{flex:1;background:var(--bg);border-radius:6px;height:10px;overflow:hidden;}
-  .bar-fill{background:var(--primary);height:100%;border-radius:6px;}
-  .bar-num{width:36px;text-align:right;font-weight:700;font-size:12.5px;}
+  .bar-track{flex:1;background:var(--bg);border-radius:6px;height:9px;overflow:hidden;border:1px solid var(--line);}
+  .bar-fill{background:linear-gradient(90deg,var(--primary),var(--primary-dk));height:100%;border-radius:6px;}
+  .bar-num{width:36px;text-align:right;font-weight:600;font-size:12.5px;font-family:var(--font-mono);}
+
   table{width:100%;border-collapse:collapse;font-size:13px;}
-  th,td{text-align:left;padding:9px 8px;border-bottom:1px solid var(--line);}
-  th{color:var(--muted);font-weight:600;font-size:11.5px;text-transform:uppercase;letter-spacing:.03em;}
-  tr.atraso{background:var(--danger-bg);}
-  .empty{text-align:center;padding:30px;color:var(--muted);font-size:13.5px;}
-  .badge-atraso{background:var(--danger-bg);color:var(--danger);padding:2px 8px;border-radius:99px;font-size:11px;font-weight:700;}
-  .refresh-info{font-size:12px;color:var(--muted);}
+  th,td{text-align:left;padding:10px 8px;border-bottom:1px solid var(--line);}
+  th{color:var(--muted);font-weight:600;font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;background:var(--bg);}
+  tbody tr:nth-child(even){background:rgba(11,95,165,.02);}
+  tbody tr:hover{background:rgba(11,95,165,.045);}
+  tr.atraso{background:var(--danger-bg) !important;}
+  table#tabelaRdos td:nth-child(1),table#tabelaRdos td:nth-child(6){font-family:var(--font-mono);font-size:12px;color:var(--muted);}
+  .empty{text-align:center;padding:30px;color:var(--muted);font-size:13.5px;border:1.5px dashed var(--line);border-radius:10px;}
+  .badge-atraso{
+    background:var(--danger-bg);color:var(--danger);padding:2px 8px;border-radius:5px;font-size:10px;font-weight:700;
+    font-family:var(--font-mono);text-transform:uppercase;letter-spacing:.04em;border:1px solid var(--danger);
+  }
   @media (max-width:800px){ .two-col{grid-template-columns:1fr;} }
+
+  .clickable{
+    cursor:pointer;font-family:var(--font-mono);text-transform:uppercase;letter-spacing:.03em;
+    border:1px solid currentColor;transition:transform .12s,box-shadow .12s;display:inline-block;
+  }
+  .clickable:hover{text-decoration:none;transform:translateY(-1px);box-shadow:0 2px 6px rgba(13,19,26,.15);}
+
+  .modal-overlay{position:fixed;inset:0;background:rgba(13,19,26,.55);display:flex;align-items:center;justify-content:center;z-index:100;padding:16px;}
+  .modal{background:var(--card);border-radius:14px;max-width:520px;width:100%;max-height:90vh;overflow-y:auto;box-shadow:0 20px 50px rgba(0,0,0,.25);}
+  .modal-head{display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--line);background:var(--bg);border-radius:14px 14px 0 0;}
+  .modal-head h3{margin:0;font-size:15.5px;font-weight:600;letter-spacing:-.01em;}
+  .modal-x{background:none;border:none;font-size:15px;cursor:pointer;color:var(--muted);padding:4px 8px;border-radius:6px;}
+  .modal-x:hover{background:var(--line);}
+  .modal-body{padding:18px 20px;}
+  .modal-resumo{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:12px 14px;font-size:12.5px;color:var(--muted);line-height:1.7;margin-bottom:16px;}
+  .modal-resumo strong{color:var(--text);}
+  #formEditarVistoria label{display:block;font-size:11.5px;font-weight:600;color:var(--muted);margin:12px 0 5px;text-transform:uppercase;letter-spacing:.03em;}
+  #formEditarVistoria label:first-child{margin-top:0;}
+  #formEditarVistoria select,#formEditarVistoria textarea{
+    width:100%;padding:9px 10px;border:1.5px solid var(--line);border-radius:8px;font-size:14px;
+    font-family:var(--font-body);background:#fff;color:var(--text);
+  }
+  #formEditarVistoria select:focus,#formEditarVistoria textarea:focus{outline:none;border-color:var(--primary);}
+  #formEditarVistoria textarea{resize:vertical;}
+  .modal-row2{display:grid;grid-template-columns:1fr 1fr;gap:0 12px;}
+  .modal-meta{font-size:11px;color:var(--muted);margin-top:12px;font-family:var(--font-mono);}
+  .modal-erro{background:var(--danger-bg);color:var(--danger);padding:8px 10px;border-radius:8px;font-size:12.5px;margin-top:10px;border:1px solid var(--danger);}
+  .modal-actions{display:flex;gap:10px;margin-top:18px;}
+  .modal-actions button{flex:1;padding:11px;border:none;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer;background:var(--primary);color:#fff;transition:background .12s;}
+  .modal-actions button:hover{background:var(--primary-dk);}
+  .modal-actions button.ghost{background:var(--bg);color:var(--text);border:1.5px solid var(--line);}
+  .modal-actions button:disabled{opacity:.5;}
 
   .obra-mgmt-item{
     display:flex;align-items:center;justify-content:space-between;gap:10px;
@@ -59,6 +143,7 @@
   }
   .obra-mgmt-item .onome{font-weight:700;font-size:14px;}
   .obra-mgmt-item .ometa{font-size:11.5px;color:var(--muted);margin-top:2px;}
+  .obra-mgmt-item .oact{display:flex;gap:6px;}
   .obra-mgmt-item .oact button{
     border:none;background:var(--danger-bg);color:var(--danger);border-radius:8px;padding:6px 10px;
     font-size:11.5px;font-weight:700;cursor:pointer;
@@ -67,6 +152,19 @@
   .obra-mgmt-locais{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px;}
   .obra-mgmt-locais span{
     background:var(--card);border:1px solid var(--line);border-radius:99px;padding:2px 9px;font-size:11px;
+    display:flex;align-items:center;gap:4px;
+  }
+  .obra-mgmt-locais span button{border:none;background:transparent;color:var(--danger);cursor:pointer;font-weight:700;font-size:12px;}
+  .obra-add-locais{display:flex;gap:6px;margin-top:8px;}
+  .obra-add-locais input{flex:1;padding:7px 9px;border:1.5px solid var(--line);border-radius:8px;font-size:12px;}
+  .obra-add-locais button{border:none;background:var(--primary);color:#fff;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;}
+
+  .rdo-detail-modal .detail-row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line);font-size:13px;gap:10px;}
+  .rdo-detail-modal .detail-row span:first-child{color:var(--muted);}
+  .rdo-detail-modal .detail-row span:last-child{text-align:right;font-weight:600;}
+  .rdo-detail-modal h3{margin-top:0;font-size:16px;color:var(--primary);}
+  .rdo-detail-modal .close-modal{
+    display:block;margin-top:16px;width:100%;padding:12px;border:none;background:var(--line);border-radius:9px;font-weight:700;cursor:pointer;
   }
 </style>
 </head>
@@ -74,8 +172,8 @@
 
 <header>
   <div>
-    <h1>📊 Dashboard RDO de Campo</h1>
-    <div class="sub">Acompanhamento em tempo real dos técnicos e obras — IPQ Tecnologia</div>
+    <h1>📊 Dashboard RDO de Campo <span class="tag">IPQ</span></h1>
+    <div class="sub">Acompanhamento em tempo real dos técnicos e obras</div>
   </div>
   <div class="cfg-bar" id="cfgBar">
     <input type="text" id="cfgServidor" placeholder="https://rdo.ipqsistemas.com.br">
@@ -107,7 +205,7 @@
       <div id="obrasGerenciamento"></div>
       <div style="margin-top:14px;">
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
-          <input type="text" id="inputNovaObra" placeholder="Nome da nova obra" style="flex:1;min-width:200px;padding:9px 11px;border:1.5px solid var(--line);border-radius:8px;font-size:13px;">
+          <input type="text" id="inputNovaObra" placeholder="Nome da nova obra" style="flex:1;min-width:200px;padding:9px 11px;border:1.5px solid var(--line);border-radius:8px;font-size:13px;font-family:var(--font-body);">
           <button onclick="window.__adicionarObra()" style="padding:9px 15px;border:none;border-radius:8px;background:var(--primary);color:#fff;font-weight:700;font-size:12.5px;cursor:pointer;">+ Cadastrar Obra</button>
         </div>
         <div id="msgObra" style="display:none;margin-top:8px;padding:8px 10px;border-radius:8px;font-size:12.5px;"></div>
@@ -140,12 +238,23 @@
   </div>
 </main>
 
+<div id="modalOverlay" class="modal-overlay" style="display:none;">
+  <div class="modal" id="modalContainer">
+    <div class="modal-head">
+      <h3 id="modalTitle">Detalhes</h3>
+      <button type="button" class="modal-x" id="btnFecharModal">✕</button>
+    </div>
+    <div class="modal-body" id="modalBody"></div>
+  </div>
+</div>
+
 <script>
 (function(){
   const $ = id => document.getElementById(id);
   const CFG_KEY = 'rdo_dashboard_config';
   let map = null, mapLayer = null;
   let refreshTimer = null;
+  let ultimoDataDashboard = null;
 
   function getCfg(){ try{ return JSON.parse(localStorage.getItem(CFG_KEY)||'null'); }catch(e){ return null; } }
   function setCfg(c){ localStorage.setItem(CFG_KEY, JSON.stringify(c)); }
@@ -163,7 +272,7 @@
   }
   function formatarData(iso){ if(!iso) return '—'; const [y,m,d]=iso.split('-'); return `${d}/${m}/${y}`; }
   function formatarDataHora(iso){
-    if(!iso) return '—'; const d = new Date(iso); if(isNaN(d)) return iso;
+    if(!iso) return '—'; const d = new Date(iso); if(isaN(d)) return iso;
     const p = n=>String(n).padStart(2,'0');
     return `${p(d.getDate())}/${p(d.getMonth()+1)} ${p(d.getHours())}:${p(d.getMinutes())}`;
   }
@@ -274,6 +383,7 @@
   }
 
   function render(data){
+    ultimoDataDashboard = data;
     renderStats(data);
     renderTecnicos(data);
     renderMapa(data);
@@ -325,7 +435,7 @@
     data.tecnicos.forEach(t=>{
       if(t.lat==null || t.lon==null) return;
       const diffMin = (Date.now()-new Date(t.atualizado_em).getTime())/60000;
-      const cor = diffMin<15 ? '#1f9d55' : diffMin<60 ? '#b8860b' : '#6b7684';
+      const cor = diffMin<15 ? '#1C7A46' : diffMin<60 ? '#C2660D' : '#5B6B72';
       const marker = L.circleMarker([t.lat, t.lon], {radius:9, color:cor, fillColor:cor, fillOpacity:0.85, weight:2});
       marker.bindPopup(`<strong>${escHtml(t.tecnico)}</strong><br>${escHtml(t.obra_nome||'')} ${escHtml(t.local||'')}<br>${timeAgo(t.atualizado_em)}`);
       marker.addTo(mapLayer);
@@ -354,7 +464,7 @@
     };
     if(!r.vistoria_status) return `<span style="color:var(--muted);font-size:12px;">— pendente</span>`;
     const [cor, bg, txt] = mapa[r.vistoria_status] || ['var(--muted)','var(--bg)', r.vistoria_status];
-    return `<span style="color:${cor};background:${bg};padding:2px 8px;border-radius:99px;font-size:11px;font-weight:700;">${txt}</span>`;
+    return `<span class="clickable" style="color:${cor};background:${bg};padding:2px 8px;border-radius:99px;font-size:11px;font-weight:700;" onclick="window.__abrirVistoriaModal('${r.uid}')" title="Clique para ver/editar">${txt} 🔍</span>`;
   }
 
   function renderTabela(rdos){
@@ -380,13 +490,17 @@
       let locais = [];
       try { locais = JSON.parse(o.locais || '[]'); } catch(e) {}
       const locaisHtml = locais.length
-        ? `<div class="obra-mgmt-locais">${locais.map(l=>`<span>${escHtml(l)}</span>`).join('')}</div>`
+        ? `<div class="obra-mgmt-locais">${locais.map(l=>`<span>${escHtml(l)} <button onclick="window.__removerLocalObra(${o.id},'${escHtml(l).replace(/'/g,"\\'")}')" title="Remover">×</button></span>`).join('')}</div>`
         : '';
       return `<div class="obra-mgmt-item">
-        <div>
+        <div style="flex:1;">
           <div class="onome">${escHtml(o.nome)}</div>
           <div class="ometa">ID: ${o.id}${o.criado_em ? ' · Criado em ' + formatarDataHora(o.criado_em) : ''}</div>
           ${locaisHtml}
+          <div class="obra-add-locais">
+            <input type="text" placeholder="Adicionar local..." id="localInput_${o.id}">
+            <button onclick="window.__adicionarLocalObra(${o.id})">+</button>
+          </div>
         </div>
         <div class="oact"><button onclick="window.__excluirObra(${o.id},'${escHtml(o.nome).replace(/'/g,"\\'")}')" title="Excluir obra">Excluir</button></div>
       </div>`;
@@ -433,6 +547,46 @@
     }
   };
 
+  window.__adicionarLocalObra = async function(obraId){
+    const input = $('localInput_' + obraId);
+    if(!input) return;
+    const local = input.value.trim();
+    if(!local) return;
+    const cfg = getCfg();
+    if(!cfg || !cfg.token) return;
+    try {
+      const resp = await fetch(cfg.servidor + '/api/dashboard/obra/' + obraId + '/local', {
+        method: 'POST',
+        headers: { 'Content-Type':'application/json', 'x-dashboard-token': cfg.token },
+        body: JSON.stringify({ local })
+      });
+      const data = await resp.json();
+      if(!resp.ok || !data.ok) throw new Error(data.erro || ('HTTP '+resp.status));
+      input.value = '';
+      carregarDados();
+    } catch(err){
+      mostrarMsgObra('Erro: ' + err.message, true);
+    }
+  };
+
+  window.__removerLocalObra = async function(obraId, local){
+    if(!confirm('Remover o local "' + local + '"?')) return;
+    const cfg = getCfg();
+    if(!cfg || !cfg.token) return;
+    try {
+      const resp = await fetch(cfg.servidor + '/api/dashboard/obra/' + obraId + '/local', {
+        method: 'DELETE',
+        headers: { 'Content-Type':'application/json', 'x-dashboard-token': cfg.token },
+        body: JSON.stringify({ local })
+      });
+      const data = await resp.json();
+      if(!resp.ok || !data.ok) throw new Error(data.erro || ('HTTP '+resp.status));
+      carregarDados();
+    } catch(err){
+      mostrarMsgObra('Erro: ' + err.message, true);
+    }
+  };
+
   function mostrarMsgObra(msg, isErro){
     const el = $('msgObra');
     el.textContent = msg;
@@ -442,6 +596,129 @@
     el.style.border = '1px solid ' + (isErro ? 'var(--danger)' : 'var(--ok)');
     setTimeout(()=>{ el.style.display = 'none'; }, 4000);
   }
+
+  // ---------------- Modal de vistoria (ver / editar) ----------------
+  window.__abrirVistoriaModal = function(rdoUid){
+    if(!ultimoDataDashboard) return;
+    const r = ultimoDataDashboard.rdos_recentes.find(x => x.uid === rdoUid);
+    if(!r || !r.vistoria_uid) return;
+
+    $('modalTitle').textContent = 'Detalhes da vistoria';
+    $('modalBody').innerHTML = `
+      <div class="modal-resumo">
+        <strong>${escHtml(r.local||'—')}</strong> — ${escHtml(r.obra_nome||'—')}<br>
+        RDO de ${escHtml(r.tecnico||'—')} em ${formatarData(r.data_servico)} · ${escHtml(r.atividade||'—')}<br>
+        ${r.switch_instalado==='sim' ? `Switch declarado: ${escHtml(r.switch_nomenclatura||'—')} (${escHtml(r.switch_local||'—')})<br>` : ''}
+        ${r.camera_instalada==='sim' ? `Câmera declarada: ${escHtml(r.camera_nomenclatura||'—')} (${escHtml(r.camera_local||'—')})<br>` : ''}
+        Vistoriado por <strong>${escHtml(r.vistoria_fiscal||'—')}</strong> em ${formatarData(r.vistoria_data)}
+      </div>
+
+      <form id="formEditarVistoria">
+        <label>Status geral</label>
+        <select id="mv_status">
+          <option value="aprovado">✅ Aprovado</option>
+          <option value="aprovado_com_ressalva">⚠️ Aprovado com ressalva</option>
+          <option value="reprovado">❌ Reprovado</option>
+        </select>
+
+        <div class="modal-row2">
+          <div>
+            <label>Local confere</label>
+            <select id="mv_local_confere"><option value="sim">Sim</option><option value="nao">Não</option></select>
+          </div>
+          <div></div>
+          <div id="mv_bloco_switch">
+            <label>Switch conferido</label>
+            <select id="mv_switch_conferido"><option value="sim">Sim</option><option value="nao">Não</option></select>
+          </div>
+          <div id="mv_bloco_switch2">
+            <label>Switch OK</label>
+            <select id="mv_switch_ok"><option value="sim">Sim</option><option value="nao">Não</option></select>
+          </div>
+          <div id="mv_bloco_camera">
+            <label>Câmera conferida</label>
+            <select id="mv_camera_conferida"><option value="sim">Sim</option><option value="nao">Não</option></select>
+          </div>
+          <div id="mv_bloco_camera2">
+            <label>Câmera OK</label>
+            <select id="mv_camera_ok"><option value="sim">Sim</option><option value="nao">Não</option></select>
+          </div>
+        </div>
+
+        <label>Observações do fiscal</label>
+        <textarea id="mv_observacoes" rows="5"></textarea>
+
+        <div class="modal-meta" id="modalMeta"></div>
+        <div class="modal-erro" id="modalErro" style="display:none;"></div>
+
+        <div class="modal-actions">
+          <button type="button" class="ghost" id="btnCancelarModal">Cancelar</button>
+          <button type="submit" id="btnSalvarModal">Salvar alterações</button>
+        </div>
+      </form>
+    `;
+
+    $('mv_status').value = r.vistoria_status || 'aprovado';
+    $('mv_local_confere').value = r.vistoria_local_confere || 'sim';
+    $('mv_switch_conferido').value = r.vistoria_switch_conferido || 'sim';
+    $('mv_switch_ok').value = r.vistoria_switch_ok || 'sim';
+    $('mv_camera_conferida').value = r.vistoria_camera_conferida || 'sim';
+    $('mv_camera_ok').value = r.vistoria_camera_ok || 'sim';
+    $('mv_observacoes').value = r.vistoria_observacoes || '';
+
+    const temSwitch = r.switch_instalado === 'sim';
+    const temCamera = r.camera_instalada === 'sim';
+    $('mv_bloco_switch').style.display = temSwitch ? 'block' : 'none';
+    $('mv_bloco_switch2').style.display = temSwitch ? 'block' : 'none';
+    $('mv_bloco_camera').style.display = temCamera ? 'block' : 'none';
+    $('mv_bloco_camera2').style.display = temCamera ? 'block' : 'none';
+
+    $('modalMeta').textContent = r.vistoria_editado_em
+      ? `Editado por último por ${r.vistoria_editado_por || '—'} em ${formatarDataHora(r.vistoria_editado_em)}`
+      : 'Ainda não foi editado pelo dashboard.';
+    $('modalErro').style.display = 'none';
+
+    $('modalOverlay').style.display = 'flex';
+
+    $('btnCancelarModal').onclick = fecharModal;
+    $('formEditarVistoria').onsubmit = async function(e){
+      e.preventDefault();
+      const cfg = getCfg();
+      if(!cfg || !cfg.token) return;
+      const btn = $('btnSalvarModal');
+      const textoOriginal = btn.textContent;
+      btn.textContent = 'Salvando...'; btn.disabled = true;
+      $('modalErro').style.display = 'none';
+      try{
+        const resp = await fetch(cfg.servidor + '/api/dashboard/vistoria/' + encodeURIComponent(r.vistoria_uid), {
+          method: 'PUT',
+          headers: { 'Content-Type':'application/json', 'x-dashboard-token': cfg.token },
+          body: JSON.stringify({
+            status: $('mv_status').value,
+            local_confere: $('mv_local_confere').value,
+            switch_conferido: $('mv_switch_conferido').value,
+            switch_ok: $('mv_switch_ok').value,
+            camera_conferida: $('mv_camera_conferida').value,
+            camera_ok: $('mv_camera_ok').value,
+            observacoes: $('mv_observacoes').value.trim(),
+          })
+        });
+        const data = await resp.json();
+        if(!resp.ok || !data.ok) throw new Error(data.erro || ('HTTP '+resp.status));
+        fecharModal();
+        carregarDados();
+      }catch(err){
+        $('modalErro').style.display = 'block';
+        $('modalErro').textContent = 'Não foi possível salvar: ' + err.message;
+      }finally{
+        btn.textContent = textoOriginal; btn.disabled = false;
+      }
+    };
+  };
+
+  function fecharModal(){ $('modalOverlay').style.display = 'none'; }
+  $('btnFecharModal').addEventListener('click', fecharModal);
+  $('modalOverlay').addEventListener('click', e => { if(e.target.id === 'modalOverlay') fecharModal(); });
 
   initFromStorage();
 })();
