@@ -2,10 +2,10 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const path = require('path');
-const Database = require('better-sqlite3');
 const multer = require('multer');
 const fs = require('fs');
 const crypto = require('crypto');
+const db = require('./db');
 
 const app = express();
 const server = http.createServer(app);
@@ -13,15 +13,9 @@ const io = new Server(server);
 
 const PORT = process.env.PORT || 8080;
 const SECRET = process.env.TOKEN_SECRET || 'ipq-obras-2024';
-const dataDir = path.join(__dirname, 'data');
 const uploadsDir = path.join(__dirname, 'uploads');
 
-if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
-
-const db = new Database(path.join(dataDir, 'crm.db'));
-db.pragma('journal_mode = WAL');
-db.pragma('foreign_keys = ON');
 
 // ============================================================
 // DATABASE
@@ -136,31 +130,38 @@ const SQL_CREATE = [
     FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
   )`
 ];
-SQL_CREATE.forEach(sql => db.exec(sql));
-
-// Migracao: novas colunas do TJCE_Mesclado para acompanhar equipes
-function ensureColumn(table, col, def) {
-  const cols = db.prepare(`PRAGMA table_info(${table})`).all().map(c=>c.name);
-  if (!cols.includes(col)) {
-    db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${def}`);
-    console.log(`[migracao] ${table}.${col} adicionado`);
+// DB init - hibrido SQLite / Postgres (Supabase)
+async function initDb(){
+  if (db.isPostgres) {
+    await db.init();
+  } else {
+    for (const sql of SQL_CREATE) await db.exec(sql);
+    async function ensureColumn(table, col, def) {
+      const cols = (await db.prepare(`PRAGMA table_info(${table})`).all()).map(c=>c.name);
+      if (!cols.includes(col)) {
+        await db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${def}`);
+        console.log(`[migracao] ${table}.${col} adicionado`);
+      }
+    }
+    await ensureColumn('locais', 'status_projeto', 'TEXT');
+    await ensureColumn('locais', 'etapa', 'TEXT');
+    await ensureColumn('locais', 'cam_fixa', 'INTEGER DEFAULT 0');
+    await ensureColumn('locais', 'cam_analitica', 'INTEGER DEFAULT 0');
+    await ensureColumn('locais', 'cam_lpr', 'INTEGER DEFAULT 0');
+    await ensureColumn('locais', 'regiao', 'TEXT');
+    await ensureColumn('locais', 'cronograma', 'TEXT');
+    await ensureColumn('locais', 'terceirizada', 'INTEGER DEFAULT 0');
+    await ensureColumn('obras', 'comarca', 'TEXT');
+  }
+  // Admin padrao (async para ambos)
+  const admin = await db.prepare('SELECT id FROM usuarios WHERE email=?').get('admin@ipq.com');
+  if (!admin) {
+    await db.prepare('INSERT INTO usuarios (nome,email,senha,perfil) VALUES (?,?,?,?)')
+      .run('Administrador', 'admin@ipq.com', hash('admin123'), 'gestor');
+    console.log('[db] admin criado');
   }
 }
-ensureColumn('locais', 'status_projeto', 'TEXT');
-ensureColumn('locais', 'etapa', 'TEXT');
-ensureColumn('locais', 'cam_fixa', 'INTEGER DEFAULT 0');
-ensureColumn('locais', 'cam_analitica', 'INTEGER DEFAULT 0');
-ensureColumn('locais', 'cam_lpr', 'INTEGER DEFAULT 0');
-ensureColumn('locais', 'regiao', 'TEXT');
-ensureColumn('locais', 'cronograma', 'TEXT');
-ensureColumn('locais', 'terceirizada', 'INTEGER DEFAULT 0');
-ensureColumn('obras', 'comarca', 'TEXT');
-
-// Admin padrao
-if (!db.prepare('SELECT id FROM usuarios WHERE email=?').get('admin@ipq.com')) {
-  db.prepare('INSERT INTO usuarios (nome,email,senha,perfil) VALUES (?,?,?,?)')
-    .run('Administrador', 'admin@ipq.com', hash('admin123'), 'gestor');
-}
+const dbReady = initDb();
 
 // ============================================================
 // HELPERS
@@ -223,57 +224,57 @@ app.use(auth);
 // ============================================================
 // AUTH
 // ============================================================
-app.post('/api/login', (req, res) => {
+app.post('/api/login', async (req, res) => {
   const { email, senha } = req.body;
   if (!email || !senha) return res.status(400).json({ error: 'Email e senha obrigatorios' });
-  const u = db.prepare('SELECT * FROM usuarios WHERE email=? AND ativo=1').get(email);
+  const u = await db.prepare('SELECT * FROM usuarios WHERE email=? AND ativo=1').get(email);
   if (!u || u.senha !== hash(senha)) return res.status(401).json({ error: 'Email ou senha incorretos' });
   const token = signToken({ id: u.id, nome: u.nome, email: u.email, perfil: u.perfil, equipe_id: u.equipe_id, exp: Date.now() + 86400000 * 7 });
   res.json({ token, user: { id: u.id, nome: u.nome, perfil: u.perfil, equipe_id: u.equipe_id } });
 });
 
 // Cadastro publico DESATIVADO: apenas gestor cria usuarios pelo painel admin
-app.post('/api/cadastrar', (req, res) => {
+app.post('/api/cadastrar', async (req, res) => {
   return res.status(403).json({ error: 'Cadastro desativado. Solicite ao gestor para criar seu acesso no Painel Admin > Usuarios.' });
 });
 
-app.get('/api/usuarios', gestor, (req, res) => {
-  res.json(db.prepare('SELECT id,nome,email,perfil,equipe_id,ativo,criado_em FROM usuarios ORDER BY ativo DESC, nome').all());
+app.get('/api/usuarios', gestor, async (req, res) => {
+  res.json(await db.prepare('SELECT id,nome,email,perfil,equipe_id,ativo,criado_em FROM usuarios ORDER BY ativo DESC, nome').all());
 });
 
-app.post('/api/usuarios', gestor, (req, res) => {
+app.post('/api/usuarios', gestor, async (req, res) => {
   const { nome, email, senha, perfil, equipe_id } = req.body;
   if (!nome || !email || !senha) return res.status(400).json({ error: 'Preencha todos os campos' });
   const emailNorm = email.trim().toLowerCase();
   if (!emailNorm.includes('@')) return res.status(400).json({ error: 'Email invalido' });
   if (senha.length < 4) return res.status(400).json({ error: 'Senha deve ter ao menos 4 caracteres' });
-  if (db.prepare('SELECT id FROM usuarios WHERE email=?').get(emailNorm)) return res.status(400).json({ error: 'Email ja cadastrado' });
+  if (await db.prepare('SELECT id FROM usuarios WHERE email=?').get(emailNorm)) return res.status(400).json({ error: 'Email ja cadastrado' });
   if (perfil && !['tecnico','gestor'].includes(perfil)) return res.status(400).json({ error: 'Perfil invalido' });
   // valida equipe existe
   if (equipe_id) {
-    const eq = db.prepare('SELECT id FROM equipes WHERE id=? AND ativo=1').get(equipe_id);
+    const eq = await db.prepare('SELECT id FROM equipes WHERE id=? AND ativo=1').get(equipe_id);
     if (!eq) return res.status(400).json({ error: 'Equipe nao encontrada' });
   }
-  const r = db.prepare('INSERT INTO usuarios (nome,email,senha,perfil,equipe_id) VALUES (?,?,?,?,?)').run(nome.trim(), emailNorm, hash(senha), perfil || 'tecnico', equipe_id || null);
+  const r = await db.prepare('INSERT INTO usuarios (nome,email,senha,perfil,equipe_id) VALUES (?,?,?,?,?)').run(nome.trim(), emailNorm, hash(senha), perfil || 'tecnico', equipe_id || null);
   res.json({ ok: true, id: r.lastInsertRowid });
 });
 
-app.put('/api/usuarios/:id', gestor, (req, res) => {
+app.put('/api/usuarios/:id', gestor, async (req, res) => {
   const id = req.params.id;
-  const atual = db.prepare('SELECT * FROM usuarios WHERE id=?').get(id);
+  const atual = await db.prepare('SELECT * FROM usuarios WHERE id=?').get(id);
   if (!atual) return res.status(404).json({ error: 'Usuario nao encontrado' });
   const { nome, email, senha, perfil, equipe_id, ativo } = req.body;
   if (!nome || !email) return res.status(400).json({ error: 'Nome e email obrigatorios' });
   const emailNorm = email.trim().toLowerCase();
-  if (db.prepare('SELECT id FROM usuarios WHERE email=? AND id<>?').get(emailNorm, id)) return res.status(400).json({ error: 'Email ja em uso por outro usuario' });
+  if (await db.prepare('SELECT id FROM usuarios WHERE email=? AND id<>?').get(emailNorm, id)) return res.status(400).json({ error: 'Email ja em uso por outro usuario' });
   if (perfil && !['tecnico','gestor'].includes(perfil)) return res.status(400).json({ error: 'Perfil invalido' });
   if (equipe_id) {
-    const eq = db.prepare('SELECT id FROM equipes WHERE id=? AND ativo=1').get(equipe_id);
+    const eq = await db.prepare('SELECT id FROM equipes WHERE id=? AND ativo=1').get(equipe_id);
     if (!eq) return res.status(400).json({ error: 'Equipe nao encontrada' });
   }
   // impedir desativar ultimo gestor ativo
   if (String(ativo) === '0' && atual.perfil === 'gestor') {
-    const gestoresAtivos = db.prepare("SELECT COUNT(*) as c FROM usuarios WHERE perfil='gestor' AND ativo=1 AND id<>?").get(id).c;
+    const gestoresAtivos = await db.prepare("SELECT COUNT(*) as c FROM usuarios WHERE perfil='gestor' AND ativo=1 AND id<>?").get(id).c;
     if (gestoresAtivos === 0) return res.status(400).json({ error: 'Nao pode desativar o ultimo gestor' });
   }
   // impedir auto-desativacao
@@ -281,55 +282,55 @@ app.put('/api/usuarios/:id', gestor, (req, res) => {
 
   if (senha && senha.trim().length > 0) {
     if (senha.length < 4) return res.status(400).json({ error: 'Senha deve ter ao menos 4 caracteres' });
-    db.prepare('UPDATE usuarios SET nome=?,email=?,senha=?,perfil=?,equipe_id=?,ativo=? WHERE id=?').run(nome.trim(), emailNorm, hash(senha), perfil || atual.perfil, equipe_id || null, ativo != null ? Number(ativo) : atual.ativo, id);
+    await db.prepare('UPDATE usuarios SET nome=?,email=?,senha=?,perfil=?,equipe_id=?,ativo=? WHERE id=?').run(nome.trim(), emailNorm, hash(senha), perfil || atual.perfil, equipe_id || null, ativo != null ? Number(ativo) : atual.ativo, id);
   } else {
-    db.prepare('UPDATE usuarios SET nome=?,email=?,perfil=?,equipe_id=?,ativo=? WHERE id=?').run(nome.trim(), emailNorm, perfil || atual.perfil, equipe_id || null, ativo != null ? Number(ativo) : atual.ativo, id);
+    await db.prepare('UPDATE usuarios SET nome=?,email=?,perfil=?,equipe_id=?,ativo=? WHERE id=?').run(nome.trim(), emailNorm, perfil || atual.perfil, equipe_id || null, ativo != null ? Number(ativo) : atual.ativo, id);
   }
   res.json({ ok: true });
 });
 
-app.delete('/api/usuarios/:id', gestor, (req, res) => {
+app.delete('/api/usuarios/:id', gestor, async (req, res) => {
   const id = req.params.id;
-  const u = db.prepare('SELECT * FROM usuarios WHERE id=?').get(id);
+  const u = await db.prepare('SELECT * FROM usuarios WHERE id=?').get(id);
   if (!u) return res.status(404).json({ error: 'Usuario nao encontrado' });
   if (Number(id) === req.user.id) return res.status(400).json({ error: 'Voce nao pode excluir seu proprio usuario' });
   if (u.perfil === 'gestor') {
-    const gestoresAtivos = db.prepare("SELECT COUNT(*) as c FROM usuarios WHERE perfil='gestor' AND ativo=1 AND id<>?").get(id).c;
+    const gestoresAtivos = await db.prepare("SELECT COUNT(*) as c FROM usuarios WHERE perfil='gestor' AND ativo=1 AND id<>?").get(id).c;
     if (gestoresAtivos === 0) return res.status(400).json({ error: 'Nao pode remover o ultimo gestor' });
   }
-  db.prepare('UPDATE usuarios SET ativo=0, equipe_id=NULL WHERE id=?').run(id);
+  await db.prepare('UPDATE usuarios SET ativo=0, equipe_id=NULL WHERE id=?').run(id);
   res.json({ ok: true });
 });
 
 // Perfil do proprio usuario (app) - sem precisar ser gestor
-app.get('/api/me', (req,res)=>{
+app.get('/api/me', async (req,res)=>{
   if(!req.user) return res.status(401).json({error:'Nao autenticado'});
-  const u = db.prepare('SELECT id,nome,email,perfil,equipe_id FROM usuarios WHERE id=?').get(req.user.id);
+  const u = await db.prepare('SELECT id,nome,email,perfil,equipe_id FROM usuarios WHERE id=?').get(req.user.id);
   if(!u) return res.status(404).json({error:'Usuario nao encontrado'});
-  const eq = u.equipe_id ? db.prepare('SELECT nome,cor FROM equipes WHERE id=?').get(u.equipe_id) : null;
+  const eq = u.equipe_id ? await db.prepare('SELECT nome,cor FROM equipes WHERE id=?').get(u.equipe_id) : null;
   res.json({...u, equipe_nome: eq?eq.nome:null, equipe_cor: eq?eq.cor:null});
 });
-app.put('/api/me', (req,res)=>{
+app.put('/api/me', async (req,res)=>{
   if(!req.user) return res.status(401).json({error:'Nao autenticado'});
   const {nome, senha} = req.body;
   if(!nome || !nome.trim()) return res.status(400).json({error:'Nome obrigatorio'});
   if(senha && senha.length<4) return res.status(400).json({error:'Senha deve ter ao menos 4 caracteres'});
-  const atual = db.prepare('SELECT id FROM usuarios WHERE id=?').get(req.user.id);
+  const atual = await db.prepare('SELECT id FROM usuarios WHERE id=?').get(req.user.id);
   if(!atual) return res.status(404).json({error:'Usuario nao encontrado'});
-  if(senha) db.prepare('UPDATE usuarios SET nome=?, senha=? WHERE id=?').run(nome.trim(), hash(senha), req.user.id);
-  else db.prepare('UPDATE usuarios SET nome=? WHERE id=?').run(nome.trim(), req.user.id);
+  if(senha) await db.prepare('UPDATE usuarios SET nome=?, senha=? WHERE id=?').run(nome.trim(), hash(senha), req.user.id);
+  else await db.prepare('UPDATE usuarios SET nome=? WHERE id=?').run(nome.trim(), req.user.id);
   res.json({ok:true});
 });
 
 // ============================================================
 // EQUIPES
 // ============================================================
-app.get('/api/equipes', (req, res) => {
-  const equipes = db.prepare('SELECT * FROM equipes WHERE ativo=1 ORDER BY nome').all();
+app.get('/api/equipes', async (req, res) => {
+  const equipes = await db.prepare('SELECT * FROM equipes WHERE ativo=1 ORDER BY nome').all();
   // Robust: inclui todos os perfis ativos, nao so tecnico — reflete logica real de obra
-  const users = db.prepare('SELECT id,nome,email,perfil,equipe_id FROM usuarios WHERE ativo=1').all();
+  const users = await db.prepare('SELECT id,nome,email,perfil,equipe_id FROM usuarios WHERE ativo=1').all();
   // conta RDOs e obras vinculadas por equipe (via usuarios)
-  const rdosPorEquipe = db.prepare('SELECT equipe_id, COUNT(*) as c FROM presenca WHERE equipe_id IS NOT NULL GROUP BY equipe_id').all();
+  const rdosPorEquipe = await db.prepare('SELECT equipe_id, COUNT(*) as c FROM presenca WHERE equipe_id IS NOT NULL GROUP BY equipe_id').all();
   const rdoMap = Object.fromEntries(rdosPorEquipe.map(r=>[r.equipe_id, r.c]));
   res.json(equipes.map(e => ({
     ...e,
@@ -340,185 +341,180 @@ app.get('/api/equipes', (req, res) => {
 });
 
 // Mantido por compatibilidade (login antigo) — agora retorna vazio e loga aviso
-app.get('/api/equipes/public', (req, res) => {
-  res.json(db.prepare('SELECT id,nome,cor FROM equipes WHERE ativo=1 ORDER BY nome').all());
+app.get('/api/equipes/public', async (req, res) => {
+  res.json(await db.prepare('SELECT id,nome,cor FROM equipes WHERE ativo=1 ORDER BY nome').all());
 });
 
-app.post('/api/equipes', gestor, (req, res) => {
+app.post('/api/equipes', gestor, async (req, res) => {
   const { nome, cor, membros } = req.body;
   if (!nome || !nome.trim()) return res.status(400).json({ error: 'Nome obrigatorio' });
   const nomeTrim = nome.trim();
-  if (db.prepare('SELECT id FROM equipes WHERE nome=? AND ativo=1').get(nomeTrim)) return res.status(400).json({ error: 'Ja existe equipe com esse nome' });
+  if (await db.prepare('SELECT id FROM equipes WHERE nome=? AND ativo=1').get(nomeTrim)) return res.status(400).json({ error: 'Ja existe equipe com esse nome' });
   // valida membros existem e ativos
   if (membros && Array.isArray(membros) && membros.length) {
     const ids = membros.map(Number).filter(Boolean);
     for (const uid of ids) {
-      const u = db.prepare('SELECT id, ativo FROM usuarios WHERE id=?').get(uid);
+      const u = await db.prepare('SELECT id, ativo FROM usuarios WHERE id=?').get(uid);
       if (!u) return res.status(400).json({ error: 'Usuario id ' + uid + ' nao encontrado' });
       if (!u.ativo) return res.status(400).json({ error: 'Usuario id ' + uid + ' esta desativado' });
     }
   }
-  const r = db.prepare('INSERT INTO equipes (nome,cor) VALUES (?,?)').run(nomeTrim, cor || '#1565c0');
+  const r = await db.prepare('INSERT INTO equipes (nome,cor) VALUES (?,?)').run(nomeTrim, cor || '#1565c0');
   if (membros && Array.isArray(membros) && membros.length) {
-    const upd = db.prepare('UPDATE usuarios SET equipe_id=? WHERE id=?');
-    const tx = db.transaction((ids) => { ids.forEach(uid => upd.run(r.lastInsertRowid, Number(uid))); });
-    tx(membros.map(Number));
+    for (const uid of membros.map(Number)) {
+      await db.prepare('UPDATE usuarios SET equipe_id=? WHERE id=?').run(r.lastInsertRowid, Number(uid));
+    }
   }
   res.json({ ok: true, id: r.lastInsertRowid });
 });
 
-app.put('/api/equipes/:id', gestor, (req, res) => {
+app.put('/api/equipes/:id', gestor, async (req, res) => {
   const id = Number(req.params.id);
-  const existe = db.prepare('SELECT id FROM equipes WHERE id=? AND ativo=1').get(id);
+  const existe = await db.prepare('SELECT id FROM equipes WHERE id=? AND ativo=1').get(id);
   if (!existe) return res.status(404).json({ error: 'Equipe nao encontrada' });
   const { nome, cor, membros } = req.body;
   if (!nome || !nome.trim()) return res.status(400).json({ error: 'Nome obrigatorio' });
   const nomeTrim = nome.trim();
-  if (db.prepare('SELECT id FROM equipes WHERE nome=? AND ativo=1 AND id<>?').get(nomeTrim, id)) return res.status(400).json({ error: 'Ja existe outra equipe com esse nome' });
+  if (await db.prepare('SELECT id FROM equipes WHERE nome=? AND ativo=1 AND id<>?').get(nomeTrim, id)) return res.status(400).json({ error: 'Ja existe outra equipe com esse nome' });
   if (membros && Array.isArray(membros)) {
     for (const uid of membros.map(Number)) {
-      const u = db.prepare('SELECT id, ativo FROM usuarios WHERE id=?').get(uid);
+      const u = await db.prepare('SELECT id, ativo FROM usuarios WHERE id=?').get(uid);
       if (!u) return res.status(400).json({ error: 'Usuario id ' + uid + ' nao encontrado' });
       if (!u.ativo) return res.status(400).json({ error: 'Usuario id ' + uid + ' esta desativado' });
     }
   }
-  db.prepare('UPDATE equipes SET nome=?,cor=? WHERE id=?').run(nomeTrim, cor || '#1565c0', id);
+  await db.prepare('UPDATE equipes SET nome=?,cor=? WHERE id=?').run(nomeTrim, cor || '#1565c0', id);
   if (membros && Array.isArray(membros)) {
-    const tx = db.transaction(() => {
-      db.prepare('UPDATE usuarios SET equipe_id=NULL WHERE equipe_id=?').run(id);
-      const upd = db.prepare('UPDATE usuarios SET equipe_id=? WHERE id=?');
-      membros.forEach(uid => upd.run(id, Number(uid)));
-    });
-    tx();
+    await db.prepare('UPDATE usuarios SET equipe_id=NULL WHERE equipe_id=?').run(id);
+    for (const uid of membros) {
+      await db.prepare('UPDATE usuarios SET equipe_id=? WHERE id=?').run(id, Number(uid));
+    }
   }
   res.json({ ok: true });
 });
 
-app.delete('/api/equipes/:id', gestor, (req, res) => {
+app.delete('/api/equipes/:id', gestor, async (req, res) => {
   const id = Number(req.params.id);
-  const eq = db.prepare('SELECT id FROM equipes WHERE id=? AND ativo=1').get(id);
+  const eq = await db.prepare('SELECT id FROM equipes WHERE id=? AND ativo=1').get(id);
   if (!eq) return res.status(404).json({ error: 'Equipe nao encontrada' });
-  const tx = db.transaction(() => {
-    db.prepare('UPDATE usuarios SET equipe_id=NULL WHERE equipe_id=?').run(id);
-    db.prepare('UPDATE equipes SET ativo=0 WHERE id=?').run(id);
-  });
-  tx();
+  await db.prepare('UPDATE usuarios SET equipe_id=NULL WHERE equipe_id=?').run(id);
+  await db.prepare('UPDATE equipes SET ativo=0 WHERE id=?').run(id);
   res.json({ ok: true });
 });
 
 // ============================================================
 // OBRAS
 // ============================================================
-app.get('/api/obras', (req, res) => {
+app.get('/api/obras', async (req, res) => {
   let sql = `SELECT o.*, l.nome as local_nome, l.comarca as local_comarca, l.endereco as local_endereco, l.cameras as local_cameras
     FROM obras o LEFT JOIN locais l ON o.local_id=l.id WHERE o.ativo=1`;
   const p = [];
   if (req.query.status) { sql += ' AND o.status=?'; p.push(req.query.status); }
-  res.json(db.prepare(sql + ' ORDER BY o.criado_em DESC').all(...p));
+  res.json(await db.prepare(sql + ' ORDER BY o.criado_em DESC').all(...p));
 });
 
-app.get('/api/obras/:id', (req, res) => {
-  const o = db.prepare(`SELECT o.*, l.nome as local_nome, l.comarca as local_comarca, l.endereco as local_endereco,
+app.get('/api/obras/:id', async (req, res) => {
+  const o = await db.prepare(`SELECT o.*, l.nome as local_nome, l.comarca as local_comarca, l.endereco as local_endereco,
     l.cameras as local_cameras, l.latitude as local_latitude, l.longitude as local_longitude,
     l.google_maps_link as local_google_maps_link
     FROM obras o LEFT JOIN locais l ON o.local_id=l.id WHERE o.id=?`).get(req.params.id);
   if (!o) return res.status(404).json({ error: 'Obra nao encontrada' });
-  o.etapas = db.prepare('SELECT * FROM etapas WHERE obra_id=? ORDER BY ordem').all(req.params.id);
+  o.etapas = await db.prepare('SELECT * FROM etapas WHERE obra_id=? ORDER BY ordem').all(req.params.id);
   res.json(o);
 });
 
-app.post('/api/obras', gestor, (req, res) => {
+app.post('/api/obras', gestor, async (req, res) => {
   const { nome, local_id, comarca, prazo_dias, data_inicio, responsavel, descricao } = req.body;
   if (!nome) return res.status(400).json({ error: 'Nome obrigatorio' });
-  const r = db.prepare('INSERT INTO obras (nome,local_id,comarca,prazo_dias,data_inicio,responsavel,descricao) VALUES (?,?,?,?,?,?,?)')
+  const r = await db.prepare('INSERT INTO obras (nome,local_id,comarca,prazo_dias,data_inicio,responsavel,descricao) VALUES (?,?,?,?,?,?,?)')
     .run(nome, local_id || null, comarca || '', prazo_dias || 30, data_inicio || null, responsavel || '', descricao || '');
   res.json({ ok: true, id: r.lastInsertRowid });
 });
 
-app.put('/api/obras/:id', gestor, (req, res) => {
+app.put('/api/obras/:id', gestor, async (req, res) => {
   const { nome, local_id, comarca, prazo_dias, data_inicio, status, responsavel, descricao } = req.body;
-  db.prepare('UPDATE obras SET nome=?,local_id=?,comarca=?,prazo_dias=?,data_inicio=?,status=?,responsavel=?,descricao=? WHERE id=?')
+  await db.prepare('UPDATE obras SET nome=?,local_id=?,comarca=?,prazo_dias=?,data_inicio=?,status=?,responsavel=?,descricao=? WHERE id=?')
     .run(nome, local_id, comarca, prazo_dias, data_inicio, status, responsavel, descricao, req.params.id);
   res.json({ ok: true });
 });
 
-app.delete('/api/obras/:id', gestor, (req, res) => {
-  db.prepare('UPDATE obras SET ativo=0 WHERE id=?').run(req.params.id);
+app.delete('/api/obras/:id', gestor, async (req, res) => {
+  await db.prepare('UPDATE obras SET ativo=0 WHERE id=?').run(req.params.id);
   res.json({ ok: true });
 });
 
-app.put('/api/obras/:id/toggle', gestor, (req, res) => {
-  const o = db.prepare('SELECT status FROM obras WHERE id=?').get(req.params.id);
+app.put('/api/obras/:id/toggle', gestor, async (req, res) => {
+  const o = await db.prepare('SELECT status FROM obras WHERE id=?').get(req.params.id);
   if (!o) return res.status(404).json({ error: 'Obra nao encontrada' });
   const novo = o.status === 'concluida' ? 'em_andamento' : 'concluida';
-  db.prepare('UPDATE obras SET status=? WHERE id=?').run(novo, req.params.id);
+  await db.prepare('UPDATE obras SET status=? WHERE id=?').run(novo, req.params.id);
   res.json({ ok: true, status: novo });
 });
 
 // ============================================================
 // ETAPAS
 // ============================================================
-app.get('/api/obras/:obra_id/etapas', (req, res) => {
-  res.json(db.prepare('SELECT * FROM etapas WHERE obra_id=? ORDER BY ordem').all(req.params.obra_id));
+app.get('/api/obras/:obra_id/etapas', async (req, res) => {
+  res.json(await db.prepare('SELECT * FROM etapas WHERE obra_id=? ORDER BY ordem').all(req.params.obra_id));
 });
 
-app.post('/api/obras/:obra_id/etapas', gestor, (req, res) => {
+app.post('/api/obras/:obra_id/etapas', gestor, async (req, res) => {
   const { nome, ordem, observacoes } = req.body;
   if (!nome) return res.status(400).json({ error: 'Nome obrigatorio' });
-  const r = db.prepare('INSERT INTO etapas (obra_id,nome,ordem,observacoes) VALUES (?,?,?,?)')
+  const r = await db.prepare('INSERT INTO etapas (obra_id,nome,ordem,observacoes) VALUES (?,?,?,?)')
     .run(req.params.obra_id, nome, ordem || 1, observacoes || '');
   res.json({ ok: true, id: r.lastInsertRowid });
 });
 
-app.put('/api/etapas/:id', gestor, (req, res) => {
+app.put('/api/etapas/:id', gestor, async (req, res) => {
   const { nome, ordem, status, data_inicio, data_fim, observacoes } = req.body;
-  db.prepare('UPDATE etapas SET nome=?,ordem=?,status=?,data_inicio=?,data_fim=?,observacoes=? WHERE id=?')
+  await db.prepare('UPDATE etapas SET nome=?,ordem=?,status=?,data_inicio=?,data_fim=?,observacoes=? WHERE id=?')
     .run(nome, ordem, status, data_inicio, data_fim, observacoes, req.params.id);
   // Atualizar progresso da obra
-  const etapa = db.prepare('SELECT obra_id FROM etapas WHERE id=?').get(req.params.id);
-  if (etapa) atualizarProgresso(etapa.obra_id);
+  const etapa = await db.prepare('SELECT obra_id FROM etapas WHERE id=?').get(req.params.id);
+  if (etapa) await atualizarProgresso(etapa.obra_id);
   res.json({ ok: true });
 });
 
-app.delete('/api/etapas/:id', gestor, (req, res) => {
-  const etapa = db.prepare('SELECT obra_id FROM etapas WHERE id=?').get(req.params.id);
-  db.prepare('DELETE FROM etapas WHERE id=?').run(req.params.id);
-  if (etapa) atualizarProgresso(etapa.obra_id);
+app.delete('/api/etapas/:id', gestor, async (req, res) => {
+  const etapa = await db.prepare('SELECT obra_id FROM etapas WHERE id=?').get(req.params.id);
+  await db.prepare('DELETE FROM etapas WHERE id=?').run(req.params.id);
+  if (etapa) await atualizarProgresso(etapa.obra_id);
   res.json({ ok: true });
 });
 
-function atualizarProgresso(obraId) {
-  const r = db.prepare('SELECT COUNT(*) as total, SUM(CASE WHEN status=\'concluida\' THEN 1 ELSE 0 END) as ok FROM etapas WHERE obra_id=?').get(obraId);
+async function atualizarProgresso(obraId) {
+  const r = await db.prepare('SELECT COUNT(*) as total, SUM(CASE WHEN status=\'concluida\' THEN 1 ELSE 0 END) as ok FROM etapas WHERE obra_id=?').get(obraId);
   const pct = r.total > 0 ? Math.round((r.ok / r.total) * 100) : 0;
-  db.prepare('UPDATE obras SET progresso=? WHERE id=?').run(pct, obraId);
+  await db.prepare('UPDATE obras SET progresso=? WHERE id=?').run(pct, obraId);
 }
 
 // ============================================================
 // LOCAIS
 // ============================================================
-app.get('/api/locais', (req, res) => {
+app.get('/api/locais', async (req, res) => {
   let sql = 'SELECT * FROM locais WHERE ativo=1';
   const p = [];
   if (req.query.obra_id) { 
     // Buscar comarca da obra e filtrar locais por comarca
-    const obra = db.prepare('SELECT comarca FROM obras WHERE id=?').get(req.query.obra_id);
+    const obra = await db.prepare('SELECT comarca FROM obras WHERE id=?').get(req.query.obra_id);
     if (obra && obra.comarca) { sql += ' AND UPPER(comarca)=UPPER(?)'; p.push(obra.comarca); }
     else { sql += ' AND 1=0'; } // Se obra nao tem comarca, retorna vazio
   }
   if (req.query.comarca) { sql += ' AND UPPER(comarca)=UPPER(?)'; p.push(req.query.comarca); }
   if (req.query.regiao) { sql += ' AND regiao=?'; p.push(req.query.regiao); }
   if (req.query.busca) { sql += ' AND (nome LIKE ? OR comarca LIKE ? OR endereco LIKE ?)'; p.push('%' + req.query.busca + '%', '%' + req.query.busca + '%', '%' + req.query.busca + '%'); }
-  res.json(db.prepare(sql + ' ORDER BY comarca, nome').all(...p));
+  res.json(await db.prepare(sql + ' ORDER BY comarca, nome').all(...p));
 });
 
-app.get('/api/locais/comarcas', (req, res) => {
-  res.json(db.prepare('SELECT DISTINCT comarca FROM locais WHERE ativo=1 AND comarca IS NOT NULL ORDER BY comarca').all().map(r => r.comarca));
+app.get('/api/locais/comarcas', async (req, res) => {
+  res.json(await db.prepare('SELECT DISTINCT comarca FROM locais WHERE ativo=1 AND comarca IS NOT NULL ORDER BY comarca').all().map(r => r.comarca));
 });
 
 // Locais da equipe com progresso da obra (automatizado para app)
-app.get('/api/equipe/:regiao/locais', (req, res) => {
+app.get('/api/equipe/:regiao/locais', async (req, res) => {
   const reg = req.params.regiao;
-  const rows = db.prepare(`
+  const rows = await db.prepare(`
     SELECT l.*, o.id as obra_id, o.nome as obra_nome, o.progresso as obra_progresso, o.status as obra_status, o.prazo_dias, o.data_inicio
     FROM locais l LEFT JOIN obras o ON o.local_id = l.id AND o.ativo=1
     WHERE l.ativo=1 AND l.regiao = ?
@@ -526,7 +522,7 @@ app.get('/api/equipe/:regiao/locais', (req, res) => {
   `).all(reg);
   // para SEM EQUIPE busca regiao IS NULL ou ''
   if (reg==='SEM EQUIPE') {
-    const sem = db.prepare(`
+    const sem = await db.prepare(`
       SELECT l.*, o.id as obra_id, o.nome as obra_nome, o.progresso as obra_progresso, o.status as obra_status FROM locais l LEFT JOIN obras o ON o.local_id=l.id AND o.ativo=1
       WHERE l.ativo=1 AND (l.regiao IS NULL OR l.regiao='')
       ORDER BY l.comarca LIMIT 100
@@ -537,62 +533,60 @@ app.get('/api/equipe/:regiao/locais', (req, res) => {
 });
 
 // Atribuir locais a equipe (dashboard define onde cada equipe vai trabalhar)
-app.post('/api/locais/atribuir-equipe', gestor, (req, res) => {
+app.post('/api/locais/atribuir-equipe', gestor, async (req, res) => {
   const { ids, regiao } = req.body;
   if (!ids || !Array.isArray(ids) || !ids.length) return res.status(400).json({error:'Selecione ao menos 1 local'});
   // regiao pode ser '' para desatribuir
   const regNorm = (regiao||'').toString().trim();
-  if (regNorm && !db.prepare('SELECT id FROM equipes WHERE nome=? AND ativo=1').get(regNorm) && regNorm!=='SEM EQUIPE') {
+  if (regNorm && !await db.prepare('SELECT id FROM equipes WHERE nome=? AND ativo=1').get(regNorm) && regNorm!=='SEM EQUIPE') {
     return res.status(400).json({error:'Equipe não encontrada. Crie em Equipes primeiro.'});
   }
-  const stmt = db.prepare('UPDATE locais SET regiao=? WHERE id=?');
-  const tx = db.transaction(()=>{
-    ids.forEach(id=> stmt.run(regNorm==='SEM EQUIPE'?'':regNorm, Number(id)));
-    // garantir obra para cada local atribuído (se não tem, cria com progresso 0)
-    ids.forEach(id=>{
-      const loc = db.prepare('SELECT id, nome, comarca, endereco FROM locais WHERE id=?').get(Number(id));
-      if(!loc) return;
-      const obraExiste = db.prepare('SELECT id FROM obras WHERE local_id=? AND ativo=1').get(loc.id);
-      if(!obraExiste && regNorm){
-        db.prepare('INSERT INTO obras (nome, local_id, comarca, status, progresso) VALUES (?,?,?, ?,0)').run(loc.nome, loc.id, loc.comarca||'', 'planejamento');
-      }
-    });
-  });
-  tx();
+  for (const id of ids) {
+    await db.prepare('UPDATE locais SET regiao=? WHERE id=?').run(regNorm==='SEM EQUIPE'?'':regNorm, Number(id));
+  }
+  // garantir obra para cada local atribuído (se não tem, cria com progresso 0)
+  for (const id of ids) {
+    const loc = await db.prepare('SELECT id, nome, comarca, endereco FROM locais WHERE id=?').get(Number(id));
+    if(!loc) continue;
+    const obraExiste = await db.prepare('SELECT id FROM obras WHERE local_id=? AND ativo=1').get(loc.id);
+    if(!obraExiste && regNorm){
+      await db.prepare('INSERT INTO obras (nome, local_id, comarca, status, progresso) VALUES (?,?,?, ?,0)').run(loc.nome, loc.id, loc.comarca||'', 'planejamento');
+    }
+  }
   res.json({ok:true, atualizados: ids.length});
 });
 
-app.get('/api/locais/:id', (req, res) => {
-  const l = db.prepare('SELECT * FROM locais WHERE id=?').get(req.params.id);
+app.get('/api/locais/:id', async (req, res) => {
+  const l = await db.prepare('SELECT * FROM locais WHERE id=?').get(req.params.id);
   if (!l) return res.status(404).json({ error: 'Local nao encontrado' });
   res.json(l);
 });
 
-app.post('/api/locais', gestor, (req, res) => {
+app.post('/api/locais', gestor, async (req, res) => {
   const { nome, comarca, nome_imovel, tipo, ocupacao, endereco, area, longitude, latitude, google_maps_link, street_view_link, cameras, obra_id } = req.body;
   if (!nome) return res.status(400).json({ error: 'Nome obrigatorio' });
-  const r = db.prepare('INSERT INTO locais (nome,comarca,nome_imovel,tipo,ocupacao,endereco,area,longitude,latitude,google_maps_link,street_view_link,cameras,obra_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)')
+  const r = await db.prepare('INSERT INTO locais (nome,comarca,nome_imovel,tipo,ocupacao,endereco,area,longitude,latitude,google_maps_link,street_view_link,cameras,obra_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)')
     .run(nome, comarca || '', nome_imovel || '', tipo || '', ocupacao || '', endereco || '', area || '', longitude || '', latitude || '', google_maps_link || '', street_view_link || '', cameras || 0, obra_id || null);
   res.json({ ok: true, id: r.lastInsertRowid });
 });
 
-app.put('/api/locais/:id', gestor, (req, res) => {
+app.put('/api/locais/:id', gestor, async (req, res) => {
   const { nome, comarca, nome_imovel, tipo, ocupacao, endereco, area, longitude, latitude, google_maps_link, street_view_link, cameras, obra_id } = req.body;
-  db.prepare('UPDATE locais SET nome=?,comarca=?,nome_imovel=?,tipo=?,ocupacao=?,endereco=?,area=?,longitude=?,latitude=?,google_maps_link=?,street_view_link=?,cameras=?,obra_id=? WHERE id=?')
+  await db.prepare('UPDATE locais SET nome=?,comarca=?,nome_imovel=?,tipo=?,ocupacao=?,endereco=?,area=?,longitude=?,latitude=?,google_maps_link=?,street_view_link=?,cameras=?,obra_id=? WHERE id=?')
     .run(nome, comarca, nome_imovel, tipo, ocupacao, endereco, area, longitude, latitude, google_maps_link, street_view_link, cameras, obra_id, req.params.id);
   res.json({ ok: true });
 });
 
-app.delete('/api/locais/:id', gestor, (req, res) => {
-  db.prepare('UPDATE locais SET ativo=0 WHERE id=?').run(req.params.id);
+app.delete('/api/locais/:id', gestor, async (req, res) => {
+  await db.prepare('UPDATE locais SET ativo=0 WHERE id=?').run(req.params.id);
   res.json({ ok: true });
 });
 
 // Importar locais do Excel
-app.post('/api/locais/importar', gestor, (req, res) => {
+app.post('/api/locais/importar', gestor, async (req, res) => {
   const { locais } = req.body;
   if (!locais || !Array.isArray(locais)) return res.status(400).json({ error: 'Dados obrigatorios' });
-  const stmt = db.prepare('INSERT INTO locais (nome,comarca,nome_imovel,tipo,ocupacao,endereco,area,longitude,latitude,google_maps_link,street_view_link,cameras) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)');
+  const stmt = await db.prepare('INSERT INTO locais (nome,comarca,nome_imovel,tipo,ocupacao,endereco,area,longitude,latitude,google_maps_link,street_view_link,cameras) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)');
   let count = 0;
   locais.forEach(l => {
     stmt.run(l.nome || l.Name || '', l.comarca || l.Comarca || '', l.nome_imovel || l['Nome do imovel'] || '', l.tipo || l.Tipo || '', l.ocupacao || l.Ocupacao || '', l.endereco || l.Endereco || '', l.area || l['Area construida'] || '', l.longitude || l.Longitude || '', l.latitude || l.Latitude || '', l.google_maps_link || l['Google Maps Link'] || '', l.street_view_link || l['Street View Link'] || '', l.cameras || l.Cameras || 0);
@@ -602,7 +596,7 @@ app.post('/api/locais/importar', gestor, (req, res) => {
 });
 
 // Importar TJCE_Mesclado com deduplicacao e vinculo a equipes (REGIAO)
-app.post('/api/locais/importar-mesclado', gestor, (req, res) => {
+app.post('/api/locais/importar-mesclado', gestor, async (req, res) => {
   const { linhas } = req.body;
   if (!linhas || !Array.isArray(linhas) || !linhas.length) return res.status(400).json({ error: 'Envie {linhas:[...]} com dados do Excel' });
 
@@ -611,12 +605,12 @@ app.post('/api/locais/importar-mesclado', gestor, (req, res) => {
 
   // Garantir equipes para regioes encontradas
   const regioes = [...new Set(linhas.map(l=> (l['REGIAO'] || l.regiao || '').toString().trim()).filter(Boolean))];
-  regioes.forEach(reg => {
+  for (const reg of regioes) {
     const nomeEq = reg.trim();
-    if (!db.prepare('SELECT id FROM equipes WHERE nome=? AND ativo=1').get(nomeEq)) {
-      db.prepare('INSERT INTO equipes (nome,cor) VALUES (?,?)').run(nomeEq, coresRegiao[nomeEq] || '#455a64');
+    if (!await db.prepare('SELECT id FROM equipes WHERE nome=? AND ativo=1').get(nomeEq)) {
+      await db.prepare('INSERT INTO equipes (nome,cor) VALUES (?,?)').run(nomeEq, coresRegiao[nomeEq] || '#455a64');
     }
-  });
+  }
 
   // Upsert idempotente: chave estável = COMARCA + NOME DO IMÓVEL + ENDEREÇO (não inclui area/cameras que são graváveis)
   // Reimportar a mesma planilha com dados novos só atualiza, nunca duplica - normalizado sem acento
@@ -672,24 +666,21 @@ app.post('/api/locais/importar-mesclado', gestor, (req, res) => {
   let inseridos=0, atualizados=0, semCoord=0;
   // Normalização para idempotência (remove acentos, caixa, espaços) - evita duplicar se planilha vier com variação
   const norm = s => (s||'').toString().normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().trim().replace(/\s+/g,' ');
-  const existentes = db.prepare('SELECT id, comarca, endereco, nome, nome_imovel FROM locais WHERE ativo=1').all();
+  const existentes = await db.prepare('SELECT id, comarca, endereco, nome, nome_imovel FROM locais WHERE ativo=1').all();
   const mapExist = new Map();
   existentes.forEach(r=>{
     const k = norm(r.comarca)+'|'+norm(r.nome_imovel||r.nome)+'|'+norm(r.endereco);
     if (!mapExist.has(k)) mapExist.set(k, r.id);
   });
-  const stmtIns = db.prepare(`INSERT INTO locais (nome,comarca,nome_imovel,tipo,ocupacao,endereco,area,longitude,latitude,google_maps_link,street_view_link,cameras,status_projeto,etapa,cam_fixa,cam_analitica,cam_lpr,regiao,cronograma,terceirizada) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
-  const stmtUpd = db.prepare(`UPDATE locais SET nome=?,comarca=?,nome_imovel=?,tipo=?,ocupacao=?,endereco=?,area=?,longitude=?,latitude=?,google_maps_link=?,street_view_link=?,cameras=?,status_projeto=?,etapa=?,cam_fixa=?,cam_analitica=?,cam_lpr=?,regiao=?,cronograma=?,terceirizada=? WHERE id=?`);
-  const tx = db.transaction(()=>{
-    for (const v of mapa.values()) {
+  const stmtIns = await db.prepare(`INSERT INTO locais (nome,comarca,nome_imovel,tipo,ocupacao,endereco,area,longitude,latitude,google_maps_link,street_view_link,cameras,status_projeto,etapa,cam_fixa,cam_analitica,cam_lpr,regiao,cronograma,terceirizada) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
+  const stmtUpd = await db.prepare(`UPDATE locais SET nome=?,comarca=?,nome_imovel=?,tipo=?,ocupacao=?,endereco=?,area=?,longitude=?,latitude=?,google_maps_link=?,street_view_link=?,cameras=?,status_projeto=?,etapa=?,cam_fixa=?,cam_analitica=?,cam_lpr=?,regiao=?,cronograma=?,terceirizada=? WHERE id=?`);
+  for (const v of mapa.values()) {
       if (!v.longitude || !v.latitude) semCoord++;
       const k = norm(v.comarca)+'|'+norm(v.nome_imovel||v.nome)+'|'+norm(v.endereco);
       const exId = mapExist.get(k);
-      if (exId) { stmtUpd.run(v.nome, v.comarca, v.nome_imovel, v.tipo, v.ocupacao, v.endereco, v.area, v.longitude, v.latitude, v.google_maps_link, v.street_view_link, v.cameras, v.status_projeto, v.etapa, v.cam_fixa, v.cam_analitica, v.cam_lpr, v.regiao, v.cronograma, v.terceirizada, exId); atualizados++; }
-      else { stmtIns.run(v.nome, v.comarca, v.nome_imovel, v.tipo, v.ocupacao, v.endereco, v.area, v.longitude, v.latitude, v.google_maps_link, v.street_view_link, v.cameras, v.status_projeto, v.etapa, v.cam_fixa, v.cam_analitica, v.cam_lpr, v.regiao, v.cronograma, v.terceirizada); inseridos++; mapExist.set(k, -1); }
+      if (exId) { await stmtUpd.run(v.nome, v.comarca, v.nome_imovel, v.tipo, v.ocupacao, v.endereco, v.area, v.longitude, v.latitude, v.google_maps_link, v.street_view_link, v.cameras, v.status_projeto, v.etapa, v.cam_fixa, v.cam_analitica, v.cam_lpr, v.regiao, v.cronograma, v.terceirizada, exId); atualizados++; }
+      else { await stmtIns.run(v.nome, v.comarca, v.nome_imovel, v.tipo, v.ocupacao, v.endereco, v.area, v.longitude, v.latitude, v.google_maps_link, v.street_view_link, v.cameras, v.status_projeto, v.etapa, v.cam_fixa, v.cam_analitica, v.cam_lpr, v.regiao, v.cronograma, v.terceirizada); inseridos++; mapExist.set(k, -1); }
     }
-  });
-  tx();
   res.json({ ok:true, regioes, unicos: mapa.size, total_linhas: linhas.length, inseridos, atualizados, semCoord, equipes_criadas: regioes.length });
 });
 
@@ -704,67 +695,67 @@ function categoriaAuto(nome){
   if (/(parafuso|bucha|abracadeira|arruela|prego|velcro|joystick|suporte)/.test(n)) return 'Fixação';
   return 'Geral';
 }
-app.post('/api/materiais/importar', gestor, (req, res) => {
+app.post('/api/materiais/importar', gestor, async (req, res) => {
   const { texto, categoria } = req.body;
   if (!texto) return res.status(400).json({ error: 'Texto obrigatorio' });
-  const stmt = db.prepare('INSERT OR IGNORE INTO materiais (nome,categoria) VALUES (?,?)');
+  const stmt = await db.prepare('INSERT OR IGNORE INTO materiais (nome,categoria) VALUES (?,?)');
   let count = 0;
-  texto.split('\n').forEach(linha => {
+  for (const linha of texto.split('\n')) {
     const nome = linha.trim();
     if (nome) {
       const cat = categoria || categoriaAuto(nome);
-      stmt.run(nome, cat); count++;
+      await stmt.run(nome, cat); count++;
     }
-  });
+  }
   res.json({ ok: true, importados: count });
 });
 
 // ============================================================
 // ATIVIDADES
 // ============================================================
-app.get('/api/atividades', (req, res) => {
-  res.json(db.prepare('SELECT * FROM atividades WHERE ativo=1 ORDER BY nome').all());
+app.get('/api/atividades', async (req, res) => {
+  res.json(await db.prepare('SELECT * FROM atividades WHERE ativo=1 ORDER BY nome').all());
 });
 
-app.post('/api/atividades', gestor, (req, res) => {
+app.post('/api/atividades', gestor, async (req, res) => {
   const { nome } = req.body;
   if (!nome) return res.status(400).json({ error: 'Nome obrigatorio' });
-  const r = db.prepare('INSERT INTO atividades (nome) VALUES (?)').run(nome);
+  const r = await db.prepare('INSERT INTO atividades (nome) VALUES (?)').run(nome);
   res.json({ ok: true, id: r.lastInsertRowid });
 });
 
-app.delete('/api/atividades/:id', gestor, (req, res) => {
-  db.prepare('UPDATE atividades SET ativo=0 WHERE id=?').run(req.params.id);
+app.delete('/api/atividades/:id', gestor, async (req, res) => {
+  await db.prepare('UPDATE atividades SET ativo=0 WHERE id=?').run(req.params.id);
   res.json({ ok: true });
 });
 
 // ============================================================
 // MATERIAIS (catalogo do gestor)
 // ============================================================
-app.get('/api/materiais', (req, res) => {
+app.get('/api/materiais', async (req, res) => {
   let sql = 'SELECT * FROM materiais WHERE ativo=1';
   const p = [];
   if (req.query.categoria) { sql += ' AND categoria=?'; p.push(req.query.categoria); }
   if (req.query.busca) { sql += ' AND nome LIKE ?'; p.push('%' + req.query.busca + '%'); }
-  res.json(db.prepare(sql + ' ORDER BY categoria, nome').all(...p));
+  res.json(await db.prepare(sql + ' ORDER BY categoria, nome').all(...p));
 });
 
-app.post('/api/materiais', gestor, (req, res) => {
+app.post('/api/materiais', gestor, async (req, res) => {
   const { nome, categoria } = req.body;
   if (!nome) return res.status(400).json({ error: 'Nome obrigatorio' });
-  const r = db.prepare('INSERT INTO materiais (nome,categoria) VALUES (?,?)').run(nome, categoria || 'Geral');
+  const r = await db.prepare('INSERT INTO materiais (nome,categoria) VALUES (?,?)').run(nome, categoria || 'Geral');
   res.json({ ok: true, id: r.lastInsertRowid });
 });
 
-app.delete('/api/materiais/:id', gestor, (req, res) => {
-  db.prepare('UPDATE materiais SET ativo=0 WHERE id=?').run(req.params.id);
+app.delete('/api/materiais/:id', gestor, async (req, res) => {
+  await db.prepare('UPDATE materiais SET ativo=0 WHERE id=?').run(req.params.id);
   res.json({ ok: true });
 });
 
 // ============================================================
 // RDOs
 // ============================================================
-app.get('/api/rdos', (req, res) => {
+app.get('/api/rdos', async (req, res) => {
   let sql = `SELECT r.*, o.nome as obra_nome, o.responsavel as obra_responsavel, o.status as obra_status,
     l.comarca as cidade, l.latitude as local_lat, l.longitude as local_lng, l.endereco as local_endereco
     FROM rdos r 
@@ -777,11 +768,11 @@ app.get('/api/rdos', (req, res) => {
   if (req.query.data_de) { sql += ' AND r.data>=?'; p.push(req.query.data_de); }
   if (req.query.data_ate) { sql += ' AND r.data<=?'; p.push(req.query.data_ate); }
   if (req.query.local) { sql += ' AND r.local=?'; p.push(req.query.local); }
-  res.json(db.prepare(sql + ' GROUP BY r.id ORDER BY r.data DESC, r.criado_em DESC').all(...p));
+  res.json(await db.prepare(sql + ' GROUP BY r.id ORDER BY r.data DESC, r.criado_em DESC').all(...p));
 });
 
-app.get('/api/rdos/:id', (req, res) => {
-  const rdo = db.prepare(`SELECT r.*, o.nome as obra_nome, l.comarca as cidade
+app.get('/api/rdos/:id', async (req, res) => {
+  const rdo = await db.prepare(`SELECT r.*, o.nome as obra_nome, l.comarca as cidade
     FROM rdos r 
     LEFT JOIN obras o ON r.obra_id=o.id 
     LEFT JOIN locais l ON (r.local = l.nome OR UPPER(l.nome) LIKE '%' || UPPER(r.local) || '%' OR UPPER(l.comarca) LIKE '%' || UPPER(r.local) || '%') AND l.ativo=1
@@ -790,10 +781,10 @@ app.get('/api/rdos/:id', (req, res) => {
   res.json(rdo);
 });
 
-app.post('/api/rdos', (req, res) => {
+app.post('/api/rdos', async (req, res) => {
   const d = req.body;
   if (!d.data || !d.local) return res.status(400).json({ error: 'Data e local obrigatorios' });
-  const r = db.prepare(`INSERT INTO rdos (obra_id,data,local,atividade,equipe_json,materiais_json,
+  const r = await db.prepare(`INSERT INTO rdos (obra_id,data,local,atividade,equipe_json,materiais_json,
     entrada_manha,saida_manha,entrada_tarde,saida_tarde,
     parou,motivo_parada,switch_instalado,nom_switch,local_switch,
     camera_instalada,nom_camera,local_camera,fotos_json,usuario_id,usuario_nome)
@@ -810,9 +801,9 @@ app.post('/api/rdos', (req, res) => {
   res.json({ ok: true, id: r.lastInsertRowid });
 });
 
-app.put('/api/rdos/:id', (req, res) => {
+app.put('/api/rdos/:id', async (req, res) => {
   const d = req.body;
-  db.prepare(`UPDATE rdos SET data=?,local=?,atividade=?,equipe_json=?,materiais_json=?,
+  await db.prepare(`UPDATE rdos SET data=?,local=?,atividade=?,equipe_json=?,materiais_json=?,
     entrada_manha=?,saida_manha=?,entrada_tarde=?,saida_tarde=?,
     parou=?,motivo_parada=?,switch_instalado=?,nom_switch=?,local_switch=?,
     camera_instalada=?,nom_camera=?,local_camera=?,fotos_json=? WHERE id=?`).run(
@@ -828,13 +819,13 @@ app.put('/api/rdos/:id', (req, res) => {
   res.json({ ok: true });
 });
 
-app.delete('/api/rdos/:id', (req, res) => {
-  const rdo = db.prepare('SELECT usuario_id FROM rdos WHERE id=?').get(req.params.id);
+app.delete('/api/rdos/:id', async (req, res) => {
+  const rdo = await db.prepare('SELECT usuario_id FROM rdos WHERE id=?').get(req.params.id);
   if (!rdo) return res.status(404).json({ error: 'RDO nao encontrado' });
   if (req.user.perfil !== 'gestor' && rdo.usuario_id !== req.user.id) {
     return res.status(403).json({ error: 'So o dono do RDO pode excluir' });
   }
-  db.prepare('DELETE FROM rdos WHERE id=?').run(req.params.id);
+  await db.prepare('DELETE FROM rdos WHERE id=?').run(req.params.id);
   res.json({ ok: true });
 });
 
@@ -846,77 +837,77 @@ app.post('/api/upload', upload.array('fotos', 10), (req, res) => {
 });
 
 // Presenca / Localizacao em tempo real
-app.post('/api/presenca', (req, res) => {
+app.post('/api/presenca', async (req, res) => {
   const { latitude, longitude, obra_id, local_nome } = req.body;
   if (!req.user) return res.status(401).json({ error: 'Nao autenticado' });
-  const existe = db.prepare('SELECT id FROM presenca WHERE usuario_id=?').get(req.user.id);
+  const existe = await db.prepare('SELECT id FROM presenca WHERE usuario_id=?').get(req.user.id);
   if (existe) {
-    db.prepare('UPDATE presenca SET latitude=?,longitude=?,obra_id=?,local_nome=?,usuario_nome=?,equipe_id=?,atualizado_em=datetime(\'now\') WHERE usuario_id=?')
+    await db.prepare('UPDATE presenca SET latitude=?,longitude=?,obra_id=?,local_nome=?,usuario_nome=?,equipe_id=?,atualizado_em=datetime(\'now\') WHERE usuario_id=?')
       .run(latitude, longitude, obra_id || null, local_nome || '', req.user.nome, req.user.equipe_id || null, req.user.id);
   } else {
-    db.prepare('INSERT INTO presenca (usuario_id,usuario_nome,equipe_id,latitude,longitude,obra_id,local_nome) VALUES (?,?,?,?,?,?,?)')
+    await db.prepare('INSERT INTO presenca (usuario_id,usuario_nome,equipe_id,latitude,longitude,obra_id,local_nome) VALUES (?,?,?,?,?,?,?)')
       .run(req.user.id, req.user.nome, req.user.equipe_id || null, latitude, longitude, obra_id || null, local_nome || '');
   }
   res.json({ ok: true });
 });
 
-app.get('/api/presenca', (req, res) => {
+app.get('/api/presenca', async (req, res) => {
   let sql = `SELECT p.*, u.email, u.perfil FROM presenca p JOIN usuarios u ON p.usuario_id=u.id WHERE u.ativo=1`;
   const p = [];
   if (req.query.equipe_id) { sql += ' AND p.equipe_id=?'; p.push(req.query.equipe_id); }
-  res.json(db.prepare(sql + ' ORDER BY p.atualizado_em DESC').all(...p));
+  res.json(await db.prepare(sql + ' ORDER BY p.atualizado_em DESC').all(...p));
 });
 
 // Minha presenca (apenas do usuario logado)
-app.get('/api/minha-presenca', (req, res) => {
+app.get('/api/minha-presenca', async (req, res) => {
   if (!req.user) return res.status(401).json({ error: 'Nao autenticado' });
-  const registros = db.prepare(`SELECT p.*, u.email FROM presenca p JOIN usuarios u ON p.usuario_id=u.id 
+  const registros = await db.prepare(`SELECT p.*, u.email FROM presenca p JOIN usuarios u ON p.usuario_id=u.id 
     WHERE p.usuario_id=? AND u.ativo=1 ORDER BY p.atualizado_em DESC`).all(req.user.id);
   res.json(registros);
 });
 
-app.get('/api/presenca/equipe/:id', (req, res) => {
-  res.json(db.prepare(`SELECT p.*, u.email FROM presenca p JOIN usuarios u ON p.usuario_id=u.id 
+app.get('/api/presenca/equipe/:id', async (req, res) => {
+  res.json(await db.prepare(`SELECT p.*, u.email FROM presenca p JOIN usuarios u ON p.usuario_id=u.id 
     WHERE p.equipe_id=? AND u.ativo=1 ORDER BY p.atualizado_em DESC`).all(req.params.id));
 });
 
 // Minha equipe
-app.get('/api/minha-equipe', (req, res) => {
+app.get('/api/minha-equipe', async (req, res) => {
   if (!req.user) return res.status(401).json({ error: 'Nao autenticado' });
   if (!req.user.equipe_id) return res.json(null);
-  const equipe = db.prepare('SELECT * FROM equipes WHERE id=?').get(req.user.equipe_id);
+  const equipe = await db.prepare('SELECT * FROM equipes WHERE id=?').get(req.user.equipe_id);
   if (!equipe) return res.json(null);
-  equipe.membros = db.prepare('SELECT id,nome,email FROM usuarios WHERE equipe_id=? AND ativo=1').all(req.user.equipe_id);
+  equipe.membros = await db.prepare('SELECT id,nome,email FROM usuarios WHERE equipe_id=? AND ativo=1').all(req.user.equipe_id);
   return res.json(equipe);
 });
 
 // Dashboard
-app.get('/api/dashboard', gestor, (req, res) => {
-  const totalObras = db.prepare('SELECT COUNT(*) as c FROM obras WHERE ativo=1').get().c;
-  const totalRdos = db.prepare('SELECT COUNT(*) as c FROM rdos').get().c;
-  const rdosHoje = db.prepare("SELECT COUNT(*) as c FROM rdos WHERE data=date('now')").get().c;
-  const totalUsuarios = db.prepare('SELECT COUNT(*) as c FROM usuarios WHERE ativo=1').get().c;
-  const totalEquipes = db.prepare('SELECT COUNT(*) as c FROM equipes WHERE ativo=1').get().c;
-  const recentes = db.prepare('SELECT id,data,local,atividade,usuario_nome FROM rdos ORDER BY criado_em DESC LIMIT 10').all();
+app.get('/api/dashboard', gestor, async (req, res) => {
+  const totalObras = await db.prepare('SELECT COUNT(*) as c FROM obras WHERE ativo=1').get().c;
+  const totalRdos = await db.prepare('SELECT COUNT(*) as c FROM rdos').get().c;
+  const rdosHoje = await db.prepare("SELECT COUNT(*) as c FROM rdos WHERE data=date('now')").get().c;
+  const totalUsuarios = await db.prepare('SELECT COUNT(*) as c FROM usuarios WHERE ativo=1').get().c;
+  const totalEquipes = await db.prepare('SELECT COUNT(*) as c FROM equipes WHERE ativo=1').get().c;
+  const recentes = await db.prepare('SELECT id,data,local,atividade,usuario_nome FROM rdos ORDER BY criado_em DESC LIMIT 10').all();
   res.json({ totalObras, totalRdos, rdosHoje, totalUsuarios, totalEquipes, recentes });
 });
 
 // Dashboard por equipe (REGIAO do mesclado + presenca/RDO)
-app.get('/api/dashboard/por-equipe', gestor, (req, res) => {
+app.get('/api/dashboard/por-equipe', gestor, async (req, res) => {
   // agregados por regiao vindo dos locais
-  const porRegiao = db.prepare(`SELECT regiao, COUNT(*) as total_locais, SUM(cameras) as total_cameras, SUM(cam_fixa) as fixa, SUM(cam_analitica) as analitica, SUM(cam_lpr) as lpr, SUM(CASE WHEN latitude IS NOT NULL AND latitude!='' THEN 1 ELSE 0 END) as com_coord FROM locais WHERE ativo=1 GROUP BY regiao`).all();
+  const porRegiao = await db.prepare(`SELECT regiao, COUNT(*) as total_locais, SUM(cameras) as total_cameras, SUM(cam_fixa) as fixa, SUM(cam_analitica) as analitica, SUM(cam_lpr) as lpr, SUM(CASE WHEN latitude IS NOT NULL AND latitude!='' THEN 1 ELSE 0 END) as com_coord FROM locais WHERE ativo=1 GROUP BY regiao`).all();
   // normalizar nulos
   porRegiao.forEach(r=>{ if(!r.regiao) r.regiao='SEM EQUIPE'; r.total_cameras=r.total_cameras||0; r.fixa=r.fixa||0; r.analitica=r.analitica||0; r.lpr=r.lpr||0; });
   // equipes cadastradas
-  const equipes = db.prepare('SELECT id,nome,cor FROM equipes WHERE ativo=1').all();
+  const equipes = await db.prepare('SELECT id,nome,cor FROM equipes WHERE ativo=1').all();
   // membros por equipe
-  const membros = db.prepare('SELECT equipe_id, COUNT(*) as c FROM usuarios WHERE ativo=1 AND equipe_id IS NOT NULL GROUP BY equipe_id').all();
+  const membros = await db.prepare('SELECT equipe_id, COUNT(*) as c FROM usuarios WHERE ativo=1 AND equipe_id IS NOT NULL GROUP BY equipe_id').all();
   const membrosMap = Object.fromEntries(membros.map(m=>[String(m.equipe_id), m.c]));
   // RDOs por equipe (via usuario.equipe_id -> rdos.usuario_id)
-  const rdosPorEquipe = db.prepare(`SELECT u.equipe_id as equipe_id, COUNT(r.id) as total, SUM(CASE WHEN r.data=date('now') THEN 1 ELSE 0 END) as hoje FROM rdos r JOIN usuarios u ON r.usuario_id=u.id WHERE u.equipe_id IS NOT NULL GROUP BY u.equipe_id`).all();
+  const rdosPorEquipe = await db.prepare(`SELECT u.equipe_id as equipe_id, COUNT(r.id) as total, SUM(CASE WHEN r.data=date('now') THEN 1 ELSE 0 END) as hoje FROM rdos r JOIN usuarios u ON r.usuario_id=u.id WHERE u.equipe_id IS NOT NULL GROUP BY u.equipe_id`).all();
   const rdoMap = Object.fromEntries(rdosPorEquipe.map(r=>[String(r.equipe_id), r]));
   // presenca ativa por equipe
-  const presPorEquipe = db.prepare('SELECT equipe_id, COUNT(*) as c FROM presenca WHERE equipe_id IS NOT NULL GROUP BY equipe_id').all();
+  const presPorEquipe = await db.prepare('SELECT equipe_id, COUNT(*) as c FROM presenca WHERE equipe_id IS NOT NULL GROUP BY equipe_id').all();
   const presMap = Object.fromEntries(presPorEquipe.map(p=>[String(p.equipe_id), p.c]));
 
   // montar resposta unificada por regiao/equipe
@@ -964,18 +955,20 @@ io.on('connection', (socket) => {
 // ============================================================
 // ROUTES
 // ============================================================
-app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
-app.get('/app', (req, res) => res.sendFile(path.join(__dirname, 'public', 'app.html')));
-app.get('/login', (req, res) => res.sendFile(path.join(__dirname, 'public', 'login.html')));
+app.get('/', async (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
+app.get('/app', async (req, res) => res.sendFile(path.join(__dirname, 'public', 'app.html')));
+app.get('/login', async (req, res) => res.sendFile(path.join(__dirname, 'public', 'login.html')));
 
-server.listen(PORT, '0.0.0.0', () => {
-  console.log('=========================================');
-  console.log('   IPQ Tecnologia - RDO de Campo');
-  console.log('=========================================');
-  console.log('Painel:  http://localhost:' + PORT);
-  console.log('Campo:   http://localhost:' + PORT + '/app');
-  console.log('Login:   http://localhost:' + PORT + '/login');
-  console.log('=========================================');
-  console.log('Admin: admin@ipq.com / admin123');
-  console.log('=========================================');
+dbReady.then(()=>{
+  server.listen(PORT, '0.0.0.0', () => {
+    console.log('=========================================');
+    console.log('   IPQ Tecnologia - RDO de Campo' + (db.isPostgres ? ' [Postgres]' : ' [SQLite]'));
+    console.log('=========================================');
+    console.log('Painel:  http://localhost:' + PORT);
+    console.log('Campo:   http://localhost:' + PORT + '/app');
+    console.log('Login:   http://localhost:' + PORT + '/login');
+    console.log('=========================================');
+    console.log('Admin: admin@ipq.com / admin123');
+    console.log('=========================================');
+  });
 });
