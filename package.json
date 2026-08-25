@@ -1,7 +1,7 @@
 {
   "name": "crm-obras",
   "version": "2.0.0",
-  "description": "CRM de Obras - IPQ Tecnologia",
+  "description": "CRM de Obras",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
