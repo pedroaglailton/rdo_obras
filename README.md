@@ -1,4 +1,4 @@
-# CRM de Obras - IPQ Tecnologia
+# CRM de Obras 
 
 Sistema de gestão de obras com chat em tempo real, cadastro flexível de materiais e interface mobile para técnicos.
 
@@ -17,38 +17,7 @@ Sistema de gestão de obras com chat em tempo real, cadastro flexível de materi
 - **Chat em Tempo Real** - Comunicação com gestor via Socket.io
 - **Cadastro Rápido** - Cadastra material novo direto no app
 
-## 📦 Instalação
 
-### 1. Instalar dependências
-```bash
-cd crm-obras
-npm install
-```
-
-### 2. Iniciar servidor
-```bash
-npm start
-```
-
-### 3. Acessar
-- **Painel Web:** http://localhost:3000
-- **App Técnico:** http://localhost:3000/app
-
-## 📁 Estrutura
-
-```
-crm-obras/
-├── server.js              # Servidor principal
-├── package.json           # Dependências
-├── lista.txt              # Lista de materiais para importar
-├── api/                   # Rotas da API
-├── public/                # Arquivos estáticos
-│   ├── index.html         # Painel web
-│   ├── app.html           # App técnico
-│   ├── css/               # Estilos
-│   └── js/                # Scripts
-├── data/                  # Banco SQLite
-└── uploads/fotos/         # Fotos enviadas
 ```
 
 ## 🛠️ Tecnologias
@@ -93,4 +62,4 @@ O banco SQLite é criado automaticamente em `data/crm.db`
 
 ## 📝 Licença
 
-IPQ Tecnologia - Uso interno
+
