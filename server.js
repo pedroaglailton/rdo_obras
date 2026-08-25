@@ -741,8 +741,13 @@ app.get('/api/materiais', async (req, res) => {
   let sql = 'SELECT * FROM materiais WHERE ativo=1';
   const p = [];
   if (req.query.categoria) { sql += ' AND categoria=?'; p.push(req.query.categoria); }
-  if (req.query.busca) { sql += ' AND nome LIKE ?'; p.push('%' + req.query.busca + '%'); }
-  res.json(await db.prepare(sql + ' ORDER BY categoria, nome').all(...p));
+  let rows = await db.prepare(sql + ' ORDER BY categoria, nome').all(...p);
+  if (req.query.busca) {
+    const norm = s => s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+    const buscaNorm = norm(req.query.busca);
+    rows = rows.filter(r => norm(r.nome).includes(buscaNorm));
+  }
+  res.json(rows);
 });
 
 app.post('/api/materiais', gestor, async (req, res) => {

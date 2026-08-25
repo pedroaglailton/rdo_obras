@@ -40,6 +40,8 @@ function toPg(sql) {
   s = s.replace(/date\('now'\)/gi, 'CURRENT_DATE::text');
   // datetime('now') -> NOW()
   s = s.replace(/datetime\('now'\)/gi, 'NOW()');
+  // LIKE -> ILIKE no Postgres para busca case-insensitive (materiais com 1ª maiúscula)
+  s = s.replace(/\sLIKE\s/gi, ' ILIKE ');
   let i = 0;
   return s.replace(/\?/g, () => `$${++i}`);
 }
