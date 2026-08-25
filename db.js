@@ -12,7 +12,10 @@ if (isPostgres) {
   pool = new Pool({
     connectionString: DATABASE_URL,
     ssl: DATABASE_URL.includes('supabase') ? { rejectUnauthorized: false } : false,
+    connectionTimeoutMillis: 10000,
+    idleTimeoutMillis: 30000,
   });
+  pool.on('error', (e) => console.error('[pg pool]', e));
   console.log('[db] usando Postgres (Supabase)');
 } else {
   const Database = require('better-sqlite3');
@@ -33,6 +36,8 @@ function toPg(sql) {
     if (/materiais/i.test(s)) s = s.replace(/VALUES\s*\(/i, 'VALUES (') + ' ON CONFLICT (nome) DO NOTHING';
     else s += ' ON CONFLICT DO NOTHING';
   }
+  // date('now') -> CURRENT_DATE::text (rdos.data é TEXT YYYY-MM-DD)
+  s = s.replace(/date\('now'\)/gi, 'CURRENT_DATE::text');
   // datetime('now') -> NOW()
   s = s.replace(/datetime\('now'\)/gi, 'NOW()');
   let i = 0;

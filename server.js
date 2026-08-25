@@ -11,6 +11,10 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
+// Evita crash silencioso que derruba o proxy (502) — loga e mantém processo
+process.on('unhandledRejection', (e) => console.error('[unhandledRejection]', e));
+process.on('uncaughtException', (e) => console.error('[uncaughtException]', e));
+
 const PORT = process.env.PORT || 8080;
 const SECRET = process.env.TOKEN_SECRET || 'ipq-obras-2024';
 const uploadsDir = path.join(__dirname, 'uploads');
@@ -564,17 +568,17 @@ app.get('/api/locais/:id', async (req, res) => {
 });
 
 app.post('/api/locais', gestor, async (req, res) => {
-  const { nome, comarca, nome_imovel, tipo, ocupacao, endereco, area, longitude, latitude, google_maps_link, street_view_link, cameras, obra_id } = req.body;
+  const { nome, comarca, nome_imovel, tipo, ocupacao, endereco, area, longitude, latitude, google_maps_link, street_view_link, cameras } = req.body;
   if (!nome) return res.status(400).json({ error: 'Nome obrigatorio' });
-  const r = await db.prepare('INSERT INTO locais (nome,comarca,nome_imovel,tipo,ocupacao,endereco,area,longitude,latitude,google_maps_link,street_view_link,cameras,obra_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)')
-    .run(nome, comarca || '', nome_imovel || '', tipo || '', ocupacao || '', endereco || '', area || '', longitude || '', latitude || '', google_maps_link || '', street_view_link || '', cameras || 0, obra_id || null);
+  const r = await db.prepare('INSERT INTO locais (nome,comarca,nome_imovel,tipo,ocupacao,endereco,area,longitude,latitude,google_maps_link,street_view_link,cameras) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)')
+    .run(nome, comarca || '', nome_imovel || '', tipo || '', ocupacao || '', endereco || '', area || '', longitude || '', latitude || '', google_maps_link || '', street_view_link || '', cameras || 0);
   res.json({ ok: true, id: r.lastInsertRowid });
 });
 
 app.put('/api/locais/:id', gestor, async (req, res) => {
-  const { nome, comarca, nome_imovel, tipo, ocupacao, endereco, area, longitude, latitude, google_maps_link, street_view_link, cameras, obra_id } = req.body;
-  await db.prepare('UPDATE locais SET nome=?,comarca=?,nome_imovel=?,tipo=?,ocupacao=?,endereco=?,area=?,longitude=?,latitude=?,google_maps_link=?,street_view_link=?,cameras=?,obra_id=? WHERE id=?')
-    .run(nome, comarca, nome_imovel, tipo, ocupacao, endereco, area, longitude, latitude, google_maps_link, street_view_link, cameras, obra_id, req.params.id);
+  const { nome, comarca, nome_imovel, tipo, ocupacao, endereco, area, longitude, latitude, google_maps_link, street_view_link, cameras } = req.body;
+  await db.prepare('UPDATE locais SET nome=?,comarca=?,nome_imovel=?,tipo=?,ocupacao=?,endereco=?,area=?,longitude=?,latitude=?,google_maps_link=?,street_view_link=?,cameras=? WHERE id=?')
+    .run(nome, comarca, nome_imovel, tipo, ocupacao, endereco, area, longitude, latitude, google_maps_link, street_view_link, cameras, req.params.id);
   res.json({ ok: true });
 });
 
@@ -960,7 +964,14 @@ app.get('/', async (req, res) => res.sendFile(path.join(__dirname, 'public', 'in
 app.get('/app', async (req, res) => res.sendFile(path.join(__dirname, 'public', 'app.html')));
 app.get('/login', async (req, res) => res.sendFile(path.join(__dirname, 'public', 'login.html')));
 
-dbReady.then(()=>{
+// Middleware de erro — transforma PGError/SQLite error em 500 JSON em vez de timeout 502 (Express 4 async)
+app.use((err, req, res, next) => {
+  console.error('[api error]', req.method, req.path, err);
+  if (res.headersSent) return next(err);
+  res.status(500).json({ error: err.message || 'Erro interno' });
+});
+
+function startServer() {
   server.listen(PORT, '0.0.0.0', () => {
     console.log('=========================================');
     console.log('   IPQ Tecnologia - RDO de Campo' + (db.isPostgres ? ' [Postgres]' : ' [SQLite]'));
@@ -972,4 +983,9 @@ dbReady.then(()=>{
     console.log('Admin: admin@ipq.com / admin123');
     console.log('=========================================');
   });
+  server.on('error', (e) => console.error('[server error]', e));
+}
+dbReady.then(startServer).catch((e) => {
+  console.error('[boot] initDb falhou, subindo mesmo assim:', e);
+  startServer();
 });
