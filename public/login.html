@@ -2,66 +2,116 @@
 <html lang="pt-br">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="RDO Campo">
+<meta name="theme-color" content="#0f3d4c">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="manifest" href="/manifest.json">
+<link rel="apple-touch-icon" href="/icon-192.svg">
 <title>Login - IPQ Tecnologia</title>
 <style>
-  :root{--primary:#0f3d4c;--primary-dark:#0a2c37;--accent:#ff7a33;--bg:#f2f4f6;--card:#fff;--line:#e1e5ea;--text:#1c2b33;--muted:#68767f;--ok:#1f8a4c;--danger:#c6392f;--radius:12px}
-  *{box-sizing:border-box}
-  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--text);display:flex;align-items:center;justify-content:center;min-height:100vh;padding:20px}
-  .box{background:var(--card);border-radius:16px;padding:32px;width:100%;max-width:400px;box-shadow:0 4px 20px rgba(0,0,0,.1)}
-  .box h1{text-align:center;color:var(--primary);margin:0 0 4px;font-size:24px}
-  .box .sub{text-align:center;color:var(--muted);font-size:13px;margin:0 0 24px}
-  .badge-gestor{display:inline-block;background:#e3f2fd;color:#0f3d4c;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;letter-spacing:.04em}
-  label{display:block;font-size:13px;font-weight:600;margin:12px 0 5px}
-  input{width:100%;padding:11px 12px;border:1.5px solid var(--line);border-radius:9px;font-size:15px;background:#fbfcfd;color:var(--text);font-family:inherit}
-  input:focus{outline:none;border-color:var(--primary);background:#fff}
-  .btn{width:100%;background:var(--accent);color:#fff;border:none;padding:14px;border-radius:11px;font-size:16px;font-weight:700;cursor:pointer;margin-top:16px}
-  .btn:active{background:#e8621d}
-  .btn:disabled{opacity:.6;cursor:not-allowed}
-  .error{color:var(--danger);font-size:12px;text-align:center;margin-top:10px;min-height:18px}
-  .hint{text-align:center;margin-top:18px;padding:14px;background:#f7f9fa;border-radius:10px;border:1px solid var(--line);font-size:12px;color:var(--muted);line-height:1.5}
+  :root{--primary:#0f3d4c;--primary-dark:#0a2c37;--primary-light:#1a6b7a;--accent:#ff7a33;--accent-dark:#e8621d;--bg:#f0f2f5;--card:#fff;--line:#e2e6ec;--text:#1a2332;--muted:#6b7a8d;--ok:#16a34a;--danger:#dc2626;--radius:16px;--safe-top:env(safe-area-inset-top,0px);--safe-bottom:env(safe-area-inset-bottom,0px)}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",Roboto,sans-serif;background:linear-gradient(160deg,#0f3d4c 0%,#1a6b7a 50%,#0a2c37 100%);color:var(--text);display:flex;align-items:center;justify-content:center;min-height:100vh;min-height:100dvh;padding:20px;padding-top:calc(20px + var(--safe-top));padding-bottom:calc(20px + var(--safe-bottom));-webkit-font-smoothing:antialiased}
+  .box{background:rgba(255,255,255,.95);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-radius:24px;padding:32px 28px;width:100%;max-width:400px;box-shadow:0 20px 60px rgba(0,0,0,.3);border:1px solid rgba(255,255,255,.2);animation:fadeUp .5s cubic-bezier(.4,0,.2,1)}
+  @keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+  .logo{text-align:center;margin-bottom:24px}
+  .logo-icon{width:64px;height:64px;border-radius:18px;background:linear-gradient(135deg,var(--primary),var(--primary-light));display:inline-flex;align-items:center;justify-content:center;margin-bottom:12px;box-shadow:0 8px 24px rgba(15,61,76,.3)}
+  .logo-icon span{color:#ff7a33;font-size:22px;font-weight:900;letter-spacing:1px}
+  .box h1{text-align:center;color:var(--primary);margin:0 0 4px;font-size:22px;font-weight:800;letter-spacing:-.02em}
+  .box .sub{text-align:center;color:var(--muted);font-size:13px;margin:0 0 28px;font-weight:500}
+  .badge-gestor{display:inline-block;background:rgba(15,61,76,.08);color:var(--primary);padding:4px 12px;border-radius:20px;font-size:11px;font-weight:700;letter-spacing:.04em}
+  label{display:block;font-size:12px;font-weight:700;color:var(--muted);margin:16px 0 6px;letter-spacing:.02em;text-transform:uppercase}
+  input{width:100%;padding:14px 16px;border:1.5px solid var(--line);border-radius:12px;font-size:16px;background:var(--card);color:var(--text);font-family:inherit;transition:border-color .2s,box-shadow .2s}
+  input:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 4px rgba(15,61,76,.1)}
+  input::placeholder{color:var(--muted)}
+  .btn{width:100%;background:linear-gradient(135deg,var(--accent),var(--accent-dark));color:#fff;border:none;padding:16px;border-radius:14px;font-size:16px;font-weight:800;cursor:pointer;margin-top:20px;box-shadow:0 4px 16px rgba(255,122,51,.3);transition:all .2s;letter-spacing:.01em}
+  .btn:active{transform:scale(.98);box-shadow:0 2px 8px rgba(255,122,51,.2)}
+  .btn:disabled{opacity:.5;cursor:not-allowed;transform:none}
+  .error{color:var(--danger);font-size:12px;text-align:center;margin-top:12px;min-height:18px;font-weight:600}
+  .hint{text-align:center;margin-top:20px;padding:16px;background:rgba(15,61,76,.04);border-radius:14px;border:1px solid var(--line);font-size:12px;color:var(--muted);line-height:1.6}
   .hint strong{color:var(--primary)}
+  .gps-status{text-align:center;margin-top:12px;font-size:11px;color:var(--muted);min-height:16px}
+  .gps-status.ok{color:var(--ok);font-weight:600}
+  .gps-status.err{color:var(--danger)}
 </style>
 </head>
 <body>
 <div class="box">
-  <h1>IPQ Tecnologia</h1>
-  <p class="sub">RDO de Campo &bull; <span class="badge-gestor">Acesso Restrito</span></p>
+  <div class="logo">
+    <div class="logo-icon"><span>RDO</span></div>
+    <h1>IPQ Tecnologia</h1>
+    <p class="sub">RDO de Campo &bull; <span class="badge-gestor">Acesso Restrito</span></p>
+  </div>
   <div id="f-login">
     <label>Email</label>
-    <input type="text" id="email" placeholder="admin@ipq.com" autocomplete="username">
+    <input type="text" id="email" placeholder="admin@ipq.com" autocomplete="username" inputmode="email">
     <label>Senha</label>
     <input type="password" id="senha" placeholder="••••••••" autocomplete="current-password">
     <button class="btn" id="btnLogin" onclick="doLogin()">Entrar</button>
     <div class="error" id="e-login"></div>
+    <div class="gps-status" id="gpsLoginStatus"></div>
     <div class="hint">
-      <strong>🔒 Cadastro pelo gestor</strong><br>
+      <strong>Cadastro pelo gestor</strong><br>
       Usuários e equipes são criados exclusivamente no <strong>Painel Admin</strong> (aba Equipes/Usuários).<br>
       Procure o administrador da obra para liberar seu acesso.
     </div>
   </div>
 </div>
 <script>
+(function(){
+  // PWA: registra service worker
+  if('serviceWorker' in navigator){
+    navigator.serviceWorker.register('/sw.js').then(function(r){r.update()}).catch(function(){});
+  }
+
+  // GPS: solicita permissão imediatamente ao abrir o login
+  var gpsEl = document.getElementById('gpsLoginStatus');
+  if(navigator.geolocation){
+    gpsEl.textContent = '📍 Solicitando localização...';
+    navigator.geolocation.getCurrentPosition(
+      function(pos){
+        window._loginPos = {lat:pos.coords.latitude, lng:pos.coords.longitude, acc:pos.coords.accuracy};
+        gpsEl.textContent = '📍 GPS: ' + pos.coords.latitude.toFixed(4) + ', ' + pos.coords.longitude.toFixed(4) + ' (±' + Math.round(pos.coords.accuracy) + 'm)';
+        gpsEl.className = 'gps-status ok';
+        try{ localStorage.setItem('lastGPS', JSON.stringify(window._loginPos)); }catch(e){}
+      },
+      function(err){
+        gpsEl.textContent = '📍 GPS: ' + (err.code===1?'permissão negada': err.code===2?'indisponível':'timeout');
+        gpsEl.className = 'gps-status err';
+      },
+      {enableHighAccuracy:true, timeout:10000, maximumAge:30000}
+    );
+  } else {
+    gpsEl.textContent = '📍 GPS não disponível neste dispositivo';
+    gpsEl.className = 'gps-status err';
+  }
+})();
+
 async function doLogin(){
-  const email=document.getElementById('email').value.trim();
-  const senha=document.getElementById('senha').value;
+  var email=document.getElementById('email').value.trim();
+  var senha=document.getElementById('senha').value;
   if(!email||!senha){document.getElementById('e-login').textContent='Preencha email e senha';return;}
-  const btn=document.getElementById('btnLogin');
+  var btn=document.getElementById('btnLogin');
   btn.disabled=true; btn.textContent='Entrando...';
   try{
-    const r=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,senha})});
-    const d=await r.json();
+    var r=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:email,senha:senha})});
+    var d=await r.json();
     if(d.error){document.getElementById('e-login').textContent=d.error; btn.disabled=false; btn.textContent='Entrar'; return;}
     localStorage.setItem('token',d.token);
     localStorage.setItem('user',JSON.stringify(d.user));
+    // GPS já foi capturado acima — se tem posição, envia presença imediatamente
+    if(window._loginPos){
+      try{
+        await fetch('/api/presenca',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+d.token},body:JSON.stringify({latitude:window._loginPos.lat,longitude:window._loginPos.lng,accuracy:window._loginPos.acc})});
+      }catch(e){}
+    }
     window.location.href=d.user.perfil==='gestor'?'/':'/app';
   }catch(e){document.getElementById('e-login').textContent='Erro de conexao'; btn.disabled=false; btn.textContent='Entrar';}
 }
-document.querySelectorAll('input').forEach(i=>i.addEventListener('keypress',e=>{if(e.key==='Enter')doLogin();}));
-// Atualiza Service Worker sem loop: só força update, não recarrega em loop
-if('serviceWorker' in navigator){
-  navigator.serviceWorker.getRegistrations().then(rs=>rs.forEach(r=>r.update()));
-}
+document.querySelectorAll('input').forEach(function(i){i.addEventListener('keypress',function(e){if(e.key==='Enter')doLogin();});});
 </script>
 </body>
 </html>
