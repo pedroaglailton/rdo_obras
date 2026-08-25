@@ -778,7 +778,7 @@ app.get('/api/rdos', async (req, res) => {
   if (req.query.data_de) { sql += ' AND r.data>=?'; p.push(req.query.data_de); }
   if (req.query.data_ate) { sql += ' AND r.data<=?'; p.push(req.query.data_ate); }
   if (req.query.local) { sql += ' AND r.local=?'; p.push(req.query.local); }
-  res.json(await db.prepare(sql + ' GROUP BY r.id ORDER BY r.data DESC, r.criado_em DESC').all(...p));
+  res.json(await db.prepare(sql + ' ORDER BY r.data DESC, r.criado_em DESC').all(...p));
 });
 
 app.get('/api/rdos/:id', async (req, res) => {
