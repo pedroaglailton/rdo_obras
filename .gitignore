@@ -6,3 +6,8 @@ uploads/fotos/*
 *.log
 *.db-wal
 *.db-shm
+*.sqlite
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
+api_key.txt
