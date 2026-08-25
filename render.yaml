@@ -1,4 +1,4 @@
-# Blueprint do Render — crm-obras (IPQ Tecnologia)
+# Blueprint do Render — crm-obras 
 # Deploy: Render > New + > Blueprint > selecione repo rdo_obras
 services:
   # Serviço principal - CRM de Obras (código na raiz)
