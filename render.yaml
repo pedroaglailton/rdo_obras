@@ -1,11 +1,26 @@
-# Blueprint do Render — "New +" > "Blueprint" na raiz deste repositório.
-# O código do servidor mora em /server, por isso o rootDir abaixo.
-#
-# Sobe no plano Free, sem disco persistente (bom pra testar; o banco .sqlite
-# é apagado a cada novo deploy/reinício). Antes de usar com técnicos de
-# verdade em campo, suba pra um plano pago e descomente o bloco "disk"
-# abaixo — veja server/README.md, seção "Deploy no GitHub + Render".
+# Blueprint do Render — crm-obras (IPQ Tecnologia)
+# Deploy: Render > New + > Blueprint > selecione repo rdo_obras
 services:
+  # Serviço principal - CRM de Obras (código na raiz)
+  - type: web
+    name: crm-obras
+    env: node
+    plan: free
+    rootDir: .
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: TOKEN_SECRET
+        generateValue: true
+    healthCheckPath: /login
+    # Para produção com dados persistentes, descomente o disco:
+    # disk:
+    #   name: crm-data
+    #   mountPath: /opt/render/project/src/data
+    #   sizeGB: 1
+  # Serviço legado (mantido do repo original) - pode remover se não usar
   - type: web
     name: rdo-central
     env: node
@@ -18,18 +33,5 @@ services:
         generateValue: true
       - key: DASHBOARD_USERS
         value: "Engenheiro:troque-esta-senha,Estagiario:troque-esta-tambem"
-        # ↑ formato "Nome:senha,Nome2:senha2" — depois do deploy, vá em
-        # "Environment" no painel do Render e troque pelos nomes e senhas
-        # reais. Todas as contas aqui têm a mesma permissão no dashboard.
       - key: FISCAL_USERS
         value: "Fiscal:troque-esta-senha"
-        # ↑ mesmo formato, mas pro app de fiscalização (contas separadas
-        # do dashboard). Troque depois do deploy também.
-    # disk:
-    #   name: rdo-data
-    #   mountPath: /var/data
-    #   sizeGB: 1
-    # (se ativar o disco acima, adicione também esta env var:)
-    # envVars:
-    #   - key: DB_PATH
-    #     value: /var/data/rdo_central.sqlite
