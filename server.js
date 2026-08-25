@@ -210,6 +210,7 @@ const upload = multer({
 // ============================================================
 // MIDDLEWARE
 // ============================================================
+app.get('/favicon.ico', (req, res) => res.status(204).end());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.static(path.join(__dirname, 'public'), {
   setHeaders: (res, filePath) => {
@@ -274,7 +275,7 @@ app.put('/api/usuarios/:id', gestor, async (req, res) => {
   }
   // impedir desativar ultimo gestor ativo
   if (String(ativo) === '0' && atual.perfil === 'gestor') {
-    const gestoresAtivos = await db.prepare("SELECT COUNT(*) as c FROM usuarios WHERE perfil='gestor' AND ativo=1 AND id<>?").get(id).c;
+    const gestoresAtivos = (await db.prepare("SELECT COUNT(*) as c FROM usuarios WHERE perfil='gestor' AND ativo=1 AND id<>?").get(id)).c;
     if (gestoresAtivos === 0) return res.status(400).json({ error: 'Nao pode desativar o ultimo gestor' });
   }
   // impedir auto-desativacao
@@ -295,7 +296,7 @@ app.delete('/api/usuarios/:id', gestor, async (req, res) => {
   if (!u) return res.status(404).json({ error: 'Usuario nao encontrado' });
   if (Number(id) === req.user.id) return res.status(400).json({ error: 'Voce nao pode excluir seu proprio usuario' });
   if (u.perfil === 'gestor') {
-    const gestoresAtivos = await db.prepare("SELECT COUNT(*) as c FROM usuarios WHERE perfil='gestor' AND ativo=1 AND id<>?").get(id).c;
+    const gestoresAtivos = (await db.prepare("SELECT COUNT(*) as c FROM usuarios WHERE perfil='gestor' AND ativo=1 AND id<>?").get(id)).c;
     if (gestoresAtivos === 0) return res.status(400).json({ error: 'Nao pode remover o ultimo gestor' });
   }
   await db.prepare('UPDATE usuarios SET ativo=0, equipe_id=NULL WHERE id=?').run(id);
@@ -508,7 +509,7 @@ app.get('/api/locais', async (req, res) => {
 });
 
 app.get('/api/locais/comarcas', async (req, res) => {
-  res.json(await db.prepare('SELECT DISTINCT comarca FROM locais WHERE ativo=1 AND comarca IS NOT NULL ORDER BY comarca').all().map(r => r.comarca));
+  res.json((await db.prepare('SELECT DISTINCT comarca FROM locais WHERE ativo=1 AND comarca IS NOT NULL ORDER BY comarca').all()).map(r => r.comarca));
 });
 
 // Locais da equipe com progresso da obra (automatizado para app)
@@ -586,12 +587,12 @@ app.delete('/api/locais/:id', gestor, async (req, res) => {
 app.post('/api/locais/importar', gestor, async (req, res) => {
   const { locais } = req.body;
   if (!locais || !Array.isArray(locais)) return res.status(400).json({ error: 'Dados obrigatorios' });
-  const stmt = await db.prepare('INSERT INTO locais (nome,comarca,nome_imovel,tipo,ocupacao,endereco,area,longitude,latitude,google_maps_link,street_view_link,cameras) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)');
+  const stmt = db.prepare('INSERT INTO locais (nome,comarca,nome_imovel,tipo,ocupacao,endereco,area,longitude,latitude,google_maps_link,street_view_link,cameras) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)');
   let count = 0;
-  locais.forEach(l => {
-    stmt.run(l.nome || l.Name || '', l.comarca || l.Comarca || '', l.nome_imovel || l['Nome do imovel'] || '', l.tipo || l.Tipo || '', l.ocupacao || l.Ocupacao || '', l.endereco || l.Endereco || '', l.area || l['Area construida'] || '', l.longitude || l.Longitude || '', l.latitude || l.Latitude || '', l.google_maps_link || l['Google Maps Link'] || '', l.street_view_link || l['Street View Link'] || '', l.cameras || l.Cameras || 0);
+  for (const l of locais) {
+    await stmt.run(l.nome || l.Name || '', l.comarca || l.Comarca || '', l.nome_imovel || l['Nome do imovel'] || '', l.tipo || l.Tipo || '', l.ocupacao || l.Ocupacao || '', l.endereco || l.Endereco || '', l.area || l['Area construida'] || '', l.longitude || l.Longitude || '', l.latitude || l.Latitude || '', l.google_maps_link || l['Google Maps Link'] || '', l.street_view_link || l['Street View Link'] || '', l.cameras || l.Cameras || 0);
     count++;
-  });
+  }
   res.json({ ok: true, importados: count });
 });
 
@@ -883,11 +884,11 @@ app.get('/api/minha-equipe', async (req, res) => {
 
 // Dashboard
 app.get('/api/dashboard', gestor, async (req, res) => {
-  const totalObras = await db.prepare('SELECT COUNT(*) as c FROM obras WHERE ativo=1').get().c;
-  const totalRdos = await db.prepare('SELECT COUNT(*) as c FROM rdos').get().c;
-  const rdosHoje = await db.prepare("SELECT COUNT(*) as c FROM rdos WHERE data=date('now')").get().c;
-  const totalUsuarios = await db.prepare('SELECT COUNT(*) as c FROM usuarios WHERE ativo=1').get().c;
-  const totalEquipes = await db.prepare('SELECT COUNT(*) as c FROM equipes WHERE ativo=1').get().c;
+  const totalObras = (await db.prepare('SELECT COUNT(*) as c FROM obras WHERE ativo=1').get()).c;
+  const totalRdos = (await db.prepare('SELECT COUNT(*) as c FROM rdos').get()).c;
+  const rdosHoje = (await db.prepare("SELECT COUNT(*) as c FROM rdos WHERE data=date('now')").get()).c;
+  const totalUsuarios = (await db.prepare('SELECT COUNT(*) as c FROM usuarios WHERE ativo=1').get()).c;
+  const totalEquipes = (await db.prepare('SELECT COUNT(*) as c FROM equipes WHERE ativo=1').get()).c;
   const recentes = await db.prepare('SELECT id,data,local,atividade,usuario_nome FROM rdos ORDER BY criado_em DESC LIMIT 10').all();
   res.json({ totalObras, totalRdos, rdosHoje, totalUsuarios, totalEquipes, recentes });
 });
