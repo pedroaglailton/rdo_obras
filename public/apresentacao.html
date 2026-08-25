@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Apresentação - CRM Obras IPQ Tecnologia</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  :root{--primary:#0f3d4c;--primary-light:#1a6b7a;--accent:#ff7a33;--accent-dark:#e8621d;--bg:#0b1120;--card:rgba(255,255,255,.06);--text:#e4e8ef;--muted:#8896aa;--ok:#16a34a;--line:rgba(255,255,255,.1)}
+  html,body{height:100%;overflow:hidden;font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var(--text)}
+  .deck{position:relative;width:100%;height:100%}
+  .slide{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 80px;opacity:0;transform:translateX(60px);transition:all .5s cubic-bezier(.4,0,.2,1);pointer-events:none}
+  .slide.active{opacity:1;transform:translateX(0);pointer-events:auto}
+  .slide.prev{opacity:0;transform:translateX(-60px)}
+  h1{font-size:clamp(32px,5vw,56px);font-weight:900;letter-spacing:-.03em;line-height:1.1;margin-bottom:16px}
+  h2{font-size:clamp(24px,3.5vw,40px);font-weight:800;letter-spacing:-.02em;margin-bottom:24px;color:var(--accent)}
+  h3{font-size:clamp(18px,2vw,24px);font-weight:700;margin-bottom:12px;color:var(--primary-light)}
+  p,.desc{font-size:clamp(14px,1.6vw,20px);color:var(--muted);line-height:1.6;max-width:800px}
+  .accent{color:var(--accent)}
+  .light{color:var(--primary-light)}
+  .ok{color:var(--ok)}
+  .gradient-text{background:linear-gradient(135deg,var(--accent),#ff9b5f);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+  .hero{background:linear-gradient(160deg,rgba(15,61,76,.3),rgba(10,44,55,.6));border-radius:24px;padding:48px;backdrop-filter:blur(20px);border:1px solid var(--line);text-align:center;max-width:900px;width:100%}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:20px;width:100%;max-width:1000px;margin-top:24px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:28px;backdrop-filter:blur(12px);transition:transform .3s,box-shadow .3s}
+  .card:hover{transform:translateY(-4px);box-shadow:0 12px 40px rgba(0,0,0,.3)}
+  .card .icon{font-size:36px;margin-bottom:12px;display:block}
+  .card h3{margin-bottom:8px}
+  .card p{font-size:14px;line-height:1.5}
+  .stats{display:flex;gap:32px;flex-wrap:wrap;justify-content:center;margin:24px 0}
+  .stat{text-align:center}
+  .stat .num{font-size:clamp(36px,5vw,64px);font-weight:900;color:var(--accent);line-height:1}
+  .stat .label{font-size:13px;color:var(--muted);margin-top:4px;text-transform:uppercase;letter-spacing:.08em;font-weight:600}
+  .two-col{display:grid;grid-template-columns:1fr 1fr;gap:40px;width:100%;max-width:1000px;align-items:center}
+  .two-col.reverse{direction:rtl}.two-col.reverse>*{direction:ltr}
+  .phone-mock{width:280px;height:560px;background:linear-gradient(160deg,#151d2e,#0b1120);border-radius:36px;border:3px solid rgba(255,255,255,.15);padding:12px;margin:0 auto;box-shadow:0 20px 60px rgba(0,0,0,.5);position:relative;overflow:hidden}
+  .phone-mock .notch{position:absolute;top:0;left:50%;transform:translateX(-50%);width:120px;height:28px;background:var(--bg);border-radius:0 0 16px 16px;z-index:2}
+  .phone-mock .screen{width:100%;height:100%;background:linear-gradient(180deg,#0f3d4c,#0a2c37);border-radius:24px;overflow:hidden;display:flex;flex-direction:column}
+  .phone-mock .ph-header{padding:36px 16px 12px;background:linear-gradient(135deg,#0f3d4c,#1a6b7a);text-align:center}
+  .phone-mock .ph-header small{font-size:9px;color:#7ec8b8;text-transform:uppercase;letter-spacing:.1em}
+  .phone-mock .ph-header strong{display:block;font-size:16px;color:#fff;margin-top:2px}
+  .phone-mock .ph-body{flex:1;padding:12px;overflow:hidden}
+  .phone-mock .ph-card{background:rgba(255,255,255,.08);border-radius:12px;padding:10px;margin-bottom:8px;border:1px solid rgba(255,255,255,.06)}
+  .phone-mock .ph-card .ph-title{font-size:11px;font-weight:700;color:#fff}
+  .phone-mock .ph-card .ph-sub{font-size:9px;color:#8896aa;margin-top:2px}
+  .phone-mock .ph-bar{height:4px;background:rgba(255,255,255,.1);border-radius:99px;margin-top:6px;overflow:hidden}
+  .phone-mock .ph-bar .ph-fill{height:100%;border-radius:99px}
+  .phone-mock .ph-nav{display:flex;border-top:1px solid rgba(255,255,255,.06);padding:8px 0}
+  .phone-mock .ph-nav span{flex:1;text-align:center;font-size:9px;color:#8896aa}
+  .phone-mock .ph-nav span.on{color:var(--accent);font-weight:700}
+  .list{list-style:none;max-width:700px;width:100%}
+  .list li{display:flex;align-items:flex-start;gap:16px;padding:14px 0;border-bottom:1px solid var(--line);font-size:15px}
+  .list li:last-child{border:none}
+  .list .check{width:28px;height:28px;border-radius:50%;background:rgba(22,163,74,.15);color:var(--ok);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;flex-shrink:0}
+  .list .check.accent-bg{background:rgba(255,122,51,.15);color:var(--accent)}
+  .progress-bar{width:100%;max-width:600px;height:8px;background:rgba(255,255,255,.08);border-radius:99px;overflow:hidden;margin:16px 0}
+  .progress-bar .fill{height:100%;border-radius:99px;background:linear-gradient(90deg,var(--accent),#ff9b5f);transition:width 1s ease}
+  .nav{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);display:flex;gap:12px;z-index:100;background:rgba(0,0,0,.4);padding:10px 20px;border-radius:99px;backdrop-filter:blur(12px);border:1px solid var(--line)}
+  .nav button{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.15);color:#fff;width:44px;height:44px;border-radius:50%;font-size:18px;cursor:pointer;transition:all .2s;display:flex;align-items:center;justify-content:center}
+  .nav button:active{background:var(--accent);transform:scale(.9)}
+  .nav .counter{display:flex;align-items:center;color:var(--muted);font-size:13px;font-weight:600;padding:0 8px}
+  .badge{display:inline-block;padding:6px 16px;border-radius:99px;font-size:12px;font-weight:700;letter-spacing:.04em}
+  .badge.primary{background:rgba(15,61,76,.2);color:var(--primary-light);border:1px solid rgba(15,61,76,.3)}
+  .badge.orange{background:rgba(255,122,51,.15);color:var(--accent);border:1px solid rgba(255,122,51,.2)}
+  .tech-stack{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin-top:16px}
+  .tech{background:rgba(255,255,255,.06);border:1px solid var(--line);padding:8px 16px;border-radius:99px;font-size:13px;font-weight:600;color:var(--muted)}
+  .divider{width:60px;height:4px;background:linear-gradient(90deg,var(--accent),#ff9b5f);border-radius:99px;margin:16px 0}
+  @media(max-width:768px){
+    .slide{padding:30px 24px}
+    .two-col{grid-template-columns:1fr;gap:24px}
+    .two-col.reverse{direction:ltr}
+    .phone-mock{width:240px;height:480px}
+    .grid{grid-template-columns:1fr}
+    .stats{gap:20px}
+    .hero{padding:28px 20px}
+  }
+</style>
+</head>
+<body>
+<div class="deck" id="deck">
+
+  <!-- SLIDE 1: Capa -->
+  <div class="slide active" data-bg="gradient">
+    <div class="hero">
+      <span class="badge orange">IPQ TECNOLOGIA</span>
+      <div style="margin:24px 0">
+        <h1><span class="gradient-text">CRM Obras</span></h1>
+        <p style="font-size:clamp(16px,2vw,22px);margin-top:8px">Sistema de Gestão de Obras & RDO de Campo</p>
+      </div>
+      <div class="divider" style="margin:16px auto"></div>
+      <p>Gestão completa de obras de infraestrutura de câmeras e CFTV<br>com relatórios diários em tempo real</p>
+      <div class="stats" style="margin-top:32px">
+        <div class="stat"><div class="num">9</div><div class="label">Tabelas</div></div>
+        <div class="stat"><div class="num">30+</div><div class="label">Endpoints</div></div>
+        <div class="stat"><div class="num">PWA</div><div class="label">Mobile</div></div>
+        <div class="stat"><div class="num">RT</div><div class="label">Tempo Real</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 2: Problema -->
+  <div class="slide">
+    <h2>O Problema</h2>
+    <div class="divider"></div>
+    <div class="grid" style="margin-top:32px">
+      <div class="card"><span class="icon">📋</span><h3>RDOs em Papel</h3><p>Relatórios diários manuais, sujeitos a perda, ilegíveis e sem backup</p></div>
+      <div class="card"><span class="icon">📊</span><h3>Dados Descentralizados</h3><p>Planilhas espalhadas, sem visão consolidada do progresso das obras</p></div>
+      <div class="card"><span class="icon">📍</span><h3>Sem Geolocalização</h3><p>Impossível saber onde cada técnico está ou confirmar presença no local</p></div>
+      <div class="card"><span class="icon">⏱️</span><h3>Demora no Relatório</h3><p>Dias para consolidar informações que deveriam estar em tempo real</p></div>
+    </div>
+  </div>
+
+  <!-- SLIDE 3: Solução -->
+  <div class="slide">
+    <h2>A Solução</h2>
+    <div class="divider"></div>
+    <div class="two-col" style="margin-top:32px">
+      <div>
+        <h3 style="font-size:28px;margin-bottom:16px">Sistema <span class="accent">Completo</span></h3>
+        <p style="margin-bottom:20px">Uma plataforma web que conecta o escritório ao campo em tempo real.</p>
+        <ul class="list">
+          <li><span class="check">✓</span> Painel admin para gestores no desktop</li>
+          <li><span class="check">✓</span> App mobile para técnicos em campo</li>
+          <li><span class="check">✓</span> GPS em tempo real com mapa</li>
+          <li><span class="check">✓</span> RDO digital com fotos e materiais</li>
+          <li><span class="check">✓</span> Exportação CSV, JSON e Excel</li>
+          <li><span class="check">✓</span> PWA — instala como app nativo</li>
+        </ul>
+      </div>
+      <div style="text-align:center">
+        <div class="phone-mock">
+          <div class="notch"></div>
+          <div class="screen">
+            <div class="ph-header"><small>IPQ TECNOLOGIA</small><strong>RDO de Campo</strong></div>
+            <div class="ph-body">
+              <div class="ph-card"><div class="ph-title">📍 Equipe 1</div><div class="ph-sub">3 membros • 7 locais</div></div>
+              <div class="ph-card"><div class="ph-title">Fórum Central</div><div class="ph-sub">Fortaleza • 📷 12 câmeras</div><div class="ph-bar"><div class="ph-fill" style="width:65%;background:var(--accent)"></div></div></div>
+              <div class="ph-card"><div class="ph-title">Fórum Aldeota</div><div class="ph-sub">Fortaleza • 📷 8 câmeras</div><div class="ph-bar"><div class="ph-fill" style="width:30%;background:#ef6c00"></div></div></div>
+              <div class="ph-card"><div class="ph-title">GPS: ✓ 12m</div><div class="ph-sub" style="color:var(--ok)">-3.7319, -38.5267</div></div>
+            </div>
+            <div class="ph-nav"><span class="on">🏠 Início</span><span>+ RDO</span><span>📋 RDOs</span><span>🗺️ Mapa</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 4: Painel Admin -->
+  <div class="slide">
+    <h2>Painel <span class="accent">Admin</span></h2>
+    <div class="divider"></div>
+    <p class="desc" style="text-align:center;margin-bottom:28px">Acesso exclusivo do gestor pelo navegador — desktop ou tablet</p>
+    <div class="grid">
+      <div class="card"><span class="icon">📊</span><h3>Dashboard</h3><p>Visão consolidada: total de obras, RDOs, equipes, usuários e RDOs do dia</p></div>
+      <div class="card"><span class="icon">🏗️</span><h3>Obras & Etapas</h3><p>CRUD completo com prazo, status, progresso automático por etapas</p></div>
+      <div class="card"><span class="icon">📍</span><h3>Locais</h3><p>Importação Excel, comarca, GPS, câmeras por tipo, região/equipe, cronograma</p></div>
+      <div class="card"><span class="icon">👥</span><h3>Equipes</h3><p>Gestão de equipes com membros, cores, vinculação a regiões e locais</p></div>
+      <div class="card"><span class="icon">📦</span><h3>Materiais</h3><p>Catálogo categorizado (Câmeras, Cabeamento, Óptico, Rack...) com importação TXT</p></div>
+      <div class="card"><span class="icon">📋</span><h3>RDOs</h3><p>Listagem com filtros, exportação CSV/JSON/Excel profissional com estilos</p></div>
+    </div>
+  </div>
+
+  <!-- SLIDE 5: App Mobile -->
+  <div class="slide">
+    <h2>App de <span class="accent">Campo</span></h2>
+    <div class="divider"></div>
+    <div class="two-col" style="margin-top:28px">
+      <div style="text-align:center">
+        <div class="phone-mock">
+          <div class="notch"></div>
+          <div class="screen">
+            <div class="ph-header"><small>IPQ TECNOLOGIA</small><strong>+ Novo RDO</strong></div>
+            <div class="ph-body">
+              <div class="ph-card"><div class="ph-title">1. Dados da Obra</div><div class="ph-sub">Fórum Central • Fortaleza</div></div>
+              <div class="ph-card"><div class="ph-title">2. Materiais</div><div class="ph-sub">Cabo UTP, Câmera Bullet...</div></div>
+              <div class="ph-card"><div class="ph-title">3. Horários</div><div class="ph-sub">08:00-12:00 • 13:00-17:00</div></div>
+              <div class="ph-card"><div class="ph-title">4. Ocorrências</div><div class="ph-sub">Serviço parou? Não</div></div>
+              <div class="ph-card"><div class="ph-title">5. Instalações</div><div class="ph-sub">Switch • Câmera</div></div>
+              <div class="ph-card"><div class="ph-title">6. Fotos</div><div class="ph-sub">📷 Tirar foto ou escolher</div></div>
+            </div>
+            <div class="ph-nav"><span>🏠</span><span class="on">+ RDO</span><span>📋</span><span>🗺️</span></div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <h3 style="font-size:22px;margin-bottom:16px">Formulário <span class="accent">Completo</span></h3>
+        <ul class="list">
+          <li><span class="check accent-bg">1</span> Seleção de obra, local e atividade</li>
+          <li><span class="check accent-bg">2</span> Materiais usados com quantidade</li>
+          <li><span class="check accent-bg">3</span> Horários manhã e tarde</li>
+          <li><span class="check accent-bg">4</span> Ocorrências e paradas</li>
+          <li><span class="check accent-bg">5</span> Switch e câmera instalada</li>
+          <li><span class="check accent-bg">6</span> Upload de fotos direto do celular</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 6: GPS & Mapa -->
+  <div class="slide">
+    <h2>GPS & <span class="accent">Mapa</span></h2>
+    <div class="divider"></div>
+    <div class="grid" style="margin-template-columns:repeat(3,1fr);margin-top:28px">
+      <div class="card" style="text-align:center"><span class="icon">📍</span><h3>GPS em Tempo Real</h3><p>Alta precisão com watchPosition — atualiza a cada 5 segundos</p></div>
+      <div class="card" style="text-align:center"><span class="icon">🗺️</span><h3>Mapa Interativo</h3><p>OpenStreetMap com markers dos técnicos e locais de obra</p></div>
+      <div class="card" style="text-align:center"><span class="icon">🔔</span><h3>Auto-detecção</h3><p>Ao chegar a 150m do local, o app detecta e sugere vincular ao RDO</p></div>
+      <div class="card" style="text-align:center"><span class="icon">👥</span><h3>Equipe no Mapa</h3><p>Veja todos os técnicos da equipe em tempo real no mapa</p></div>
+      <div class="card" style="text-align:center"><span class="icon">📌</span><h3>RDOs no Mapa</h3><p>Cada RDO registrado aparece como marker com detalhes</p></div>
+      <div class="card" style="text-align:center"><span class="icon">🏠</span><h3>Endereço Reverso</h3><p>Nominatim converte coordenadas em endereço legível automaticamente</p></div>
+    </div>
+  </div>
+
+  <!-- SLIDE 7: PWA -->
+  <div class="slide">
+    <h2>PWA — <span class="gradient-text">App Nativo</span></h2>
+    <div class="divider"></div>
+    <div class="two-col" style="margin-top:28px">
+      <div>
+        <p style="margin-bottom:24px;font-size:17px">Instale direto do navegador — <strong style="color:var(--text)">sem precisar da App Store ou Play Store</strong></p>
+        <ul class="list">
+          <li><span class="check">✓</span> Tela cheia como app nativo</li>
+          <li><span class="check">✓</span> Ícone na tela inicial (Android & iOS)</li>
+          <li><span class="check">✓</span> Cache offline para assets</li>
+          <li><span class="check">✓</span> GPS capturado automaticamente no login</li>
+          <li><span class="check">✓</span> Safe areas para notch e barra inferior</li>
+          <li><span class="check">✓</span> Design glass morphism moderno</li>
+        </ul>
+      </div>
+      <div style="text-align:center">
+        <div style="display:inline-flex;flex-direction:column;gap:16px">
+          <div style="background:var(--card);border:1px solid var(--line);border-radius:16px;padding:20px 32px;display:flex;align-items:center;gap:16px">
+            <span style="font-size:32px">🤖</span>
+            <div style="text-align:left"><strong style="display:block">Android</strong><span style="font-size:13px;color:var(--muted)">Chrome → "Adicionar à tela inicial"</span></div>
+          </div>
+          <div style="background:var(--card);border:1px solid var(--line);border-radius:16px;padding:20px 32px;display:flex;align-items:center;gap:16px">
+            <span style="font-size:32px">🍎</span>
+            <div style="text-align:left"><strong style="display:block">iOS</strong><span style="font-size:13px;color:var(--muted)">Safari → Compartilhar → "Adicionar à Tela de Início"</span></div>
+          </div>
+          <div style="background:var(--card);border:1px solid var(--line);border-radius:16px;padding:20px 32px;display:flex;align-items:center;gap:16px">
+            <span style="font-size:32px">💻</span>
+            <div style="text-align:left"><strong style="display:block">Desktop</strong><span style="font-size:13px;color:var(--muted)">Chrome → ícone "Instalar" na barra de endereço</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 8: Arquitetura -->
+  <div class="slide">
+    <h2>Arquitetura <span class="accent">Técnica</span></h2>
+    <div class="divider"></div>
+    <div class="tech-stack" style="margin-bottom:28px">
+      <span class="tech">Node.js</span>
+      <span class="tech">Express 4</span>
+      <span class="tech">Socket.IO</span>
+      <span class="tech">PostgreSQL</span>
+      <span class="tech">Supabase</span>
+      <span class="tech">Leaflet</span>
+      <span class="tech">PWA</span>
+      <span class="tech">JWT</span>
+      <span class="tech">Render</span>
+    </div>
+    <div class="grid" style="grid-template-columns:repeat(3,1fr)">
+      <div class="card" style="text-align:center"><span class="icon">🖥️</span><h3>Backend</h3><p>Node.js + Express<br>30+ endpoints REST<br>Socket.IO tempo real</p></div>
+      <div class="card" style="text-align:center"><span class="icon">🗄️</span><h3>Banco</h3><p>PostgreSQL (Supabase)<br>Híbrido: SQLite dev<br>RLS habilitado</p></div>
+      <div class="card" style="text-align:center"><span class="icon">☁️</span><h3>Deploy</h3><p>Render (free plan)<br>Auto-deploy via GitHub<br>HTTPS automático</p></div>
+    </div>
+    <div style="margin-top:24px;text-align:center">
+      <p style="font-size:14px;color:var(--muted)">Fluxo: <strong style="color:var(--text)">GitHub push</strong> → <strong style="color:var(--text)">Render build</strong> → <strong style="color:var(--text)">Supabase Postgres</strong> → <strong style="color:var(--ok)">Live 🎉</strong></p>
+    </div>
+  </div>
+
+  <!-- SLIDE 9: Números -->
+  <div class="slide">
+    <h2>O Sistema em <span class="accent">Números</span></h2>
+    <div class="divider"></div>
+    <div class="stats" style="margin:40px 0">
+      <div class="stat"><div class="num">9</div><div class="label">Tabelas no banco</div></div>
+      <div class="stat"><div class="num">30+</div><div class="label">Endpoints API</div></div>
+      <div class="stat"><div class="num">106</div><div class="label">Materiais no catálogo</div></div>
+      <div class="stat"><div class="num">4</div><div class="label">Views no app</div></div>
+    </div>
+    <div class="grid" style="grid-template-columns:repeat(2,1fr);max-width:700px">
+      <div class="card" style="text-align:center"><h3>Exportação</h3><p>CSV, JSON e Excel profissional com estilos e cabeçalho congelado</p></div>
+      <div class="card" style="text-align:center"><h3>Importação</h3><p>Excel (TJCE Mesclado) com deduplicação e vinculação automática a equipes</p></div>
+      <div class="card" style="text-align:center"><h3>Segurança</h3><p>JWT 7 dias, RLS Supabase, hash SHA-256, auth middleware</p></div>
+      <div class="card" style="text-align:center"><h3>Real-time</h3><p>Socket.IO para notificação de novos RDOs entre técnicos</p></div>
+    </div>
+  </div>
+
+  <!-- SLIDE 10: Fluxo do Técnico -->
+  <div class="slide">
+    <h2>Fluxo do <span class="accent">Técnico</span></h2>
+    <div class="divider"></div>
+    <div style="display:flex;flex-direction:column;gap:16px;max-width:700px;width:100%;margin-top:24px">
+      <div style="display:flex;align-items:center;gap:20px;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:20px">
+        <div style="width:48px;height:48px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent-dark));color:#fff;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:900;flex-shrink:0">1</div>
+        <div><strong style="font-size:16px">Login</strong><p style="font-size:13px;color:var(--muted);margin-top:2px">Abre o app → GPS é capturado automaticamente → entra com email/senha</p></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:20px;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:20px">
+        <div style="width:48px;height:48px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent-dark));color:#fff;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:900;flex-shrink:0">2</div>
+        <div><strong style="font-size:16px">Home</strong><p style="font-size:13px;color:var(--muted);margin-top:2px">Vê equipe, locais da região ordenados por proximidade, progresso das obras</p></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:20px;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:20px">
+        <div style="width:48px;height:48px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent-dark));color:#fff;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:900;flex-shrink:0">3</div>
+        <div><strong style="font-size:16px">Novo RDO</strong><p style="font-size:13px;color:var(--muted);margin-top:2px">Seleciona local (auto-detect por GPS), preenche materiais, horários, fotos</p></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:20px;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:20px">
+        <div style="width:48px;height:48px;border-radius:50%;background:linear-gradient(135deg,var(--ok),#22c55e);color:#fff;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:900;flex-shrink:0">✓</div>
+        <div><strong style="font-size:16px">Salvar</strong><p style="font-size:13px;color:var(--muted);margin-top:2px">RDO salvo → gestor vê em tempo real → exporta quando precisar</p></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 11: Encerramento -->
+  <div class="slide" data-bg="gradient">
+    <div class="hero">
+      <span class="badge orange">OBRIGADO</span>
+      <h1 style="margin-top:24px"><span class="gradient-text">CRM Obras</span></h1>
+      <div class="divider" style="margin:20px auto"></div>
+      <p style="font-size:18px;margin-bottom:28px">Gestão de obras simplificada<br>do escritório ao campo</p>
+      <div style="display:flex;gap:16px;justify-content:center;flex-wrap:wrap">
+        <span class="tech" style="background:rgba(255,122,51,.15);color:var(--accent);border-color:rgba(255,122,51,.2)">🌐 crm-obras.onrender.com</span>
+        <span class="tech" style="background:rgba(22,163,74,.15);color:var(--ok);border-color:rgba(22,163,74,.2)">📱 PWA — Instale agora</span>
+      </div>
+      <p style="margin-top:32px;font-size:13px;color:var(--muted)">IPQ Tecnologia • 2026</p>
+    </div>
+  </div>
+
+</div>
+
+<!-- Navegação -->
+<div class="nav">
+  <button id="prevBtn" onclick="navigate(-1)">‹</button>
+  <div class="counter"><span id="current">1</span> / <span id="total">11</span></div>
+  <button id="nextBtn" onclick="navigate(1)">›</button>
+</div>
+
+<script>
+  let current = 0;
+  const slides = document.querySelectorAll('.slide');
+  const total = slides.length;
+  document.getElementById('total').textContent = total;
+
+  function navigate(dir) {
+    const next = current + dir;
+    if (next < 0 || next >= total) return;
+    slides[current].classList.remove('active');
+    slides[current].classList.add(dir > 0 ? 'prev' : '');
+    current = next;
+    slides[current].classList.remove('prev');
+    slides[current].classList.add('active');
+    document.getElementById('current').textContent = current + 1;
+  }
+
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); navigate(1); }
+    if (e.key === 'ArrowLeft') { e.preventDefault(); navigate(-1); }
+  });
+
+  // Touch swipe
+  let touchStartX = 0;
+  document.addEventListener('touchstart', function(e) { touchStartX = e.touches[0].clientX; });
+  document.addEventListener('touchend', function(e) {
+    const diff = touchStartX - e.changedTouches[0].clientX;
+    if (Math.abs(diff) > 50) navigate(diff > 0 ? 1 : -1);
+  });
+</script>
+</body>
+</html>
