@@ -149,7 +149,7 @@
       </div>
       <div id="equipeLocais" style="margin-top:12px;display:none">
         <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">📍 Meus locais (REGIÃO) — ordenados por proximidade</div>
-        <div id="listaEquipeLocais" style="max-height:240px;overflow:auto"></div>
+        <div id="listaEquipeLocais" style="max-height:420px;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:4px;background:#fbfcfd"></div>
       </div>
     </div>
     <div class="card">
@@ -511,7 +511,7 @@
               return {...l, _dist: d};
             }).sort((a,b)=>a._dist-b._dist);
           }
-          divLoc.innerHTML = sorted.slice(0,10).map(l=>{
+          divLoc.innerHTML = sorted.map(l=>{
             const prog = l.obra_progresso||0;
             const cor = prog===100?'#2e7d32': prog>0?'#ef6c00':'#90a4ae';
             const dist = l._dist!=null && l._dist<999999 ? (l._dist<1000? Math.round(l._dist)+'m' : (l._dist/1000).toFixed(1)+'km') : '';
@@ -521,7 +521,7 @@
               <div style="height:3px;background:var(--line);border-radius:99px;margin-top:4px;overflow:hidden"><div style="height:100%;background:${cor};width:${prog}%"></div></div>
               <div style="color:var(--muted);margin-top:2px">${l.obra_nome||'Sem obra'} • 📷 ${l.cameras||0} (${l.cam_fixa||0}/${l.cam_analitica||0}/${l.cam_lpr||0})${l.latitude?' • GPS OK':' • sem GPS'}</div>
             </div>`;
-          }).join('') + (locaisEq.length>10? `<div style="text-align:center;font-size:11px;color:var(--muted)">+${locaisEq.length-10} locais</div>`:'');
+          }).join('');
           // checar auto-detect se já temos posição
           if(window._lastPos) checkAutoLocal(window._lastPos.lat, window._lastPos.lng);
         } else { $('equipeLocais').style.display='none'; }
