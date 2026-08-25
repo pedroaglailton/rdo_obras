@@ -1,0 +1,11 @@
+{
+    "name": "CRM Obras - IPQ Tecnologia",
+    "short_name": "CRM Obras",
+    "description": "Sistema de Gestao de Obras",
+    "start_url": "/app",
+    "display": "standalone",
+    "background_color": "#0f3d4c",
+    "theme_color": "#0f3d4c",
+    "orientation": "portrait",
+    "icons": []
+}

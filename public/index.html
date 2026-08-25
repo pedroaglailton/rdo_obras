@@ -1,0 +1,1201 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Painel - IPQ Tecnologia</title>
+<style>
+  :root{--primary:#0f3d4c;--primary-dark:#0a2c37;--accent:#ff7a33;--bg:#f2f4f6;--card:#fff;--line:#e1e5ea;--text:#1c2b33;--muted:#68767f;--ok:#1f8a4c;--danger:#c6392f;--radius:12px;font-size:16px}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--text)}
+  header{background:linear-gradient(135deg,var(--primary),var(--primary-dark));color:#fff;padding:14px 16px;position:sticky;top:0;z-index:20;box-shadow:0 2px 10px rgba(0,0,0,.15)}
+  header .brand{display:flex;align-items:center;justify-content:space-between}
+  header .brand-name{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#9fd6c9;font-weight:700}
+  header h1{margin:2px 0 0;font-size:18px;font-weight:700}
+  .header-actions{display:flex;align-items:center;gap:10px}
+  .user-name{font-size:12px;opacity:.8}
+  .btn-logout{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;padding:5px 12px;border-radius:8px;font-size:11px;cursor:pointer;font-weight:600}
+  nav.tabs{display:flex;gap:0;margin-top:10px;background:rgba(255,255,255,.08);border-radius:10px;padding:3px;overflow-x:auto}
+  nav.tabs button{flex:1;min-width:70px;border:none;background:0 0;color:#cfe4e4;padding:8px 5px;font-size:12px;font-weight:600;border-radius:8px;cursor:pointer;white-space:nowrap}
+  nav.tabs button.active{background:#fff;color:var(--primary-dark)}
+  main{padding:12px;max-width:900px;margin:0 auto}
+  .view{display:none}.view.active{display:block}
+  .card{background:var(--card);border-radius:var(--radius);padding:16px;margin-bottom:12px;box-shadow:0 1px 3px rgba(20,30,40,.06);border:1px solid var(--line)}
+  .card h2{font-size:13px;text-transform:uppercase;letter-spacing:.05em;color:var(--primary);margin:0 0 10px}
+  label{display:block;font-size:13px;font-weight:600;margin:10px 0 4px}
+  input[type=text],select{width:100%;padding:10px 12px;border:1.5px solid var(--line);border-radius:9px;font-size:14px;background:#fbfcfd;color:var(--text);font-family:inherit}
+  input:focus,select:focus{outline:none;border-color:var(--primary);background:#fff}
+  .form-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px}
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;text-align:center}
+  .stat{padding:12px 6px;background:var(--bg);border-radius:var(--radius)}
+  .stat-num{display:block;font-size:24px;font-weight:700;color:var(--primary)}
+  .stat-label{font-size:10px;color:var(--muted);text-transform:uppercase}
+  .btn-primary{width:100%;background:var(--accent);color:#fff;border:none;padding:12px;border-radius:11px;font-size:14px;font-weight:700;cursor:pointer}
+  .btn-primary:active{background:#e8621d}
+  .btn-small{padding:5px 10px;font-size:11px;background:var(--primary);color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:600}
+  .btn-delete{background:0 0;border:none;color:var(--danger);font-size:18px;cursor:pointer;padding:0 4px}
+  .list{list-style:none;margin:8px 0 0;padding:0}
+  .list li{display:flex;align-items:center;gap:8px;padding:10px;background:#f7f9fa;border-radius:9px;margin-bottom:6px;border:1px solid var(--line)}
+  .list li span,.list li strong{flex:1;font-size:13px}
+  .list li .meta{font-size:11px;color:var(--muted);display:block;flex:none}
+  .toast{position:fixed;left:16px;right:16px;bottom:16px;background:var(--primary-dark);color:#fff;padding:12px;border-radius:11px;font-size:13px;font-weight:600;text-align:center;box-shadow:0 6px 20px rgba(0,0,0,.25);transform:translateY(120%);transition:transform .25s;z-index:200;max-width:640px;margin:0 auto}
+  .toast.show{transform:translateY(0)}
+  .empty-state{text-align:center;padding:20px;color:var(--muted);font-size:13px}
+  .badge{display:inline-block;padding:3px 8px;border-radius:99px;font-size:10px;font-weight:600;text-transform:uppercase;background:#e3f2fd;color:#1565c0}
+  .badge-planejamento{background:#e3f2fd;color:#1565c0}
+  .badge-em_andamento{background:#fff3e0;color:#ef6c00}
+  .badge-concluida{background:#e8f5e9;color:#2e7d32}
+  .modal{display:none;position:fixed;inset:0;background:rgba(10,20,25,.6);z-index:100;align-items:center;justify-content:center}
+  .modal.show{display:flex}
+  .modal-content{background:#fff;border-radius:16px;width:90%;max-width:500px;max-height:80vh;overflow:hidden}
+  .modal-header{display:flex;justify-content:space-between;align-items:center;padding:14px;border-bottom:1px solid var(--line)}
+  .modal-header h3{margin:0;font-size:15px;color:var(--primary)}
+  .modal-close{background:0 0;border:none;font-size:22px;cursor:pointer;color:var(--muted)}
+  .modal-body{padding:14px;overflow-y:auto;max-height:calc(80vh - 56px)}
+  .detail-row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line);font-size:13px;gap:10px}
+  .detail-row span:first-child{color:var(--muted)}
+  .detail-row span:last-child{text-align:right;font-weight:600}
+  .foto-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-top:8px}
+  .foto-grid img{width:100%;border-radius:8px;border:1px solid var(--line)}
+  .chip-membro{display:inline-block;background:#e3f2fd;color:#1565c0;padding:2px 8px;border-radius:12px;font-size:11px;margin:2px}
+  .chk-label{display:flex;align-items:center;gap:8px;padding:6px 8px;cursor:pointer;border-radius:6px}
+  .chk-label:hover{background:#e8f0fe}
+  @media(max-width:600px){.stats{grid-template-columns:repeat(2,1fr)}.form-row{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <div><div class="brand-name">IPQ TECNOLOGIA</div><h1>Painel de Obras</h1></div>
+    <div class="header-actions"><span class="user-name" id="headerUser"></span><button class="btn-logout" onclick="logout()">Sair</button></div>
+  </div>
+  <nav class="tabs">
+    <button data-view="dashboard" class="active">Dashboard</button>
+    <button data-view="por-equipe">Por Equipe</button>
+    <button data-view="obras">Obras</button>
+    <button data-view="rdos">RDOs</button>
+    <button data-view="locais">Locais</button>
+    <button data-view="atividades">Atividades</button>
+    <button data-view="materiais">Materiais</button>
+    <button data-view="equipes">Equipes</button>
+    <button data-view="usuarios">Usuarios</button>
+  </nav>
+</header>
+<main>
+  <!-- DASHBOARD -->
+  <section class="view active" id="view-dashboard">
+    <div class="stats">
+      <div class="stat"><span class="stat-num" id="sObras">0</span><span class="stat-label">Obras</span></div>
+      <div class="stat"><span class="stat-num" id="sRdos">0</span><span class="stat-label">RDOs</span></div>
+      <div class="stat"><span class="stat-num" id="sHoje">0</span><span class="stat-label">Hoje</span></div>
+      <div class="stat"><span class="stat-num" id="sUsers">0</span><span class="stat-label">Usuarios</span></div>
+    </div>
+    <div class="card" style="margin-top:12px"><h2>RDOs Recentes</h2><div id="rdosRecentes"></div></div>
+  </section>
+
+  <!-- POR EQUIPE - Visão do mesclado (REGIAO) -->
+  <section class="view" id="view-por-equipe">
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+        <h2 style="margin:0">Acompanhamento por Equipe (REGIÃO)</h2>
+        <button class="btn-small" onclick="carregarPorEquipe()" style="background:#0f3d4c">↻ Atualizar</button>
+      </div>
+      <p style="font-size:12px;color:var(--muted);margin:8px 0 0">Dados do <strong>TJCE_Mesclado</strong> agrupados por <code>REGIAO</code> (Equipe 1-4, TERCEIRIZADA) + cruzamento com <strong>RDO/Presença</strong>. Importe a planilha em <em>Locais → Importar Mesclado</em>.</p>
+      <div id="porEquipeStats" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;margin-top:12px"></div>
+    </div>
+    <div class="card">
+      <h2>Detalhamento — Locais por equipe</h2>
+      <div class="form-row">
+        <select id="filtroPorEquipe" onchange="filtrarPorEquipe()"><option value="">Todas as equipes</option></select>
+        <input type="text" id="buscaPorEquipe" placeholder="Buscar comarca/endereço..." oninput="filtrarPorEquipe()">
+      </div>
+      <div id="listaPorEquipe" style="margin-top:10px"></div>
+    </div>
+  </section>
+
+  <!-- OBRAS -->
+  <section class="view" id="view-obras">
+    <div class="card">
+      <h2 id="tituloObra">Nova Obra</h2>
+      <input type="hidden" id="obraEditId">
+      <label>Nome da obra</label>
+      <input type="text" id="obraNome" placeholder="Nome da obra">
+      <label>Local (Imovel TJCE)</label>
+      <select id="obraLocal"><option value="">Selecione o local</option></select>
+      <div class="form-row">
+        <div><label>Prazo (dias)</label><input type="number" id="obraPrazo" placeholder="Prazo" value="30"></div>
+        <div><label>Data inicio</label><input type="date" id="obraInicio"></div>
+      </div>
+      <label>Responsavel</label>
+      <input type="text" id="obraResponsavel" placeholder="Responsavel">
+      <label>Descricao</label>
+      <textarea id="obraDescricao" placeholder="Descricao..." rows="2" style="width:100%;padding:10px;border:1.5px solid var(--line);border-radius:9px;font-size:14px;margin-bottom:8px"></textarea>
+      <div style="display:flex;gap:8px"><button class="btn-primary" onclick="salvarObra()" style="flex:1" id="btnObra">Criar Obra</button><button class="btn-primary" onclick="cancelarObra()" style="flex:1;display:none;background:var(--muted)" id="btnCancelObra">Cancelar</button></div>
+    </div>
+    <div class="card"><h2>Obras Cadastradas</h2><div id="listaObras"></div></div>
+  </section>
+
+  <!-- MODAL ETAPAS -->
+  <div class="modal" id="modalEtapas">
+    <div class="modal-content" style="max-width:600px">
+      <div class="modal-header"><h3 id="tituloEtapas">Etapas da Obra</h3><button class="modal-close" onclick="document.getElementById('modalEtapas').classList.remove('show')">&times;</button></div>
+      <div class="modal-body">
+        <div id="infoObraEtapas" style="margin-bottom:12px;font-size:13px;color:var(--muted)"></div>
+        <div style="margin-bottom:12px">
+          <div class="form-row"><input type="text" id="etapaNome" placeholder="Nome da etapa"><input type="number" id="etapaOrdem" placeholder="Ordem" value="1"></div>
+          <button class="btn-primary" onclick="adicionarEtapa()" style="padding:8px;font-size:13px">Adicionar Etapa</button>
+        </div>
+        <div id="listaEtapas"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RDOs -->
+  <section class="view" id="view-rdos">
+    <div class="card">
+      <h2>Todos os RDOs</h2>
+      <div class="form-row">
+        <select id="filtroRdoLocal" onchange="carregarRdos()"><option value="">Todos os locais</option></select>
+        <input type="date" id="filtroRdoData" onchange="carregarRdos()">
+      </div>
+      <div id="listaRdos"></div>
+    </div>
+  </section>
+
+  <!-- LOCAIS -->
+  <section class="view" id="view-locais">
+    <div class="card" style="border-left:4px solid #1565c0">
+      <h2>📥 Importar TJCE_Mesclado (com equipes)</h2>
+      <p style="font-size:12px;color:var(--muted);margin:4px 0 10px">Arraste o <code>TJCE_Mesclado_Geolocalizacao.xlsx</code> (971 linhas, REGIAO=Equipe 1-4/TERCEIRIZADA, CAM FIXA/ANALÍTICA/LPR). O sistema <strong>deduplica por endereço</strong> (229 únicos), soma câmeras e cria as equipes automaticamente.</p>
+      <input type="file" id="fileMesclado" accept=".xlsx,.xls" style="width:100%;padding:10px;border:1.5px dashed var(--line);border-radius:9px;background:#f7f9fa;margin-bottom:8px">
+      <div style="display:flex;gap:8px">
+        <button class="btn-primary" onclick="importarMesclado()" id="btnImportMesclado" style="flex:1">Importar Mesclado</button>
+        <button class="btn-small" onclick="document.getElementById('fileMesclado').value=''" style="background:#e0e0e0;color:#333">Limpar</button>
+      </div>
+      <div id="msgMesclado" style="font-size:12px;margin-top:8px;min-height:16px"></div>
+      <div id="previewMesclado" style="margin-top:10px;max-height:200px;overflow:auto;font-size:11px;display:none"></div>
+    </div>
+    <div class="card" style="border-left:4px solid #2e7d32">
+      <h2>🎯 Definir onde cada equipe vai trabalhar</h2>
+      <p style="font-size:11px;color:var(--muted);margin:4px 0 8px">Selecione locais filtrados acima e atribua a uma equipe. O app do técnico mostra só os dele, com % da obra e GPS automático.</p>
+      <div class="form-row">
+        <select id="atribEquipe"><option value="">Selecione a equipe</option><option value="SEM EQUIPE">SEM EQUIPE (remover)</option></select>
+        <button class="btn-small" onclick="atribuirSelecionados()" style="background:#2e7d32">Atribuir selecionados</button>
+        <button class="btn-small" onclick="toggleSelecionarTodosLocais()" style="background:#e3f2fd;color:#1565c0;border:1px solid #90caf9">Todos visíveis</button>
+      </div>
+      <div id="msgAtribuir" style="font-size:11px;margin-top:6px;min-height:14px"></div>
+    </div>
+    <div class="card">
+      <h2>Vincular Local a Obra</h2>
+      <div class="form-row">
+        <select id="localObraSelect"><option value="">Selecione a obra</option></select>
+        <select id="localSelect"><option value="">Selecione o local</option></select>
+      </div>
+      <button class="btn-primary" onclick="vincularLocalObra()">Vincular</button>
+    </div>
+    <div class="card">
+      <h2>Imoveis TJCE (<span id="countLocais">0</span>)</h2>
+      <div class="form-row">
+        <select id="filtroComarca" onchange="carregarLocais()"><option value="">Todas as comarcas</option></select>
+        <input type="text" id="buscaLocal" placeholder="Buscar..." oninput="carregarLocais()">
+      </div>
+      <div id="listaLocais"></div>
+    </div>
+  </section>
+
+  <!-- ATIVIDADES -->
+  <section class="view" id="view-atividades">
+    <div class="card">
+      <h2>Nova Atividade</h2>
+      <div class="form-row"><input type="text" id="nomeAtividade" placeholder="Nome da atividade"><button class="btn-primary" onclick="adicionarAtividade()">Adicionar</button></div>
+    </div>
+    <div class="card"><h2>Atividades</h2><div id="listaAtividades"></div></div>
+  </section>
+
+  <!-- MATERIAIS - Organizado visualmente -->
+  <section class="view" id="view-materiais">
+    <div class="card" style="border-left:4px solid var(--accent)">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+        <h2 style="margin:0">📦 Catálogo de Materiais</h2>
+        <span style="font-size:11px;background:#f7f9fa;border:1px solid var(--line);padding:4px 10px;border-radius:20px"><span id="countMateriais">0</span> itens • <span id="countCategorias">0</span> categorias</span>
+      </div>
+      <p style="font-size:11px;color:var(--muted);margin:6px 0 0">Lista importada de <code>lista.txt</code> (106 itens) auto-categorizada. Busque e filtre para usar no RDO.</p>
+      <div id="chipsCategorias" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px"></div>
+    </div>
+    <div class="card">
+      <h2>Buscar & Filtrar</h2>
+      <div class="form-row">
+        <input type="text" id="buscaMat" placeholder="🔍 Digite 3 letras para buscar..." oninput="buscarMateriais()">
+        <select id="filtroCatMat" onchange="filtrarMateriais()"><option value="">Todas categorias</option></select>
+      </div>
+      <div id="resultBuscaMat" style="margin-top:8px"></div>
+    </div>
+    <div class="card">
+      <h2>Adicionar Material</h2>
+      <div class="form-row"><input type="text" id="nomeMaterial" placeholder="Nome do material *"><input type="text" id="catMaterial" placeholder="Categoria" value="Geral" list="listaCats"><datalist id="listaCats"><option value="Câmeras"><option value="Cabeamento"><option value="Óptico / Ativos"><option value="Infra Rack"><option value="Infra Elétrica"><option value="Fixação"><option value="Geral"></datalist></div>
+      <div style="display:flex;gap:8px"><button class="btn-primary" onclick="adicionarMaterial()" style="flex:1">Adicionar</button><button class="btn-small" onclick="importarListaTxt()" style="background:#e8f5e9;color:#2e7d32;border:1px solid #a5d6a7">↻ Reimportar lista.txt</button></div>
+      <div id="msgMat" style="font-size:12px;margin-top:6px;min-height:16px"></div>
+    </div>
+    <div class="card"><h2>Catálogo Organizado</h2><div id="listaMateriais"></div></div>
+  </section>
+
+  <!-- EQUIPES - Gestao robusta (logica de obras) -->
+  <section class="view" id="view-equipes">
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <h2 id="tituloEq" style="margin:0">Nova Equipe</h2>
+        <span style="font-size:11px;background:#fff3e0;color:#ef6c00;padding:4px 10px;border-radius:20px;font-weight:700" id="eqStatsTop">0 equipes</span>
+      </div>
+      <p style="font-size:12px;color:var(--muted);margin:0 0 10px;line-height:1.4">Equipes vinculam técnicos a <strong>obras</strong> e <strong>RDOs</strong>. Só o gestor cria/edita aqui — cadastro não existe no login.</p>
+      <input type="hidden" id="eqEditId">
+      <div class="form-row"><input type="text" id="nomeEquipe" placeholder="Nome da equipe * (ex: Equipe Fortaleza 01)"><input type="color" id="corEquipe" value="#1565c0" style="height:42px;padding:4px" title="Cor no mapa/relatórios"></div>
+      <div style="margin:10px 0">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <label style="margin:0">Membros da Equipe</label>
+          <span style="font-size:11px;color:var(--muted)" id="membrosCount">0 selecionados</span>
+        </div>
+        <div style="display:flex;gap:6px;margin-bottom:6px">
+          <input type="text" id="buscaMembroEq" placeholder="Filtrar por nome/email..." oninput="filtrarMembrosEq()" style="flex:1;padding:8px;font-size:12px">
+          <button class="btn-small" onclick="selecionarTodosMembros(true)" style="background:#e3f2fd;color:#1565c0;border:1px solid #90caf9">Todos</button>
+          <button class="btn-small" onclick="selecionarTodosMembros(false)" style="background:#fce4ec;color:#c62828;border:1px solid #ef9a9a">Limpar</button>
+        </div>
+        <div id="membrosChks" style="max-height:240px;overflow-y:auto;border:1.5px solid var(--line);border-radius:9px;padding:8px;background:var(--bg)"></div>
+        <div style="font-size:11px;color:var(--muted);margin-top:6px;display:flex;gap:10px;flex-wrap:wrap">
+          <span id="eqSemEquipeInfo">0 sem equipe</span>
+          <span>•</span>
+          <span>Arraste/alteração reflete imediatamente em RDO e Presença</span>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px"><button class="btn-primary" onclick="salvarEquipe()" style="flex:1" id="btnEq">Criar Equipe</button><button class="btn-primary" onclick="cancelarEq()" style="flex:1;display:none;background:var(--muted)" id="btnCancelEq">Cancelar</button></div>
+      <div id="eqMsg" style="font-size:12px;margin-top:8px;min-height:16px"></div>
+    </div>
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+        <h2 style="margin:0">Equipes Cadastradas</h2>
+        <div style="display:flex;gap:6px;align-items:center">
+          <input type="text" id="buscaEquipe" placeholder="Buscar equipe..." oninput="filtrarEquipes()" style="width:140px;padding:7px;font-size:12px">
+          <button class="btn-small" onclick="exportarEquipesExcel('todas')" style="background:#1b5e20;color:#fff">📗 Excel Todas</button>
+        </div>
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-top:6px">Exporta com todos os dados do local + câmeras + obra % + membros. Use o botão 📗 em cada equipe para individual.</div>
+      <div id="listaEquipes" style="margin-top:10px"></div>
+    </div>
+  </section>
+
+  <!-- USUARIOS - CRUD completo (só gestor) -->
+  <section class="view" id="view-usuarios">
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <h2 id="tituloUsuario" style="margin:0">Novo Usuário</h2>
+        <span style="font-size:11px;background:#e8f5e9;color:#2e7d32;padding:4px 10px;border-radius:20px;font-weight:700" id="userStatsTop">0 usuários</span>
+      </div>
+      <p style="font-size:12px;color:var(--muted);margin:0 0 10px;line-height:1.4">Gestor cria <strong>técnicos e gestores</strong> aqui. Login não tem cadastro. Defina equipe para vincular à obra/RDO.</p>
+      <input type="hidden" id="uEditId">
+      <div class="form-row"><input type="text" id="uNome" placeholder="Nome completo *"><input type="text" id="uEmail" placeholder="Email * (login)"></div>
+      <div class="form-row"><input type="text" id="uSenha" placeholder="Senha * (mín 4)"><select id="uPerfil"><option value="tecnico">Técnico (campo)</option><option value="gestor">Gestor (admin)</option></select></div>
+      <div class="form-row">
+        <select id="uEquipe" style="margin-bottom:0"><option value="">Sem equipe</option></select>
+        <select id="uAtivo"><option value="1">✅ Ativo</option><option value="0">⛔ Inativo</option></select>
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin:6px 0 8px" id="uSenhaHint">Ao editar, deixe a senha em branco para manter a atual.</div>
+      <div style="display:flex;gap:8px"><button class="btn-primary" onclick="salvarUsuario()" style="flex:1" id="btnUsuario">Criar Usuário</button><button class="btn-primary" onclick="cancelarUsuario()" style="flex:1;display:none;background:var(--muted)" id="btnCancelUsuario">Cancelar</button></div>
+      <div id="uMsg" style="font-size:12px;margin-top:8px;min-height:16px"></div>
+    </div>
+    <div class="card">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;justify-content:space-between">
+        <h2 style="margin:0">Usuários</h2>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <input type="text" id="buscaUsuario" placeholder="Buscar nome/email..." oninput="filtrarUsuarios()" style="padding:7px;font-size:12px;width:150px">
+          <select id="filtroPerfilUsuario" onchange="filtrarUsuarios()" style="padding:7px;font-size:12px;width:120px"><option value="">Todos perfis</option><option value="tecnico">Técnico</option><option value="gestor">Gestor</option></select>
+          <select id="filtroEquipeUsuario" onchange="filtrarUsuarios()" style="padding:7px;font-size:12px;width:130px"><option value="">Todas equipes</option></select>
+          <select id="filtroAtivoUsuario" onchange="filtrarUsuarios()" style="padding:7px;font-size:12px;width:110px"><option value="">Todos</option><option value="1">Ativos</option><option value="0">Inativos</option></select>
+        </div>
+      </div>
+      <div id="listaUsuarios" style="margin-top:10px"></div>
+    </div>
+  </section>
+</main>
+
+<div class="modal" id="modalDetalhe">
+  <div class="modal-content" style="max-width:600px">
+    <div class="modal-header"><h3>Detalhes do RDO</h3><button class="modal-close" onclick="document.getElementById('modalDetalhe').classList.remove('show')">&times;</button></div>
+    <div class="modal-body" id="detalheBody"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="/socket.io/socket.io.js"></script>
+<script>
+const token = localStorage.getItem('token');
+const user = JSON.parse(localStorage.getItem('user') || '{}');
+if (!token || user.perfil !== 'gestor') { window.location.href = '/login'; }
+
+function logout() { localStorage.removeItem('token'); localStorage.removeItem('user'); window.location.href = '/login'; }
+
+async function api(url, opts = {}) {
+  opts.headers = { 'Authorization': 'Bearer ' + token, ...(opts.headers || {}) };
+  if (opts.body && !(opts.body instanceof FormData)) opts.headers['Content-Type'] = 'application/json';
+  const r = await fetch(url, opts);
+  if (r.status === 401) { logout(); return null; }
+  return r;
+}
+
+document.getElementById('headerUser').textContent = user.nome || '';
+
+// Navegacao
+document.querySelectorAll('nav.tabs button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('nav.tabs button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+    document.getElementById('view-' + btn.dataset.view).classList.add('active');
+    const loaders = { dashboard: carregarDashboard, 'por-equipe': carregarPorEquipe, obras: carregarObras, rdos: carregarRdos, locais: carregarLocais, atividades: carregarAtividades, materiais: carregarMateriais, equipes: carregarEquipes, usuarios: carregarUsuarios };
+    if (loaders[btn.dataset.view]) loaders[btn.dataset.view]();
+  });
+});
+
+let toastTimer;
+function toast(msg) { const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 3000); }
+
+// DASHBOARD
+async function carregarDashboard() {
+  const d = await api('/api/dashboard').then(r => r.json());
+  document.getElementById('sObras').textContent = d.totalObras;
+  document.getElementById('sRdos').textContent = d.totalRdos;
+  document.getElementById('sHoje').textContent = d.rdosHoje;
+  document.getElementById('sUsers').textContent = d.totalUsuarios;
+  document.getElementById('rdosRecentes').innerHTML = d.recentes.map(r => '<li style="cursor:pointer" onclick="verRdo(' + r.id + ')"><strong>' + r.local + '</strong><span class="meta">' + r.data + ' | ' + (r.atividade || '-') + ' | ' + (r.usuario_nome || '-') + '</span></li>').join('') || '<p class="empty-state">Nenhum RDO</p>';
+}
+
+// POR EQUIPE (TJCE_Mesclado)
+let porEquipeCache = [];
+let locaisPorEquipeCache = [];
+async function carregarPorEquipe(){
+  const [cards, locais] = await Promise.all([api('/api/dashboard/por-equipe').then(r=>r.json()), api('/api/locais').then(r=>r.json())]);
+  porEquipeCache = cards;
+  locaisPorEquipeCache = locais;
+  // cards
+  document.getElementById('porEquipeStats').innerHTML = cards.map(c=>`
+    <div style="padding:14px;background:#fff;border-radius:12px;border:1px solid var(--line);border-left:5px solid ${c.cor};box-shadow:0 1px 3px rgba(0,0,0,.06)">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <strong style="font-size:14px">${c.regiao}</strong>
+        <span style="width:12px;height:12px;border-radius:50%;background:${c.cor};display:inline-block"></span>
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-top:4px">${c.membros} membro(s) • ${c.tecnicos_ativos} ativo(s) em campo • ${c.rdos_total} RDOs (${c.rdos_hoje} hoje)</div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:10px;text-align:center">
+        <div style="background:#f7f9fa;border-radius:8px;padding:8px"><div style="font-size:18px;font-weight:700;color:var(--primary)">${c.total_locais}</div><div style="font-size:10px;color:var(--muted)">LOCAIS</div></div>
+        <div style="background:#e8f5e9;border-radius:8px;padding:8px"><div style="font-size:18px;font-weight:700;color:#2e7d32">${c.total_cameras}</div><div style="font-size:10px;color:var(--muted)">CÂMERAS</div></div>
+        <div style="background:#fff3e0;border-radius:8px;padding:8px"><div style="font-size:14px;font-weight:700;color:#ef6c00">${c.cam_fixa}/${c.cam_analitica}/${c.cam_lpr}</div><div style="font-size:10px;color:var(--muted)">FIXA/ANA/LPR</div></div>
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-top:8px">📍 ${c.com_coord}/${c.total_locais} com GPS • ${c.total_locais? Math.round(c.com_coord/c.total_locais*100):0}% geolocalizado</div>
+    </div>
+  `).join('') || '<p class="empty-state">Sem dados — importe o Mesclado</p>';
+  // filtro select
+  const sel = document.getElementById('filtroPorEquipe');
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">Todas as equipes</option>' + porEquipeCache.map(c=>`<option value="${c.regiao}">${c.regiao} (${c.total_locais})</option>`).join('');
+  sel.value = cur;
+  filtrarPorEquipe();
+}
+function filtrarPorEquipe(){
+  const reg = document.getElementById('filtroPorEquipe').value;
+  const busca = (document.getElementById('buscaPorEquipe').value||'').toLowerCase();
+  let lista = locaisPorEquipeCache.slice();
+  if(reg) lista = lista.filter(l=> (l.regiao||'SEM EQUIPE')===reg);
+  if(busca) lista = lista.filter(l=> (l.comarca||'').toLowerCase().includes(busca) || (l.endereco||'').toLowerCase().includes(busca) || (l.nome||'').toLowerCase().includes(busca));
+  document.getElementById('listaPorEquipe').innerHTML = lista.slice(0,200).map(l=>`
+    <div style="padding:10px;background:#f7f9fa;border-radius:9px;margin-bottom:6px;border:1px solid var(--line);border-left:4px solid ${porEquipeCache.find(c=>c.regiao===(l.regiao||'SEM EQUIPE'))?.cor || '#90a4ae'}">
+      <div style="display:flex;justify-content:space-between;gap:8px">
+        <div style="flex:1;min-width:0"><strong style="font-size:13px">${l.nome}</strong> <span style="font-size:11px;background:${l.terceirizada?'#ffcdd2':'#e3f2fd'};color:${l.terceirizada?'#c62828':'#1565c0'};padding:2px 6px;border-radius:8px">${l.regiao||'SEM EQUIPE'}${l.terceirizada?' • TERCEIRIZADA':''}</span><br>
+        <span style="font-size:11px;color:var(--muted)">${l.comarca||''} • ${l.endereco||''} ${l.etapa? '• ETAPA '+l.etapa:''} ${l.status_projeto? '• '+l.status_projeto:''}</span><br>
+        <span style="font-size:11px;color:var(--muted)">📷 ${l.cameras||0} (${l.cam_fixa||0}/${l.cam_analitica||0}/${l.cam_lpr||0}) ${l.cronograma? '• '+l.cronograma:''} ${l.latitude? '• 📍 GPS OK':'• ⚠️ sem GPS'}</span></div>
+        ${l.google_maps_link? `<a href="${l.google_maps_link}" target="_blank" style="font-size:11px;color:var(--primary);white-space:nowrap">Maps</a>`:''}
+      </div>
+    </div>
+  `).join('') || '<p class="empty-state">Nenhum local com esse filtro</p>';
+  if(lista.length>200) document.getElementById('listaPorEquipe').innerHTML += `<p style="text-align:center;font-size:11px;color:var(--muted)">Mostrando 200 de ${lista.length} — refine o filtro</p>`;
+}
+
+// Importar Mesclado
+async function importarMesclado(){
+  const file = document.getElementById('fileMesclado').files[0];
+  const msg = document.getElementById('msgMesclado');
+  const preview = document.getElementById('previewMesclado');
+  if(!file){ toast('Selecione o XLSX'); msg.textContent='Selecione o arquivo'; msg.style.color='var(--danger)'; return; }
+  msg.textContent='Lendo planilha...'; msg.style.color='var(--muted)';
+  const btn = document.getElementById('btnImportMesclado'); btn.disabled=true; btn.textContent='Processando...';
+  try{
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, {type:'array'});
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const linhas = XLSX.utils.sheet_to_json(ws, {defval:''});
+    if(!linhas.length){ throw new Error('Planilha vazia'); }
+    preview.style.display='block';
+    preview.innerHTML = `<strong>Detectado ${linhas.length} linhas — colunas:</strong> ${Object.keys(linhas[0]).join(', ')}<br><em>Enviando ao servidor (deduplica 229 endereços)...</em>`;
+    const r = await api('/api/locais/importar-mesclado', {method:'POST', body: JSON.stringify({linhas})});
+    const d = await r.json();
+    if(d.error){ msg.textContent=d.error; msg.style.color='var(--danger)'; btn.disabled=false; btn.textContent='Importar Mesclado'; return; }
+    msg.innerHTML = `✅ <strong>${d.inseridos} novos</strong>, ${d.atualizados} atualizados — <strong>${d.unicos} endereços únicos</strong> de ${d.total_linhas} linhas. <br>Equipes: ${d.regioes.join(', ')} • Sem GPS: ${d.semCoord} • <a href="#" onclick="carregarLocais();carregarPorEquipe();return false" style="color:var(--primary)">Ver em Locais/Por Equipe</a>`;
+    msg.style.color='var(--ok)';
+    preview.innerHTML += `<br><strong>Resultado:</strong> ${JSON.stringify(d)}`;
+    toast('Mesclado importado!');
+    carregarLocais(); carregarPorEquipe(); carregarEquipes();
+  } catch(e){ msg.textContent='Erro: '+(e.message||e); msg.style.color='var(--danger)'; toast('Falha na importação'); console.error(e); }
+  btn.disabled=false; btn.textContent='Importar Mesclado';
+}
+
+// OBRAS
+let locaisGlobal = [];
+
+async function carregarObras() {
+  const [obras, locais] = await Promise.all([api('/api/obras').then(r => r.json()), api('/api/locais').then(r => r.json())]);
+  locaisGlobal = locais;
+  
+  // Popular select de locais no form
+  const sel = document.getElementById('obraLocal');
+  sel.innerHTML = '<option value="">Selecione o local</option>' + locais.map(l => '<option value="' + l.id + '">' + l.nome + ' - ' + (l.comarca || '') + '</option>').join('');
+
+  const div = document.getElementById('listaObras');
+  div.innerHTML = obras.map(o => {
+    const localInfo = o.local_nome ? o.local_nome + (o.local_comarca ? ' - ' + o.local_comarca : '') : 'Sem local';
+    return '<div style="padding:12px;background:#f7f9fa;border-radius:9px;margin-bottom:8px;border:1px solid var(--line)">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center">' +
+      '<div><strong>' + o.nome + '</strong> <span class="badge badge-' + o.status + '">' + (o.status || 'planejamento') + '</span></div>' +
+      '<div>' +
+      '<button class="btn-small" onclick="abrirEtapas(' + o.id + ')" style="margin-right:4px;background:#6a1b9a">Etapas</button>' +
+      '<button class="btn-small" onclick="toggleObra(' + o.id + ')" style="margin-right:4px;background:var(--ok)">' + (o.status === 'concluida' ? 'Reabrir' : 'Concluir') + '</button>' +
+      '<button class="btn-small" onclick="editarObra(' + o.id + ')" style="margin-right:4px;background:#1565c0">Editar</button>' +
+      '<button class="btn-delete" onclick="excluirObra(' + o.id + ')">&times;</button>' +
+      '</div></div>' +
+      '<div style="font-size:12px;color:var(--muted);margin-top:6px">📍 ' + localInfo + ' | ' + o.prazo_dias + ' dias | ' + (o.responsavel || '') + ' | ' + (o.progresso || 0) + '% concluido</div>' +
+      '<div class="progress-bar" style="height:5px;background:var(--line);border-radius:3px;overflow:hidden;margin-top:4px"><div style="height:100%;background:var(--ok);border-radius:3px;width:' + (o.progresso || 0) + '%"></div></div>' +
+      '</div>';
+  }).join('') || '<p class="empty-state">Nenhuma obra</p>';
+}
+
+async function salvarObra() {
+  const editId = document.getElementById('obraEditId').value;
+  const localId = document.getElementById('obraLocal').value ? parseInt(document.getElementById('obraLocal').value) : null;
+  
+  // Buscar comarca do local selecionado
+  let comarca = '';
+  if (localId) {
+    const local = locaisGlobal.find(l => l.id === localId);
+    if (local) comarca = local.comarca || '';
+  }
+  
+  const data = {
+    nome: document.getElementById('obraNome').value.trim(),
+    local_id: localId,
+    comarca: comarca,
+    prazo_dias: parseInt(document.getElementById('obraPrazo').value) || 30,
+    data_inicio: document.getElementById('obraInicio').value,
+    responsavel: document.getElementById('obraResponsavel').value.trim(),
+    descricao: document.getElementById('obraDescricao').value.trim()
+  };
+  if (!data.nome) { toast('Nome obrigatorio'); return; }
+  const method = editId ? 'PUT' : 'POST';
+  const url = editId ? '/api/obras/' + editId : '/api/obras';
+  await api(url, { method, body: JSON.stringify(data) });
+  cancelarObra(); carregarObras(); toast(editId ? 'Obra atualizada!' : 'Obra criada!');
+}
+
+async function editarObra(id) {
+  const o = await api('/api/obras/' + id).then(r => r.json());
+  document.getElementById('obraEditId').value = o.id;
+  document.getElementById('obraNome').value = o.nome || '';
+  document.getElementById('obraLocal').value = o.local_id || '';
+  document.getElementById('obraPrazo').value = o.prazo_dias || 30;
+  document.getElementById('obraInicio').value = o.data_inicio || '';
+  document.getElementById('obraResponsavel').value = o.responsavel || '';
+  document.getElementById('obraDescricao').value = o.descricao || '';
+  document.getElementById('tituloObra').textContent = 'Editar Obra';
+  document.getElementById('btnObra').textContent = 'Salvar';
+  document.getElementById('btnCancelObra').style.display = 'block';
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function cancelarObra() {
+  document.getElementById('obraEditId').value = '';
+  document.getElementById('obraNome').value = '';
+  document.getElementById('obraLocal').value = '';
+  document.getElementById('obraPrazo').value = '30';
+  document.getElementById('obraInicio').value = '';
+  document.getElementById('obraResponsavel').value = '';
+  document.getElementById('obraDescricao').value = '';
+  document.getElementById('tituloObra').textContent = 'Nova Obra';
+  document.getElementById('btnObra').textContent = 'Criar Obra';
+  document.getElementById('btnCancelObra').style.display = 'none';
+}
+
+async function toggleObra(id) {
+  await api('/api/obras/' + id + '/toggle', { method: 'PUT' });
+  carregarObras(); toast('Status atualizado!');
+}
+
+async function excluirObra(id) {
+  if (!confirm('Excluir obra?')) return;
+  await api('/api/obras/' + id, { method: 'DELETE' });
+  carregarObras(); toast('Obra excluida');
+}
+
+// ETAPAS
+let etapaObraId = null;
+
+async function abrirEtapas(obraId) {
+  etapaObraId = obraId;
+  const obra = await api('/api/obras/' + obraId).then(r => r.json());
+  document.getElementById('tituloEtapas').textContent = 'Etapas - ' + obra.nome;
+  document.getElementById('infoObraEtapas').innerHTML = '📍 ' + (obra.comarca || 'Sem comarca') + ' | Progresso: ' + (obra.progresso || 0) + '%';
+  await carregarEtapas(obraId);
+  document.getElementById('modalEtapas').classList.add('show');
+}
+
+async function carregarEtapas(obraId) {
+  const etapas = await api('/api/obras/' + obraId + '/etapas').then(r => r.json());
+  const div = document.getElementById('listaEtapas');
+  div.innerHTML = etapas.map(e => {
+    const statusCor = e.status === 'concluida' ? 'var(--ok)' : e.status === 'em_andamento' ? '#ef6c00' : 'var(--muted)';
+    return '<div style="display:flex;align-items:center;gap:8px;padding:10px;background:#f7f9fa;border-radius:8px;margin-bottom:6px;border:1px solid var(--line)">' +
+      '<span style="width:24px;height:24px;border-radius:50%;background:' + statusCor + ';color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700">' + e.ordem + '</span>' +
+      '<div style="flex:1"><strong style="font-size:13px">' + e.nome + '</strong>' +
+      (e.observacoes ? '<br><small style="color:var(--muted)">' + e.observacoes + '</small>' : '') + '</div>' +
+      '<select onchange="atualizarStatusEtapa(' + e.id + ',this.value)" style="width:auto;padding:4px 8px;font-size:11px">' +
+      '<option value="pendente"' + (e.status === 'pendente' ? ' selected' : '') + '>Pendente</option>' +
+      '<option value="em_andamento"' + (e.status === 'em_andamento' ? ' selected' : '') + '>Andamento</option>' +
+      '<option value="concluida"' + (e.status === 'concluida' ? ' selected' : '') + '>Concluida</option>' +
+      '</select>' +
+      '<button class="btn-delete" onclick="excluirEtapa(' + e.id + ')" style="font-size:14px">&times;</button>' +
+      '</div>';
+  }).join('') || '<p class="empty-state">Nenhuma etapa cadastrada</p>';
+}
+
+async function adicionarEtapa() {
+  const nome = document.getElementById('etapaNome').value.trim();
+  const ordem = parseInt(document.getElementById('etapaOrdem').value) || 1;
+  if (!nome) { toast('Nome obrigatorio'); return; }
+  await api('/api/obras/' + etapaObraId + '/etapas', { method: 'POST', body: JSON.stringify({ nome, ordem }) });
+  document.getElementById('etapaNome').value = '';
+  document.getElementById('etapaOrdem').value = parseInt(document.getElementById('etapaOrdem').value || '1') + 1;
+  await carregarEtapas(etapaObraId);
+  carregarObras();
+  toast('Etapa adicionada!');
+}
+
+async function atualizarStatusEtapa(etapaId, status) {
+  await api('/api/etapas/' + etapaId, { method: 'PUT', body: JSON.stringify({ status }) });
+  await carregarEtapas(etapaObraId);
+  carregarObras();
+}
+
+async function excluirEtapa(etapaId) {
+  if (!confirm('Excluir etapa?')) return;
+  await api('/api/etapas/' + etapaId, { method: 'DELETE' });
+  await carregarEtapas(etapaObraId);
+  carregarObras();
+  toast('Etapa excluida');
+}
+
+// RDOs
+async function carregarRdos() {
+  let url = '/api/rdos?';
+  const data = document.getElementById('filtroRdoData').value;
+  if (data) url += 'data_de=' + data + '&data_ate=' + data;
+  const rdos = await api(url).then(r => r.json());
+  document.getElementById('listaRdos').innerHTML = rdos.map(r => 
+    '<li style="cursor:pointer" onclick="verRdo(' + r.id + ')"><strong>' + (r.obra_nome || r.local || 'RDO #' + r.id) + '</strong><span class="meta">' + r.data + ' | ' + r.local + ' | ' + (r.atividade || '-') + ' | ' + (r.usuario_nome || '-') + '</span></li>'
+  ).join('') || '<p class="empty-state">Nenhum RDO</p>';
+}
+
+async function verRdo(id) {
+  const rdo = await api('/api/rdos/' + id).then(r => r.json());
+  const eq = JSON.parse(rdo.equipe_json || '[]');
+  const mats = JSON.parse(rdo.materiais_json || '[]');
+  const fotos = JSON.parse(rdo.fotos_json || '[]');
+  let html = '<div class="detail-row"><span>Obra</span><span>' + (rdo.obra_nome || '-') + '</span></div>';
+  html += '<div class="detail-row"><span>Cidade</span><span>' + (rdo.cidade || '-') + '</span></div>';
+  html += '<div class="detail-row"><span>Local</span><span>' + rdo.local + '</span></div>';
+  html += '<div class="detail-row"><span>Data</span><span>' + rdo.data + '</span></div>';
+  html += '<div class="detail-row"><span>Atividade</span><span>' + (rdo.atividade || '-') + '</span></div>';
+  html += '<div class="detail-row"><span>Equipe</span><span>' + (eq.join(', ') || '-') + '</span></div>';
+  html += '<div class="detail-row"><span>Manha</span><span>' + (rdo.entrada_manha || '-') + ' as ' + (rdo.saida_manha || '-') + '</span></div>';
+  html += '<div class="detail-row"><span>Tarde</span><span>' + (rdo.entrada_tarde || '-') + ' as ' + (rdo.saida_tarde || '-') + '</span></div>';
+  html += '<div class="detail-row"><span>Parada</span><span>' + (rdo.parou === 'sim' ? 'Sim - ' + (rdo.motivo_parada || '') : 'Nao') + '</span></div>';
+  html += '<div class="detail-row"><span>Switch</span><span>' + (rdo.switch_instalado === 'sim' ? rdo.nom_switch + ' / ' + rdo.local_switch : 'Nao') + '</span></div>';
+  html += '<div class="detail-row"><span>Camera</span><span>' + (rdo.camera_instalada === 'sim' ? rdo.nom_camera + ' / ' + rdo.local_camera : 'Nao') + '</span></div>';
+  html += '<div class="detail-row"><span>Registrado por</span><span>' + (rdo.usuario_nome || '-') + '</span></div>';
+  if (mats.length) { html += '<label style="margin-top:10px">Materiais</label>'; mats.forEach(m => { html += '<div class="detail-row"><span>' + m.nome + '</span><span>' + m.qtd + '</span></div>'; }); }
+  if (fotos.length) { html += '<label style="margin-top:10px">Fotos</label><div class="foto-grid">' + fotos.map(f => '<img src="' + f + '">').join('') + '</div>'; }
+  document.getElementById('detalheBody').innerHTML = html;
+  document.getElementById('modalDetalhe').classList.add('show');
+}
+
+// LOCAIS - com atribuição a equipe e obra progresso
+let _locaisVisiveis = [];
+async function carregarLocais() {
+  const [comarcas, obras, equipes] = await Promise.all([api('/api/locais/comarcas').then(r => r.json()), api('/api/obras').then(r => r.json()), api('/api/equipes').then(r=>r.json())]);
+  
+  // Atualizar selects
+  const selComarca = document.getElementById('filtroComarca');
+  const valComarca = selComarca.value;
+  selComarca.innerHTML = '<option value="">Todas as comarcas</option>' + comarcas.map(c => '<option>' + c + '</option>').join('');
+  selComarca.value = valComarca;
+
+  const selObra = document.getElementById('localObraSelect');
+  selObra.innerHTML = '<option value="">Selecione a obra</option>' + obras.map(o => '<option value="' + o.id + '">' + o.nome + (o.comarca ? ' - ' + o.comarca : '') + '</option>').join('');
+
+  // popular atribuição equipe
+  const selAtrib = document.getElementById('atribEquipe');
+  if(selAtrib){
+    const cur = selAtrib.value;
+    selAtrib.innerHTML = '<option value="">Selecione a equipe</option><option value="SEM EQUIPE">SEM EQUIPE (remover)</option>' + equipes.map(e=>`<option value="${e.nome}">${e.nome}</option>`).join('');
+    selAtrib.value = cur;
+  }
+
+  // Carregar todos os locais para o select de vinculo
+  const todosLocais = await api('/api/locais').then(r => r.json());
+  const selLocal = document.getElementById('localSelect');
+  selLocal.innerHTML = '<option value="">Selecione o local</option>' + todosLocais.map(l => '<option value="' + l.id + '">' + l.nome + ' - ' + (l.comarca || '') + '</option>').join('');
+
+  // Filtrar locais
+  let url = '/api/locais?';
+  if (selComarca.value) url += 'comarca=' + encodeURIComponent(selComarca.value) + '&';
+  const busca = document.getElementById('buscaLocal').value;
+  if (busca) url += 'busca=' + encodeURIComponent(busca);
+  const locais = await api(url).then(r => r.json());
+  _locaisVisiveis = locais;
+  document.getElementById('countLocais').textContent = locais.length;
+
+  // Mapa de obras por local_id
+  const obraPorLocal = {};
+  obras.forEach(o=>{ if(o.local_id) obraPorLocal[o.local_id]=o; });
+
+  document.getElementById('listaLocais').innerHTML = locais.map(l => {
+    const obra = obraPorLocal[l.id];
+    const prog = obra? (obra.progresso||0) : 0;
+    const status = obra? obra.status : 'sem obra';
+    const corProg = prog===100?'#2e7d32': prog>0?'#ef6c00':'#90a4ae';
+    const regiaoBadge = l.regiao ? `<span style="background:${equipes.find(e=>e.nome===l.regiao)?.cor||'#1565c0'};color:#fff;padding:2px 7px;border-radius:10px;font-size:10px">${l.regiao}</span>` : '<span style="background:#ffcdd2;color:#c62828;padding:2px 6px;border-radius:8px;font-size:10px">SEM EQUIPE</span>';
+    return '<div style="padding:10px;background:#fff;border-radius:9px;margin-bottom:6px;border:1px solid var(--line);display:flex;gap:8px;align-items:flex-start">' +
+    `<input type="checkbox" class="chk-local" value="${l.id}" style="margin-top:4px;accent-color:var(--primary)">` +
+    '<div style="flex:1;min-width:0"><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><strong style="font-size:13px">' + l.nome + '</strong>' + regiaoBadge + (obra? `<span style="font-size:10px;background:#e8f5e9;color:#2e7d32;padding:2px 6px;border-radius:8px">${prog}%</span>`:'') + '</div>' +
+    '<span style="font-size:11px;color:var(--muted)">' + (l.comarca || '') + ' • ' + (l.tipo || '') + ' • ' + (l.ocupacao || '') + '</span><br>' +
+    '<span style="font-size:11px;color:var(--muted)">' + (l.endereco || '') + '</span><br>' +
+    '<span style="font-size:11px;color:var(--muted)">📷 ' + (l.cameras || 0) + ' ('+(l.cam_fixa||0)+'/'+(l.cam_analitica||0)+'/'+(l.cam_lpr||0)+') • '+(l.area||'-')+ (obra? ` • <strong style="color:${corProg}">${prog}% ${status}</strong>`:'') + '</span>' +
+    (obra? `<div style="height:4px;background:var(--line);border-radius:99px;margin-top:4px;overflow:hidden"><div style="height:100%;background:${corProg};width:${prog}%"></div></div>`:'') +
+    (l.google_maps_link ? ' <a href="' + l.google_maps_link + '" target="_blank" style="font-size:11px;color:var(--primary)">Maps</a>' : '') +
+    '</div>' +
+    '<button class="btn-delete" onclick="excluirLocal(' + l.id + ')" title="Desativar">&times;</button>' +
+    '</div>';
+  }).join('') || '<p class="empty-state">Nenhum local</p>';
+}
+async function atribuirSelecionados(){
+  const regiao = document.getElementById('atribEquipe').value;
+  const ids = Array.from(document.querySelectorAll('.chk-local:checked')).map(c=>parseInt(c.value));
+  const msg=document.getElementById('msgAtribuir');
+  if(!regiao){ msg.textContent='Selecione a equipe'; msg.style.color='var(--danger)'; return; }
+  if(!ids.length){ msg.textContent='Marque ao menos 1 local visível'; msg.style.color='var(--danger)'; return; }
+  msg.textContent='Atribuindo...'; msg.style.color='var(--muted)';
+  const r=await api('/api/locais/atribuir-equipe',{method:'POST', body: JSON.stringify({ids, regiao})});
+  const d=await r.json();
+  if(d.error){ msg.textContent=d.error; msg.style.color='var(--danger)'; return; }
+  msg.textContent=`✅ ${d.atualizados} locais → ${regiao} (obra criada se não existia)`; msg.style.color='var(--ok)';
+  toast(`${d.atualizados} locais atribuídos a ${regiao}`);
+  carregarLocais(); carregarPorEquipe();
+}
+function toggleSelecionarTodosLocais(){
+  const chks=document.querySelectorAll('.chk-local');
+  const marcar = Array.from(chks).some(c=>!c.checked);
+  chks.forEach(c=>c.checked=marcar);
+}
+
+async function vincularLocalObra() {
+  const obraId = document.getElementById('localObraSelect').value;
+  const localId = document.getElementById('localSelect').value;
+  if (!obraId || !localId) { toast('Selecione a obra e o local'); return; }
+  const local = await api('/api/locais/' + localId).then(r => r.json());
+  await api('/api/locais/' + localId, { method: 'PUT', body: JSON.stringify({ ...local, obra_id: parseInt(obraId) }) });
+  carregarLocais(); toast('Local vinculado a obra!');
+}
+
+async function excluirLocal(id) { await api('/api/locais/' + id, { method: 'DELETE' }); carregarLocais(); }
+
+// ATIVIDADES
+async function carregarAtividades() {
+  const atvs = await api('/api/atividades').then(r => r.json());
+  document.getElementById('listaAtividades').innerHTML = atvs.map(a => '<li><strong>' + a.nome + '</strong><button class="btn-delete" onclick="excluirAtividade(' + a.id + ')">&times;</button></li>').join('') || '<p class="empty-state">Nenhuma atividade</p>';
+}
+async function adicionarAtividade() {
+  const nome = document.getElementById('nomeAtividade').value.trim();
+  if (!nome) { toast('Nome obrigatorio'); return; }
+  await api('/api/atividades', { method: 'POST', body: JSON.stringify({ nome }) });
+  document.getElementById('nomeAtividade').value = '';
+  carregarAtividades(); toast('Atividade adicionada!');
+}
+async function excluirAtividade(id) { await api('/api/atividades/' + id, { method: 'DELETE' }); carregarAtividades(); }
+
+// MATERIAIS - Organizado visualmente por categorias
+let materiaisCache = [];
+let buscaTimer;
+const catCores = {'Câmeras':'#e3f2fd','Cabeamento':'#fff3e0','Óptico / Ativos':'#f3e5f5','Infra Rack':'#e8f5e9','Infra Elétrica':'#fce4ec','Fixação':'#fffde7','Geral':'#f5f5f5'};
+const catIcon = {'Câmeras':'📷','Cabeamento':'🔌','Óptico / Ativos':'💡','Infra Rack':'🗄️','Infra Elétrica':'⚡','Fixação':'🔩','Geral':'📦'};
+async function carregarMateriais() {
+  const mats = await api('/api/materiais').then(r => r.json());
+  materiaisCache = mats;
+  document.getElementById('countMateriais').textContent = mats.length;
+  const cats = [...new Set(mats.map(m=>m.categoria))].sort();
+  document.getElementById('countCategorias').textContent = cats.length;
+  // chips categorias
+  document.getElementById('chipsCategorias').innerHTML = cats.map(c=>{
+    const n = mats.filter(m=>m.categoria===c).length;
+    return `<span onclick="filtrarPorCategoria('${c}')" style="cursor:pointer;background:${catCores[c]||'#f5f5f5'};border:1px solid var(--line);padding:5px 10px;border-radius:20px;font-size:11px;font-weight:600">${catIcon[c]||'📦'} ${c} <strong>${n}</strong></span>`;
+  }).join('') + (cats.length? `<span onclick="filtrarPorCategoria('')" style="cursor:pointer;background:#fff;border:1px solid var(--line);padding:5px 10px;border-radius:20px;font-size:11px">✕ Limpar</span>` : '');
+  // filtro select
+  const sel = document.getElementById('filtroCatMat');
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">Todas categorias</option>' + cats.map(c=>`<option value="${c}">${catIcon[c]||''} ${c} (${mats.filter(m=>m.categoria===c).length})</option>`).join('');
+  sel.value = cur;
+  renderMateriais();
+}
+function renderMateriais(){
+  const filtroCat = document.getElementById('filtroCatMat').value;
+  const busca = (document.getElementById('buscaMat').value||'').toLowerCase();
+  let lista = materiaisCache.slice();
+  if(filtroCat) lista = lista.filter(m=>m.categoria===filtroCat);
+  if(busca && busca.length>=2) lista = lista.filter(m=>m.nome.toLowerCase().includes(busca));
+  // agrupar por categoria para exibição organizada
+  const porCat = {};
+  lista.forEach(m=>{ if(!porCat[m.categoria]) porCat[m.categoria]=[]; porCat[m.categoria].push(m); });
+  let html = '';
+  Object.entries(porCat).sort().forEach(([cat, items])=>{
+    html += `<div style="margin-bottom:14px;border:1px solid var(--line);border-radius:10px;overflow:hidden">
+      <div style="background:${catCores[cat]||'#f5f5f5'};padding:8px 12px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--line)">
+        <strong style="font-size:12px">${catIcon[cat]||'📦'} ${cat} <span style="background:#fff;padding:1px 7px;border-radius:10px;font-size:10px;border:1px solid var(--line)">${items.length}</span></strong>
+        <span style="font-size:10px;color:var(--muted)">${cat==='Câmeras'?'demanda do Mesclado':cat==='Cabeamento'?'para instalação':''}</span>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:6px;padding:8px;background:#fbfcfd">
+        ${items.map(m=>`<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:#fff;border-radius:8px;border:1px solid var(--line);font-size:12px">
+          <span style="flex:1;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${m.nome}">${m.nome}</span>
+          <button class="btn-delete" onclick="excluirMaterial(${m.id})" title="Remover">&times;</button>
+        </div>`).join('')}
+      </div>
+    </div>`;
+  });
+  document.getElementById('listaMateriais').innerHTML = html || '<p class="empty-state">Nenhum material com esse filtro. Busque acima ou adicione.</p>';
+}
+function filtrarMateriais(){ renderMateriais(); }
+function filtrarPorCategoria(cat){ document.getElementById('filtroCatMat').value=cat; renderMateriais(); }
+async function buscarMateriais() {
+  clearTimeout(buscaTimer);
+  const texto = document.getElementById('buscaMat').value.trim();
+  // render filtra ao digitar
+  renderMateriais();
+  if (texto.length < 2) { document.getElementById('resultBuscaMat').innerHTML = ''; return; }
+  buscaTimer = setTimeout(async () => {
+    const mats = await api('/api/materiais?busca=' + encodeURIComponent(texto)).then(r => r.json());
+    if (!mats.length) {
+      document.getElementById('resultBuscaMat').innerHTML = `<div style="padding:10px;background:#fff3e0;border-radius:8px;font-size:13px;color:#e65100">Nenhum encontrado. <a href="#" onclick="document.getElementById('nomeMaterial').value='${texto.replace(/'/g,"\\'")}';document.getElementById('catMaterial').focus();toast('Preencha a categoria e clique em Adicionar');return false;" style="color:var(--primary)">Adicionar "${texto}"?</a></div>`;
+    } else {
+      document.getElementById('resultBuscaMat').innerHTML = '<div style="max-height:200px;overflow-y:auto">' + mats.slice(0,20).map(m => `<div style="display:flex;align-items:center;gap:8px;padding:8px;background:#f7f9fa;border-radius:6px;margin-bottom:4px;border:1px solid var(--line)"><span style="flex:1;font-size:13px"><strong>${m.nome}</strong> <small style="color:var(--muted)">(${m.categoria})</small></span><button class="btn-delete" onclick="excluirMaterial(${m.id})">&times;</button></div>`).join('') + (mats.length>20?`<div style="font-size:11px;color:var(--muted);text-align:center">+${mats.length-20} mais</div>`:'') + '</div>';
+    }
+  }, 250);
+}
+async function adicionarMaterial() {
+  const nome = document.getElementById('nomeMaterial').value.trim();
+  const categoria = document.getElementById('catMaterial').value.trim() || 'Geral';
+  const msg = document.getElementById('msgMat');
+  if (!nome) { toast('Nome obrigatório'); msg.textContent='Nome obrigatório'; msg.style.color='var(--danger)'; return; }
+  const r = await api('/api/materiais', { method: 'POST', body: JSON.stringify({ nome, categoria }) });
+  const d = await r.json();
+  if(d.error){ msg.textContent=d.error; msg.style.color='var(--danger)'; toast(d.error); return; }
+  document.getElementById('nomeMaterial').value = '';
+  msg.textContent=''; renderMateriais();
+  await carregarMateriais(); toast('Material adicionado em '+categoria+'!');
+}
+async function excluirMaterial(id) { if(!confirm('Remover material? Ele some do catálogo mas RDOs antigos mantêm.')) return; await api('/api/materiais/' + id, { method: 'DELETE' }); await carregarMateriais(); toast('Removido'); }
+async function importarListaTxt(){
+  const msg=document.getElementById('msgMat');
+  try{
+    const txt = await fetch('/lista.txt').then(r=>r.text());
+    if(!txt) throw new Error('lista.txt vazia');
+    const login=localStorage.getItem('token');
+    // usa endpoint com auto-categoria
+    const r=await fetch('/api/materiais/importar',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+login},body:JSON.stringify({texto:txt})});
+    const d=await r.json();
+    if(d.error) throw new Error(d.error);
+    msg.textContent=`✅ ${d.importados} materiais (re)importados de lista.txt`;
+    msg.style.color='var(--ok)';
+    await carregarMateriais();
+  }catch(e){ msg.textContent='Erro: '+(e.message||e); msg.style.color='var(--danger)'; }
+}
+
+// ============================================================
+// EQUIPES - Gestao robusta (admin only) + logica de obras
+// ============================================================
+let usuariosGlobal = [];
+let equipesCache = [];
+let usuariosCache = [];
+let filtroMembroEq = '';
+
+async function carregarEquipes() {
+  const [equipes, usuarios] = await Promise.all([api('/api/equipes').then(r => r.json()), api('/api/usuarios').then(r => r.json())]);
+  equipesCache = equipes;
+  usuariosCache = usuarios;
+  usuariosGlobal = usuarios.filter(u => u.ativo); // todos ativos para selecao (tecnico + gestor)
+  // stats topo
+  const semEquipe = usuarios.filter(u => !u.equipe_id && u.ativo).length;
+  document.getElementById('eqStatsTop').textContent = equipes.length + ' equipe(s) • ' + semEquipe + ' sem equipe';
+  document.getElementById('eqSemEquipeInfo').textContent = semEquipe + ' usuário(s) sem equipe';
+  document.getElementById('membrosCount').textContent = document.querySelectorAll('.chk-eq:checked').length + ' selecionados';
+  renderEquipesLista();
+  renderChks(window._eqSelecionados || []);
+  // popula selects de usuario (criacao/edicao + filtros)
+  const sel = document.getElementById('uEquipe');
+  const selFiltro = document.getElementById('filtroEquipeUsuario');
+  const valSel = sel.value;
+  const valFiltro = selFiltro ? selFiltro.value : '';
+  sel.innerHTML = '<option value="">Sem equipe</option>' + equipes.map(e => '<option value="' + e.id + '">' + e.nome + '</option>').join('');
+  if (selFiltro) selFiltro.innerHTML = '<option value="">Todas equipes</option><option value="__sem">Sem equipe</option>' + equipes.map(e => '<option value="' + e.id + '">' + e.nome + '</option>').join('');
+  sel.value = valSel;
+  if (selFiltro) selFiltro.value = valFiltro;
+}
+
+function renderEquipesLista() {
+  const busca = (document.getElementById('buscaEquipe')?.value || '').toLowerCase();
+  const div = document.getElementById('listaEquipes');
+  let lista = equipesCache;
+  if (busca) lista = lista.filter(e => e.nome.toLowerCase().includes(busca) || (e.membros||[]).some(m=>m.nome.toLowerCase().includes(busca)));
+  div.innerHTML = lista.map(e => {
+    const membrosHtml = e.membros && e.membros.length
+      ? e.membros.map(m => '<span class="chip-membro" title="'+m.email+' • '+m.perfil+'">' + m.nome + ' <small style="opacity:.7">('+(m.perfil==='gestor'?'G':'T')+')</small></span>').join('')
+      : '<span style="font-size:11px;color:var(--muted)">Nenhum membro — atribua técnicos/gestores</span>';
+    const semMembroAlerta = !e.membros || !e.membros.length ? '<div style="margin-top:6px;background:#fff3e0;color:#e65100;padding:6px 8px;border-radius:6px;font-size:11px">⚠️ Equipe sem membros: não aparecerá em RDO/Presença até vincular usuários.</div>' : '';
+    return '<div style="padding:12px;background:#f7f9fa;border-radius:9px;margin-bottom:8px;border:1px solid var(--line);border-left:4px solid ' + e.cor + '">'
+      + '<div style="display:flex;align-items:center;gap:8px">'
+      + '<div style="width:14px;height:14px;border-radius:50%;background:' + e.cor + ';flex:none;border:1px solid var(--line)"></div>'
+      + '<div style="flex:1"><strong>' + e.nome + '</strong> <span style="font-size:11px;color:var(--muted)">• ' + (e.total_membros||0) + ' membro(s) • ' + (e.rdos_vinculados||0) + ' presenças</span></div>'
+      + '<button class="btn-small" onclick="exportarEquipesExcel('+e.id+')" title="Exportar esta equipe em Excel" style="background:#1b5e20;margin-right:4px">📗</button>'
+      + '<button class="btn-small" onclick="editarEq(' + e.id + ')" style="background:#1565c0;margin-right:4px">Editar</button>'
+      + '<button class="btn-delete" title="Excluir equipe (desvincula membros)" onclick="excluirEq(' + e.id + ')">&times;</button>'
+      + '</div>'
+      + '<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--line)"><span style="font-size:11px;color:var(--muted);font-weight:600">Membros: </span>' + membrosHtml + '</div>'
+      + semMembroAlerta
+      + '</div>';
+  }).join('') || '<p class="empty-state">Nenhuma equipe encontrada. Crie a primeira acima.</p>';
+}
+
+function filtrarEquipes(){ renderEquipesLista(); }
+function filtrarMembrosEq(){ filtroMembroEq = document.getElementById('buscaMembroEq').value.toLowerCase(); renderChks(window._eqSelecionados || []); }
+function selecionarTodosMembros(v){ document.querySelectorAll('.chk-eq').forEach(cb=>cb.checked=v); document.getElementById('membrosCount').textContent = document.querySelectorAll('.chk-eq:checked').length + ' selecionados'; }
+async function exportarEquipesExcel(filtro){
+  // filtro: 'todas' ou id numérico da equipe
+  toast('Gerando Excel...');
+  try{
+    const [equipes, locais, obras] = await Promise.all([api('/api/equipes').then(r=>r.json()), api('/api/locais').then(r=>r.json()), api('/api/obras').then(r=>r.json())]);
+    const obraPorLocal = {}; obras.forEach(o=>{ if(o.local_id) obraPorLocal[o.local_id]=o; });
+    let equipesAlvo = equipes;
+    if(filtro && filtro!=='todas' && !isNaN(filtro)){
+      equipesAlvo = equipes.filter(e=>String(e.id)===String(filtro));
+      if(!equipesAlvo.length){ toast('Equipe não encontrada'); return; }
+    }
+    // se todas, inclui também SEM EQUIPE como pseudo-equipe
+    const incluirSemEquipe = (filtro==='todas');
+    const wb = XLSX.utils.book_new();
+    // Aba Resumo
+    const resumo = [['Equipe','Cor','Membros','Locais','Câmeras Total','FIXA','ANALÍTICA','LPR','Com GPS','Terceirizada']];
+    const todasEquipesParaResumo = incluirSemEquipe ? [...equipes, {nome:'SEM EQUIPE', cor:'#90a4ae', membros:[]}] : equipesAlvo;
+    // dados por equipe vindos do dashboard/por-equipe para números oficiais
+    let dash = [];
+    try{ dash = await api('/api/dashboard/por-equipe').then(r=>r.json()); }catch(e){}
+    for(const eq of todasEquipesParaResumo){
+      const isSem = eq.nome==='SEM EQUIPE';
+      const locs = isSem ? locais.filter(l=>!l.regiao) : locais.filter(l=>l.regiao===eq.nome);
+      const dashRow = dash.find(d=>d.regiao===eq.nome) || {total_cameras: locs.reduce((s,l)=>s+(l.cameras||0),0), cam_fixa: locs.reduce((s,l)=>s+(l.cam_fixa||0),0), cam_analitica: locs.reduce((s,l)=>s+(l.cam_analitica||0),0), cam_lpr: locs.reduce((s,l)=>s+(l.cam_lpr||0),0)};
+      const comGPS = locs.filter(l=>l.latitude && l.longitude).length;
+      const membrosN = isSem ? 0 : (eq.membros? eq.membros.length : (eq.total_membros||0));
+      resumo.push([eq.nome, eq.cor||'', membrosN, locs.length, dashRow.total_cameras||0, dashRow.cam_fixa||0, dashRow.cam_analitica||0, dashRow.cam_lpr||0, comGPS, locs.some(l=>l.terceirizada)?'Sim':'Não']);
+    }
+    const wsResumo = XLSX.utils.aoa_to_sheet(resumo);
+    wsResumo['!cols']=[{wch:18},{wch:10},{wch:10},{wch:10},{wch:14},{wch:8},{wch:10},{wch:8},{wch:10},{wch:12}];
+    // estilizar cabeçalho
+    const hdrStyle={font:{bold:true,color:{rgb:'FFFFFF'}}, fill:{fgColor:{rgb:'0F3D4C'}}, alignment:{horizontal:'center',vertical:'center'}, border:{top:{style:'thin',color:{rgb:'D0D5DD'}},bottom:{style:'thin',color:{rgb:'D0D5DD'}},left:{style:'thin',color:{rgb:'D0D5DD'}},right:{style:'thin',color:{rgb:'D0D5DD'}}}};
+    for(let c=0;c<resumo[0].length;c++){ const ref=XLSX.utils.encode_cell({r:0,c}); if(wsResumo[ref]) wsResumo[ref].s=hdrStyle; }
+    XLSX.utils.book_append_sheet(wb, wsResumo, 'Resumo');
+    // Uma aba por equipe com detalhes completos
+    const cabDetalhe = ['Equipe','Comarca','Nome do Imóvel','Tipo','Ocupação','Endereço','Área','Longitude','Latitude','Google Maps','Street View','CAM FIXA','CAM ANALÍTICA','CAM LPR','Total Câmeras','Status Projeto','Etapa','Cronograma','Terceirizada','Obra','Progresso %','Status Obra','Membros da Equipe'];
+    for(const eq of equipesAlvo){
+      const locs = locais.filter(l=>l.regiao===eq.nome);
+      const linhas = [cabDetalhe];
+      const membrosStr = (eq.membros||[]).map(m=>m.nome+' ('+m.perfil+')').join(', ');
+      for(const l of locs){
+        const obra = obraPorLocal[l.id];
+        linhas.push([eq.nome, l.comarca||'', l.nome_imovel||l.nome||'', l.tipo||'', l.ocupacao||'', l.endereco||'', l.area||'', l.longitude||'', l.latitude||'', l.google_maps_link||'', l.street_view_link||'', l.cam_fixa||0, l.cam_analitica||0, l.cam_lpr||0, l.cameras||0, l.status_projeto||'', l.etapa||'', l.cronograma||'', l.terceirizada?'Sim':'Não', obra?obra.nome:'', obra? (obra.progresso||0):'', obra?obra.status:'', membrosStr]);
+      }
+      // se equipe sem locais, ainda cria aba vazia com aviso
+      if(locs.length===0) linhas.push([eq.nome,'— sem locais atribuídos —']);
+      const ws = XLSX.utils.aoa_to_sheet(linhas);
+      ws['!cols']=[{wch:16},{wch:14},{wch:28},{wch:10},{wch:10},{wch:32},{wch:12},{wch:12},{wch:12},{wch:32},{wch:32},{wch:10},{wch:12},{wch:10},{wch:12},{wch:14},{wch:8},{wch:12},{wch:12},{wch:22},{wch:10},{wch:12},{wch:30}];
+      for(let c=0;c<cabDetalhe.length;c++){ const ref=XLSX.utils.encode_cell({r:0,c}); if(ws[ref]) ws[ref].s=hdrStyle; }
+      // congelar cabeçalho e filtro
+      ws['!freeze']={xSplit:0,ySplit:1}; ws['!autofilter']={ref: XLSX.utils.encode_range({s:{r:0,c:0},e:{r:0,c:cabDetalhe.length-1}})};
+      // nome da aba sem caracteres inválidos
+      const sheetName = eq.nome.replace(/[:\\/?*\[\]]/g,'_').substring(0,31) || 'Equipe';
+      XLSX.utils.book_append_sheet(wb, ws, sheetName);
+    }
+    // Se todas, também aba SEM EQUIPE
+    if(incluirSemEquipe){
+      const locsSem = locais.filter(l=>!l.regiao);
+      const linhas=[cabDetalhe];
+      for(const l of locsSem){
+        const obra=obraPorLocal[l.id];
+        linhas.push(['SEM EQUIPE', l.comarca||'', l.nome_imovel||l.nome||'', l.tipo||'', l.ocupacao||'', l.endereco||'', l.area||'', l.longitude||'', l.latitude||'', l.google_maps_link||'', l.street_view_link||'', l.cam_fixa||0, l.cam_analitica||0, l.cam_lpr||0, l.cameras||0, l.status_projeto||'', l.etapa||'', l.cronograma||'', l.terceirizada?'Sim':'Não', obra?obra.nome:'', obra? (obra.progresso||0):'', obra?obra.status:'', '']);
+      }
+      const ws=XLSX.utils.aoa_to_sheet(linhas);
+      ws['!cols']=[{wch:16},{wch:14},{wch:28},{wch:10},{wch:10},{wch:32},{wch:12},{wch:12},{wch:12},{wch:32},{wch:32},{wch:10},{wch:12},{wch:10},{wch:12},{wch:14},{wch:8},{wch:12},{wch:12},{wch:22},{wch:10},{wch:12},{wch:30}];
+      for(let c=0;c<cabDetalhe.length;c++){ const ref=XLSX.utils.encode_cell({r:0,c}); if(ws[ref]) ws[ref].s=hdrStyle; }
+      ws['!freeze']={xSplit:0,ySplit:1}; ws['!autofilter']={ref: XLSX.utils.encode_range({s:{r:0,c:0},e:{r:0,c:cabDetalhe.length-1}})};
+      XLSX.utils.book_append_sheet(wb, ws, 'SEM EQUIPE');
+    }
+    const nomeFile = filtro && filtro!=='todas' ? `equipe_${equipesAlvo[0].nome.replace(/\s+/g,'_')}_${Date.now()}.xlsx` : `equipes_todas_${Date.now()}.xlsx`;
+    XLSX.writeFile(wb, nomeFile);
+    toast('Excel exportado: '+nomeFile);
+  }catch(e){ console.error(e); toast('Erro ao exportar: '+(e.message||e)); }
+}
+window.exportarEquipesExcel=exportarEquipesExcel;
+
+function renderChks(selecionados) {
+  window._eqSelecionados = selecionados.slice();
+  const filtro = filtroMembroEq;
+  let lista = usuariosGlobal;
+  if (filtro) lista = lista.filter(u => u.nome.toLowerCase().includes(filtro) || u.email.toLowerCase().includes(filtro));
+  // ordena: sem equipe primeiro, depois alfabético — facilita alocar
+  lista = lista.slice().sort((a,b)=>{
+    const aSem = !a.equipe_id ? -1 : 1;
+    const bSem = !b.equipe_id ? -1 : 1;
+    if (aSem !== bSem) return aSem - bSem;
+    return a.nome.localeCompare(b.nome);
+  });
+  const html = lista.map(u => {
+    const equipeNome = u.equipe_id ? (equipesCache.find(e=>String(e.id)===String(u.equipe_id))?.nome || 'Equipe #'+u.equipe_id) : 'Sem equipe';
+    const ocup = u.equipe_id ? '' : '<span style="background:#e8f5e9;color:#2e7d32;padding:1px 6px;border-radius:8px;font-size:10px;margin-left:4px">LIVRE</span>';
+    const perfilBadge = u.perfil==='gestor' ? '<span style="background:#e3f2fd;color:#1565c0;padding:1px 6px;border-radius:8px;font-size:10px">GESTOR</span>' : '<span style="background:#f3e5f5;color:#7b1fa2;padding:1px 6px;border-radius:8px;font-size:10px">TÉCNICO</span>';
+    const checked = selecionados.includes(u.id) ? 'checked' : '';
+    const disabled = ''; // permite mover entre equipes
+    return '<label class="chk-label" style="justify-content:space-between">'
+      + '<span style="display:flex;align-items:center;gap:8px;flex:1"><input type="checkbox" value="' + u.id + '" ' + checked + ' ' + disabled + ' class="chk-eq" style="accent-color:var(--primary)" onchange="document.getElementById(\'membrosCount\').textContent=document.querySelectorAll(\'.chk-eq:checked\').length+\' selecionados\'">'
+      + '<span style="font-size:12px;flex:1"><strong>' + u.nome + '</strong> ' + perfilBadge + ocup + '<br><span style="font-size:10px;color:var(--muted)">' + u.email + ' • ' + equipeNome + '</span></span></span>'
+      + '</label>';
+  }).join('');
+  document.getElementById('membrosChks').innerHTML = html || '<p style="font-size:12px;color:var(--muted)">Nenhum usuário ativo encontrado. Cadastre usuários em "Usuários" primeiro.</p>';
+  document.getElementById('membrosCount').textContent = document.querySelectorAll('.chk-eq:checked').length + ' selecionados';
+  // atualiza lista se filtro vazio e nenhum usuário
+  if (!usuariosGlobal.length) document.getElementById('membrosChks').innerHTML = '<p style="font-size:12px;color:var(--muted);text-align:center;padding:10px">Crie usuários primeiro na aba <strong>Usuários</strong> para poder montar equipes.</p>';
+}
+
+async function salvarEquipe() {
+  const editId = document.getElementById('eqEditId').value;
+  const nome = document.getElementById('nomeEquipe').value.trim();
+  const cor = document.getElementById('corEquipe').value;
+  const membros = Array.from(document.querySelectorAll('.chk-eq:checked')).map(cb => parseInt(cb.value));
+  const msgEl = document.getElementById('eqMsg');
+  if (!nome) { toast('Nome da equipe é obrigatório'); msgEl.textContent='Nome obrigatório'; msgEl.style.color='var(--danger)'; return; }
+  if (nome.length < 3) { toast('Nome deve ter ao menos 3 caracteres'); return; }
+  const method = editId ? 'PUT' : 'POST';
+  const url = editId ? '/api/equipes/' + editId : '/api/equipes';
+  const btn = document.getElementById('btnEq'); btn.disabled=true; btn.textContent='Salvando...';
+  try{
+    const r = await api(url, { method, body: JSON.stringify({ nome, cor, membros }) });
+    const d = await r.json();
+    if (d.error) { toast(d.error); msgEl.textContent=d.error; msgEl.style.color='var(--danger)'; btn.disabled=false; btn.textContent=editId?'Salvar':'Criar Equipe'; return; }
+    msgEl.textContent=''; cancelarEq(); await carregarEquipes(); await carregarUsuarios(); toast(editId ? 'Equipe atualizada com sucesso!' : 'Equipe criada! Vincule obras e registre RDOs.');
+  } catch(e){ toast('Erro ao salvar equipe'); }
+  btn.disabled=false; btn.textContent=document.getElementById('eqEditId').value?'Salvar':'Criar Equipe';
+}
+async function editarEq(id) {
+  const e = equipesCache.find(eq => eq.id === id);
+  if (!e) { toast('Equipe não encontrada'); return; }
+  document.getElementById('eqEditId').value = e.id;
+  document.getElementById('nomeEquipe').value = e.nome;
+  document.getElementById('corEquipe').value = e.cor || '#1565c0';
+  document.getElementById('tituloEq').textContent = 'Editar Equipe • ' + e.nome;
+  document.getElementById('btnEq').textContent = 'Salvar Alterações';
+  document.getElementById('btnCancelEq').style.display = 'block';
+  filtroMembroEq=''; document.getElementById('buscaMembroEq').value='';
+  renderChks((e.membros || []).map(m => m.id));
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+function cancelarEq() {
+  document.getElementById('eqEditId').value = '';
+  document.getElementById('nomeEquipe').value = '';
+  document.getElementById('corEquipe').value = '#1565c0';
+  document.getElementById('tituloEq').textContent = 'Nova Equipe';
+  document.getElementById('btnEq').textContent = 'Criar Equipe';
+  document.getElementById('btnCancelEq').style.display = 'none';
+  document.getElementById('eqMsg').textContent='';
+  document.getElementById('buscaMembroEq').value=''; filtroMembroEq='';
+  renderChks([]);
+}
+async function excluirEq(id) {
+  const eq = equipesCache.find(e=>e.id===id);
+  const nome = eq? eq.nome : '#'+id;
+  const membrosN = eq?.membros?.length || 0;
+  if (!confirm('Excluir equipe "'+nome+'"?\n\n'+membrosN+' membro(s) ficarão SEM EQUIPE (não perdem login). Esta ação não apaga RDOs já registrados.')) return;
+  const r = await api('/api/equipes/' + id, { method: 'DELETE' });
+  const d = await r.json();
+  if (d.error) { toast(d.error); return; }
+  await carregarEquipes(); await carregarUsuarios(); toast('Equipe "'+nome+'" removida');
+}
+
+// ============================================================
+// USUARIOS - CRUD completo + filtros + logica de obras
+// ============================================================
+async function carregarUsuarios() {
+  const users = await api('/api/usuarios').then(r => r.json());
+  usuariosCache = users;
+  document.getElementById('userStatsTop').textContent = users.filter(u=>u.ativo).length + ' ativos • ' + users.length + ' total';
+  // atualiza filtro equipe (mantem selecao)
+  const selFiltro = document.getElementById('filtroEquipeUsuario');
+  if (selFiltro && equipesCache.length) {
+    const v = selFiltro.value;
+    selFiltro.innerHTML = '<option value="">Todas equipes</option><option value="__sem">Sem equipe</option>' + equipesCache.map(e => '<option value="' + e.id + '">' + e.nome + '</option>').join('');
+    selFiltro.value = v;
+  }
+  renderUsuariosLista();
+}
+
+function renderUsuariosLista(){
+  const busca = (document.getElementById('buscaUsuario')?.value || '').toLowerCase();
+  const perfil = document.getElementById('filtroPerfilUsuario')?.value || '';
+  const equipe = document.getElementById('filtroEquipeUsuario')?.value || '';
+  const ativo = document.getElementById('filtroAtivoUsuario')?.value || '';
+  let lista = usuariosCache.slice();
+  if (busca) lista = lista.filter(u => u.nome.toLowerCase().includes(busca) || u.email.toLowerCase().includes(busca));
+  if (perfil) lista = lista.filter(u => u.perfil===perfil);
+  if (equipe) {
+    if (equipe==='__sem') lista = lista.filter(u => !u.equipe_id);
+    else lista = lista.filter(u => String(u.equipe_id)===String(equipe));
+  }
+  if (ativo) lista = lista.filter(u => String(u.ativo)===String(ativo));
+  // ordena ativos primeiro
+  lista.sort((a,b)=> b.ativo - a.ativo || a.nome.localeCompare(b.nome));
+  const equipeNome = (id)=> {
+    if (!id) return '<span style="color:var(--muted)">Sem equipe</span>';
+    const e = equipesCache.find(x=>String(x.id)===String(id));
+    return e ? '<span class="chip-membro" style="background:'+e.cor+'20;color:'+e.cor+';border:1px solid '+e.cor+'40">'+e.nome+'</span>' : 'Equipe #'+id;
+  };
+  document.getElementById('listaUsuarios').innerHTML = lista.map(u => {
+    const perfilBadge = u.perfil==='gestor'
+      ? '<span class="badge" style="background:#e3f2fd;color:#1565c0">GESTOR</span>'
+      : '<span class="badge" style="background:#f3e5f5;color:#7b1fa2">TÉCNICO</span>';
+    const ativoBadge = u.ativo
+      ? '<span style="font-size:10px;background:#e8f5e9;color:#2e7d32;padding:2px 8px;border-radius:10px;font-weight:700">ATIVO</span>'
+      : '<span style="font-size:10px;background:#fce4ec;color:#c62828;padding:2px 8px;border-radius:10px;font-weight:700">INATIVO</span>';
+    const selfMark = String(u.id)===String(user.id) ? '<span style="font-size:10px;background:#fff3e0;color:#ef6c00;padding:2px 6px;border-radius:8px">VOCÊ</span>' : '';
+    const editarBtn = '<button class="btn-small" onclick="editarUsuario(' + u.id + ')" style="background:#1565c0">Editar</button>';
+    const toggleBtn = u.ativo
+      ? '<button class="btn-small" onclick="toggleUsuarioAtivo(' + u.id + ',0)" style="background:#ff9800">Desativar</button>'
+      : '<button class="btn-small" onclick="toggleUsuarioAtivo(' + u.id + ',1)" style="background:#2e7d32">Reativar</button>';
+    const excluirBtn = String(u.id)!==String(user.id) ? '<button class="btn-delete" title="Desativar (soft-delete)" onclick="excluirUsuario(' + u.id + ')">&times;</button>' : '';
+    return '<div style="padding:12px;background:'+(u.ativo?'#f7f9fa':'#fff5f5')+';border-radius:9px;margin-bottom:8px;border:1px solid '+(u.ativo?'var(--line)':'#ffcdd2')+';opacity:'+(u.ativo?'1':'.85')+'">'
+      + '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">'
+      + '<div style="flex:1;min-width:0"><strong style="font-size:13px">' + u.nome + '</strong> ' + perfilBadge + ' ' + ativoBadge + ' ' + selfMark + '<br>'
+      + '<span style="font-size:11px;color:var(--muted);word-break:break-all">' + u.email + '</span><br>'
+      + '<span style="font-size:11px;margin-top:4px;display:inline-block">' + equipeNome(u.equipe_id) + '</span></div>'
+      + '<div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">' + editarBtn + toggleBtn + excluirBtn + '</div>'
+      + '</div></div>';
+  }).join('') || '<p class="empty-state">Nenhum usuário com esse filtro. Ajuste a busca.</p>';
+}
+function filtrarUsuarios(){ renderUsuariosLista(); }
+
+async function salvarUsuario() {
+  const editId = document.getElementById('uEditId').value;
+  const nome = document.getElementById('uNome').value.trim();
+  const email = document.getElementById('uEmail').value.trim();
+  const senha = document.getElementById('uSenha').value; // pode ser vazio ao editar
+  const perfil = document.getElementById('uPerfil').value;
+  const equipe_id = document.getElementById('uEquipe').value || null;
+  const ativo = document.getElementById('uAtivo').value;
+  const msgEl = document.getElementById('uMsg');
+  if (!nome || !email) { toast('Nome e email são obrigatórios'); msgEl.textContent='Preencha nome e email'; msgEl.style.color='var(--danger)'; return; }
+  if (!editId && !senha) { toast('Senha obrigatória ao criar'); msgEl.textContent='Senha obrigatória'; msgEl.style.color='var(--danger)'; return; }
+  if (senha && senha.length < 4) { toast('Senha deve ter ao menos 4 caracteres'); return; }
+  const payload = { nome, email, perfil, equipe_id: equipe_id ? Number(equipe_id) : null, ativo: Number(ativo) };
+  if (senha) payload.senha = senha;
+  // ao criar, ativo sempre 1 se não informado? já tratado, mas garante
+  const method = editId ? 'PUT' : 'POST';
+  const url = editId ? '/api/usuarios/' + editId : '/api/usuarios';
+  const btn = document.getElementById('btnUsuario'); btn.disabled=true; btn.textContent='Salvando...';
+  try{
+    const r = await api(url, { method, body: JSON.stringify(payload) });
+    const d = await r.json();
+    if (d.error) { toast(d.error); msgEl.textContent=d.error; msgEl.style.color='var(--danger)'; btn.disabled=false; btn.textContent=editId?'Salvar Alterações':'Criar Usuário'; return; }
+    msgEl.textContent=''; msgEl.style.color='var(--ok)';
+    cancelarUsuario(); await carregarUsuarios(); await carregarEquipes();
+    toast(editId ? 'Usuário atualizado!' : 'Usuário criado! Ele já pode fazer login.');
+  } catch(e){ toast('Erro ao salvar usuário'); }
+  btn.disabled=false; btn.textContent=document.getElementById('uEditId').value?'Salvar Alterações':'Criar Usuário';
+}
+function editarUsuario(id){
+  const u = usuariosCache.find(x=>x.id===id);
+  if (!u) return;
+  document.getElementById('uEditId').value = u.id;
+  document.getElementById('uNome').value = u.nome;
+  document.getElementById('uEmail').value = u.email;
+  document.getElementById('uSenha').value = '';
+  document.getElementById('uSenha').placeholder = 'Deixe em branco para manter';
+  document.getElementById('uPerfil').value = u.perfil;
+  document.getElementById('uEquipe').value = u.equipe_id || '';
+  document.getElementById('uAtivo').value = String(u.ativo);
+  document.getElementById('tituloUsuario').textContent = 'Editar Usuário • ' + u.nome;
+  document.getElementById('btnUsuario').textContent = 'Salvar Alterações';
+  document.getElementById('btnCancelUsuario').style.display = 'block';
+  document.getElementById('uSenhaHint').textContent = 'Senha em branco = mantém atual. Preencha só se quiser trocar.';
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+function cancelarUsuario(){
+  document.getElementById('uEditId').value='';
+  document.getElementById('uNome').value='';
+  document.getElementById('uEmail').value='';
+  document.getElementById('uSenha').value='';
+  document.getElementById('uSenha').placeholder='Senha * (mín 4)';
+  document.getElementById('uPerfil').value='tecnico';
+  document.getElementById('uEquipe').value='';
+  document.getElementById('uAtivo').value='1';
+  document.getElementById('tituloUsuario').textContent='Novo Usuário';
+  document.getElementById('btnUsuario').textContent='Criar Usuário';
+  document.getElementById('btnCancelUsuario').style.display='none';
+  document.getElementById('uMsg').textContent='';
+  document.getElementById('uSenhaHint').textContent='Ao editar, deixe a senha em branco para manter a atual.';
+}
+async function toggleUsuarioAtivo(id, novoAtivo){
+  const u = usuariosCache.find(x=>x.id===id);
+  if (!u) return;
+  const acao = novoAtivo ? 'reativar' : 'desativar';
+  if (!confirm((novoAtivo?'Reativar':'Desativar')+' usuário "'+u.nome+'"?\n\n'+(novoAtivo?'Ele voltará a fazer login.':'Ele não fará mais login nem aparecerá em equipes.')) ) return;
+  const r = await api('/api/usuarios/' + id, { method: 'PUT', body: JSON.stringify({ nome: u.nome, email: u.email, perfil: u.perfil, equipe_id: u.equipe_id, ativo: novoAtivo }) });
+  const d = await r.json();
+  if (d.error) { toast(d.error); return; }
+  await carregarUsuarios(); await carregarEquipes(); toast('Usuário ' + acao + 'do!');
+}
+async function excluirUsuario(id){
+  const u = usuariosCache.find(x=>x.id===id);
+  if (!u) return;
+  if (!confirm('Remover usuário "'+u.nome+'"?\n\nIsso o DESATIVA (soft-delete): login bloqueado, sai das equipes, mas RDOs permanecem.')) return;
+  const r = await api('/api/usuarios/' + id, { method: 'DELETE' });
+  const d = await r.json();
+  if (d.error) { toast(d.error); return; }
+  await carregarUsuarios(); await carregarEquipes(); toast('Usuário desativado');
+}
+function criarUsuario(){ salvarUsuario(); } // alias compatibilidade
+
+// Socket
+const socket = io({ auth: { token } });
+socket.on('rdo_novo', () => { if (document.getElementById('view-dashboard').classList.contains('active')) carregarDashboard(); });
+
+// Init
+carregarDashboard();
+</script>
+</body>
+</html>

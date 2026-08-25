@@ -1,0 +1,1244 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>RDO de Campo - IPQ Tecnologia</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
+<style>
+  :root{--primary:#0f3d4c;--primary-dark:#0a2c37;--accent:#ff7a33;--accent-dark:#e8621d;--bg:#f2f4f6;--card:#fff;--line:#e1e5ea;--text:#1c2b33;--muted:#68767f;--ok:#1f8a4c;--ok-bg:#e6f6ec;--danger:#c6392f;--danger-bg:#fdeceb;--radius:12px;font-size:16px}
+  body.dark-mode{--bg:#0d1117;--card:#161b22;--line:#2a2a4a;--text:#e0e0e0;--muted:#a0a0a0;--ok-bg:#1a3a2a;--danger-bg:#3a1a1a}
+  body.dark-mode header{background:linear-gradient(135deg,#1a4a5c,#0f2d38)}
+  body.dark-mode .chip-input{background:#1a1a2e}
+  body.dark-mode input,body.dark-mode select,body.dark-mode textarea{background:#1a1a2e;color:#e0e0e0;border-color:#2a2a4a}
+  body.dark-mode .equipe-card,body.dark-mode .presenca-item{background:#1a1a2e;border-color:#2a2a4a}
+  body.dark-mode .rdo-item{background:#161b22;border-color:#2a2a4a}
+  body.dark-mode .mat-list li{background:#1a1a2e;border-color:#2a2a4a}
+  body.dark-mode .toast{background:#1a4a5c}
+  body.dark-mode .modal{background:#161b22}
+  body.dark-mode .modal .close-modal{background:#2a2a4a}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--text);padding-bottom:90px;transition:background 0.3s,color 0.3s}
+  header{background:linear-gradient(135deg,var(--primary),var(--primary-dark));color:#fff;padding:18px 16px 16px;position:sticky;top:0;z-index:20;box-shadow:0 2px 10px rgba(0,0,0,.15)}
+  header .brand{display:flex;align-items:center;justify-content:space-between}
+  header .brand-name{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:#9fd6c9;font-weight:700}
+  header h1{margin:2px 0 0;font-size:21px;font-weight:700}
+  .user-pill{font-size:11px;padding:4px 9px;border-radius:99px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.25)}
+  .btn-sair{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;padding:5px 12px;border-radius:8px;font-size:11px;cursor:pointer;font-weight:600}
+  .btn-theme{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;padding:5px 8px;border-radius:8px;cursor:pointer;font-size:16px}
+  nav.tabs{display:flex;gap:0;margin-top:14px;background:rgba(255,255,255,.08);border-radius:10px;padding:3px}
+  nav.tabs button{flex:1;border:none;background:0 0;color:#cfe4e4;padding:9px 6px;font-size:13.5px;font-weight:600;border-radius:8px;cursor:pointer}
+  nav.tabs button.active{background:#fff;color:var(--primary-dark)}
+  main{padding:14px;max-width:640px;margin:0 auto}
+  .view{display:none}.view.active{display:block}
+  .card{background:var(--card);border-radius:var(--radius);padding:16px;margin-bottom:14px;box-shadow:0 1px 3px rgba(20,30,40,.06);border:1px solid var(--line)}
+  .card h2{font-size:14px;text-transform:uppercase;letter-spacing:.05em;color:var(--primary);margin:0 0 12px;display:flex;align-items:center;gap:8px}
+  .card h2 .n{background:var(--primary);color:#fff;width:20px;height:20px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:11px}
+  label{display:block;font-size:13px;font-weight:600;color:var(--text);margin:12px 0 5px}
+  label:first-child{margin-top:0}
+  label .opt{color:var(--muted);font-weight:400}
+  input[type=text],input[type=date],input[type=number],input[type=time],select,textarea{width:100%;padding:11px 12px;border:1.5px solid var(--line);border-radius:9px;font-size:15.5px;background:#fbfcfd;color:var(--text);font-family:inherit;text-transform:uppercase}
+  input[type=text]::placeholder,textarea::placeholder{text-transform:none}
+  input:focus,select:focus,textarea:focus{outline:none;border-color:var(--primary);background:#fff}
+  textarea{resize:vertical;min-height:60px}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .chip-input{display:flex;flex-wrap:wrap;gap:6px;border:1.5px solid var(--line);border-radius:9px;padding:8px;background:#fbfcfd}
+  .chip-input input{border:none;flex:1;min-width:110px;padding:4px;background:0 0}
+  .chip-input input:focus{outline:none}
+  .chip{background:var(--primary);color:#fff;padding:5px 10px;border-radius:99px;font-size:13px;display:flex;align-items:center;gap:6px}
+  .chip button{background:0 0;border:none;color:#fff;font-size:14px;cursor:pointer;line-height:1;padding:0;opacity:.8}
+  .toggle-group{display:flex;gap:8px}
+  .toggle-group button{flex:1;padding:10px;border-radius:9px;border:1.5px solid var(--line);background:#fbfcfd;font-weight:600;font-size:14px;color:var(--muted);cursor:pointer}
+  .toggle-group button.sel-sim.active{background:var(--ok-bg);border-color:var(--ok);color:var(--ok)}
+  .toggle-group button.sel-nao.active{background:var(--danger-bg);border-color:var(--danger);color:var(--danger)}
+  .conditional{margin-top:10px;padding:12px;background:#f6f8f9;border-radius:9px;border:1px dashed var(--line);display:none}
+  .conditional.show{display:block}
+  .mat-list{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:6px}
+  .mat-list li{display:flex;align-items:center;gap:6px;padding:8px 10px;background:#f7f9fa;border-radius:8px;border:1px solid var(--line);transition:all 0.2s}
+  .mat-list li:hover{border-color:var(--primary);box-shadow:0 2px 8px rgba(0,0,0,.08)}
+  .mat-list li .mname{flex:1;font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .mat-list li input[type=number]{width:52px;padding:4px;text-align:center;font-size:12px;border-radius:6px}
+  .mat-list li .rm{background:0 0;border:none;color:var(--danger);font-size:16px;cursor:pointer;padding:2px 4px;opacity:0.6;transition:opacity 0.2s}
+  .mat-list li .rm:hover{opacity:1}
+  .empty-hint{color:var(--muted);font-size:13px;text-align:center;padding:14px 0}
+  .foto-add{display:block;text-align:center;padding:16px;border:2px dashed var(--line);border-radius:9px;color:var(--muted);font-size:13.5px;font-weight:600;cursor:pointer}
+  .foto-add input{display:none}
+  .foto-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}
+  .foto-thumb{position:relative;aspect-ratio:1;border-radius:8px;overflow:hidden;border:1px solid var(--line)}
+  .foto-thumb img{width:100%;height:100%;object-fit:cover;display:block}
+  .foto-thumb button{position:absolute;top:3px;right:3px;background:rgba(0,0,0,.6);color:#fff;border:none;width:20px;height:20px;border-radius:50%;font-size:12px;cursor:pointer}
+  .btn-primary{width:100%;background:var(--accent);color:#fff;border:none;padding:15px;border-radius:11px;font-size:16px;font-weight:700;cursor:pointer;box-shadow:0 3px 8px rgba(255,122,51,.35)}
+  .btn-primary:active{background:var(--accent-dark)}
+  .btn-export{display:flex;gap:8px;margin-bottom:14px}
+  .btn-export button{flex:1;padding:10px;border-radius:9px;border:1.5px solid var(--line);background:var(--card);font-size:12.5px;font-weight:700;color:var(--primary);cursor:pointer}
+  .rdo-item{background:var(--card);border-radius:var(--radius);padding:14px;margin-bottom:10px;border:1px solid var(--line)}
+  .rdo-item .top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+  .rdo-item .top div strong{font-size:15px}
+  .rdo-item .top div span{display:block;font-size:12.5px;color:var(--muted);margin-top:2px}
+  .rdo-item .badge{font-size:11px;background:var(--primary);color:#fff;padding:3px 8px;border-radius:99px;white-space:nowrap}
+  .rdo-item .meta{display:flex;gap:14px;margin-top:10px;font-size:12.5px;color:var(--muted);flex-wrap:wrap}
+  .rdo-item .actions{display:flex;gap:8px;margin-top:12px}
+  .rdo-item .actions button{flex:1;padding:8px;border-radius:8px;border:1.5px solid var(--line);background:#fbfcfd;font-size:12.5px;font-weight:600;cursor:pointer}
+  .rdo-item .actions button.del{color:var(--danger);border-color:var(--danger-bg)}
+  .toast{position:fixed;left:16px;right:16px;bottom:16px;background:var(--primary-dark);color:#fff;padding:13px 16px;border-radius:11px;font-size:14px;font-weight:600;text-align:center;box-shadow:0 6px 20px rgba(0,0,0,.25);transform:translateY(120%);transition:transform .25s;z-index:100;max-width:640px;margin:0 auto}
+  .toast.show{transform:translateY(0)}
+  .modal-bg{display:none;position:fixed;inset:0;background:rgba(10,20,25,.55);z-index:200;align-items:flex-end;justify-content:center}
+  .modal-bg.show{display:flex}
+  .modal{background:#fff;border-radius:16px 16px 0 0;width:100%;max-width:640px;max-height:85vh;overflow-y:auto;padding:18px}
+  .modal h3{margin-top:0;font-size:17px;color:var(--primary)}
+  .modal .close-modal{display:block;margin-top:16px;width:100%;padding:12px;border:none;background:var(--line);border-radius:9px;font-weight:700;cursor:pointer}
+  .detail-row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line);font-size:13.5px;gap:10px}
+  .detail-row span:first-child{color:var(--muted)}
+  .detail-row span:last-child{text-align:right;font-weight:600}
+  .empty-state{text-align:center;padding:50px 20px;color:var(--muted)}
+  .empty-state .ic{font-size:40px;display:block;margin-bottom:10px}
+  .equipe-card{display:flex;align-items:center;gap:8px;padding:8px;background:#f7f9fa;border-radius:8px;margin-bottom:6px;border:1px solid var(--line)}
+  .equipe-card .avatar{width:32px;height:32px;border-radius:50%;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700}
+  .equipe-card .nome{flex:1;font-size:13px;font-weight:600}
+  .presenca-item{display:flex;align-items:center;gap:8px;padding:8px;background:#f7f9fa;border-radius:8px;margin-bottom:6px;border:1px solid var(--line)}
+  .presenca-item .dot{width:10px;height:10px;border-radius:50%;background:var(--ok)}
+  .presenca-item .info{flex:1}
+  .presenca-item .info strong{font-size:12px;display:block}
+  .presenca-item .info small{font-size:10px;color:var(--muted)}
+  .gps-card{background:#f0fdf4;border:2px solid #16a34a;border-radius:8px;padding:12px;margin-top:8px}
+  .gps-card.error{background:#fef2f2;border-color:#dc2626}
+  .gps-label{font-size:10px;font-weight:700;color:#6b7280;letter-spacing:1px;text-transform:uppercase}
+  .gps-value{font-family:monospace;font-size:13px;font-weight:600;color:#15803d;margin-top:2px}
+  .gps-card.error .gps-value{color:#dc2626}
+  .mapa-full{height:300px;border-radius:8px;overflow:hidden;border:1px solid var(--line);position:relative}
+  .mapa-status{position:absolute;top:8px;right:8px;z-index:500;background:rgba(0,0,0,.7);color:#fff;padding:4px 8px;border-radius:6px;font-size:10px;font-weight:600}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(0,87,184,.4)}70%{box-shadow:0 0 0 12px rgba(0,87,184,0)}100%{box-shadow:0 0 0 0 rgba(0,87,184,0)}}
+  .marker-pulse{animation:pulse 1.5s infinite}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <div>
+      <div class="brand-name">IPQ Tecnologia</div>
+      <h1>RDO de Campo</h1>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <span class="user-pill" id="userPill" onclick="abrirPerfil()" style="cursor:pointer" title="Meu perfil"></span>
+      <button class="btn-theme" onclick="toggleDarkMode()" title="Modo Escuro">🌙</button>
+      <button class="btn-sair" onclick="logout()">Sair</button>
+    </div>
+  </div>
+  <nav class="tabs">
+    <button class="active" data-view="home">Inicio</button>
+    <button data-view="novo">+ RDO</button>
+    <button data-view="lista">RDOs</button>
+    <button data-view="mapa">Mapa</button>
+  </nav>
+</header>
+
+<main>
+  <!-- HOME -->
+  <section class="view active" id="view-home">
+    <div class="card" style="border-left:4px solid var(--primary)" id="cardMinhaEquipe">
+      <h2>Minha Equipe <span id="badgeEquipe" style="margin-left:auto;font-size:10px;background:var(--primary);color:#fff;padding:3px 8px;border-radius:10px"></span></h2>
+      <div id="infoEquipe"><p class="empty-state">Carregando...</p></div>
+      <div id="autoLocalBanner" style="display:none;margin-top:10px;padding:10px;background:#e8f5e9;border:2px solid #2e7d32;border-radius:10px;text-align:center">
+        <div style="font-size:12px;font-weight:700;color:#2e7d32">📍 Você chegou!</div>
+        <div style="font-size:13px;font-weight:600" id="autoLocalNome">-</div>
+        <div style="font-size:11px;color:var(--muted)" id="autoLocalInfo"></div>
+        <button class="btn-primary" onclick="usarLocalDetectado()" style="margin-top:8px;padding:8px;font-size:12px">Usar este local no RDO</button>
+      </div>
+      <div id="equipeLocais" style="margin-top:12px;display:none">
+        <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">📍 Meus locais (REGIÃO) — ordenados por proximidade</div>
+        <div id="listaEquipeLocais" style="max-height:240px;overflow:auto"></div>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Minha Localizacao</h2>
+      <div class="mapa-full" id="mapaHome">
+        <div class="mapa-status" id="gpsStatus">GPS: aguardando...</div>
+      </div>
+      <div id="gpsCard" class="gps-card" style="display:none">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div><div class="gps-label">Latitude</div><div class="gps-value" id="gpsLat">-</div></div>
+          <div><div class="gps-label">Longitude</div><div class="gps-value" id="gpsLng">-</div></div>
+          <div><div class="gps-label">Precisao</div><div class="gps-value" id="gpsAcc">-</div></div>
+          <div><div class="gps-label">Status</div><div class="gps-value">✓ OK</div></div>
+        </div>
+        <div style="margin-top:8px;font-size:11px;color:var(--muted)" id="gpsEndereco">Buscando endereco...</div>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Equipe em Campo</h2>
+      <div id="listaPresenca"><p class="empty-state">Carregando...</p></div>
+      <div style="font-size:11px;color:var(--muted);text-align:center;margin-top:8px" id="presencaInfo">Atualiza a cada GPS</div>
+    </div>
+  </section>
+
+  <!-- NOVO RDO -->
+  <section class="view" id="view-novo">
+    <form id="rdoForm">
+      <div class="card">
+        <h2><span class="n">1</span>Dados da Obra</h2>
+        <label>Data do servico</label>
+        <input type="date" id="f_data" required>
+        <label>Obra</label>
+        <select id="f_obra" required><option value="">Selecione a obra</option></select>
+        <label>Cidade</label>
+        <input type="text" id="f_cidade" readonly placeholder="Selecione obra e local" style="background:#f2f4f6;color:#68767f;cursor:default">
+        <label>Local</label>
+        <select id="f_local" required><option value="">Selecione a obra primeiro</option></select>
+        <input type="text" id="f_local_outro" placeholder="Digite o local" style="display:none;margin-top:8px">
+        <label>Atividade principal</label>
+        <select id="f_atividade" required><option value="">Selecione</option></select>
+        <input type="text" id="f_atividade_outro" placeholder="Outra atividade" style="display:none;margin-top:8px">
+        <label>Equipe <span class="opt">— selecione da sua equipe</span></label>
+        <div id="equipeMembrosRDO" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px"></div>
+        <div class="chip-input" id="chipEquipe"><input type="text" id="f_equipe_input" placeholder="Adicionar outro nome e Enter..."></div>
+        <div style="font-size:11px;color:var(--muted);margin-top:4px" id="equipeRDOInfo">Toque nos membros acima para incluir no RDO</div>
+      </div>
+
+      <div class="card">
+        <h2><span class="n">2</span>Materiais</h2>
+        <input type="text" id="matBusca" placeholder="Buscar material..." style="width:100%;padding:11px;border:1.5px solid var(--line);border-radius:9px;font-size:15px;margin-bottom:8px">
+        <div id="matBuscaResult" style="margin-bottom:10px"></div>
+        <label>Selecionados</label>
+        <ul class="mat-list" id="matList"></ul>
+        <div class="empty-hint" id="matEmptyHint">Nenhum material selecionado.</div>
+      </div>
+
+      <div class="card">
+        <h2><span class="n">3</span>Horarios</h2>
+        <div class="row2">
+          <div><label>Entrada manha</label><input type="time" id="f_entradaM" value="08:00"></div>
+          <div><label>Saida manha</label><input type="time" id="f_saidaM" value="12:00"></div>
+        </div>
+        <div class="row2">
+          <div><label>Entrada tarde</label><input type="time" id="f_entradaT" value="13:00"></div>
+          <div><label>Saida tarde</label><input type="time" id="f_saidaT" value="17:00"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2><span class="n">4</span>Ocorrencias</h2>
+        <label>Servico parou ou atrasou?</label>
+        <div class="toggle-group" id="toggleParou"><button type="button" class="sel-nao active" data-val="nao">Nao</button><button type="button" class="sel-sim" data-val="sim">Sim</button></div>
+        <div class="conditional" id="condParou"><label>Motivo</label><textarea id="f_motivoParada" placeholder="Descreva..."></textarea></div>
+      </div>
+
+      <div class="card">
+        <h2><span class="n">5</span>Instalacoes</h2>
+        <label>Instalou switches?</label>
+        <div class="toggle-group" id="toggleSwitch"><button type="button" class="sel-nao active" data-val="nao">Nao</button><button type="button" class="sel-sim" data-val="sim">Sim</button></div>
+        <div class="conditional" id="condSwitch">
+          <label>Nomenclatura</label><input type="text" id="f_nomSwitch" placeholder="Ex: Switch 1 e 2">
+          <label>Local</label><input type="text" id="f_localSwitch" placeholder="Ex: Rack">
+        </div>
+        <label style="margin-top:18px">Instalou cameras?</label>
+        <div class="toggle-group" id="toggleCamera"><button type="button" class="sel-nao active" data-val="nao">Nao</button><button type="button" class="sel-sim" data-val="sim">Sim</button></div>
+        <div class="conditional" id="condCamera">
+          <label>Nomenclatura</label><input type="text" id="f_nomCamera" placeholder="Ex: CAM 01, CAM 02">
+          <label>Local</label><input type="text" id="f_localCamera" placeholder="Ex: Corredor 2 pav">
+        </div>
+      </div>
+
+      <div class="card">
+        <h2><span class="n">6</span>Fotos</h2>
+        <label class="foto-add">Tirar foto ou escolher<input type="file" id="f_fotos" accept="image/*" capture="environment" multiple></label>
+        <div class="foto-grid" id="fotoGrid"></div>
+      </div>
+
+      <button type="submit" class="btn-primary">Salvar RDO</button>
+    </form>
+  </section>
+
+  <!-- LISTA -->
+  <section class="view" id="view-lista">
+    <div class="btn-export">
+      <button onclick="exportarJSON()">📄 JSON</button>
+      <button onclick="exportarCSV()">📊 CSV</button>
+      <button onclick="exportarExcel()">📗 Excel</button>
+    </div>
+    <div id="listaContainer"></div>
+  </section>
+
+  <!-- MAPA -->
+  <section class="view" id="view-mapa">
+    <div class="card">
+      <h2>Mapa Completo</h2>
+      <div class="mapa-full" id="mapaFull" style="height:60vh">
+        <div class="mapa-status" id="mapaStatus">Carregando...</div>
+      </div>
+      <button class="btn-primary" onclick="centralizarMapa()" style="margin-top:8px;padding:10px;font-size:13px">📍 Minha Localizacao</button>
+    </div>
+  </section>
+</main>
+
+<div class="toast" id="toast"></div>
+<div class="modal-bg" id="modalBg"><div class="modal" id="modalBody"></div></div>
+<div class="modal-bg" id="modalPerfil"><div class="modal" style="border-radius:16px;max-width:400px"><h3>Meu Perfil</h3><div id="perfilBody"></div></div></div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+(function(){
+  "use strict";
+
+  const $ = id => document.getElementById(id);
+  const token = localStorage.getItem('token');
+  const user = JSON.parse(localStorage.getItem('user') || '{}');
+
+  if (!token) { window.location.href = '/login'; return; }
+
+  $('userPill').textContent = user.nome || 'Usuario';
+
+  // Dark Mode
+  function toggleDarkMode() {
+    document.body.classList.toggle('dark-mode');
+    localStorage.setItem('darkMode', document.body.classList.contains('dark-mode'));
+  }
+  window.toggleDarkMode = toggleDarkMode;
+  if (localStorage.getItem('darkMode') === 'true') document.body.classList.add('dark-mode');
+
+  function logout() { localStorage.removeItem('token'); localStorage.removeItem('user'); window.location.href = '/login'; }
+  window.logout = logout;
+  // Perfil (usuário logado pode editar nome/senha)
+  async function abrirPerfil(){
+    const me = await api('/api/me').then(r=>r.json());
+    const b=$('perfilBody');
+    b.innerHTML = `<div style="font-size:12px;color:var(--muted);margin-bottom:8px">${me.equipe_nome? 'Equipe: <strong style=color:var(--primary)>'+me.equipe_nome+'</strong>':'Sem equipe'} • ${me.perfil}</div>
+      <label>Nome</label><input type="text" id="pNome" value="${me.nome.replace(/"/g,'&quot;')}">
+      <label>Email (somente leitura)</label><input type="text" value="${me.email}" disabled style="background:#f2f4f6">
+      <label>Nova senha <span class="opt">(deixe em branco para manter)</span></label><input type="password" id="pSenha" placeholder="••••••••">
+      <div id="pMsg" style="font-size:12px;margin-top:8px;min-height:16px"></div>
+      <button class="btn-primary" onclick="salvarPerfil()" style="margin-top:10px">Salvar</button>
+      <button class="close-modal" onclick="fecharPerfil()">Fechar</button>`;
+    $('modalPerfil').classList.add('show');
+  }
+  window.abrirPerfil=abrirPerfil;
+  function fecharPerfil(){ $('modalPerfil').classList.remove('show'); }
+  window.fecharPerfil=fecharPerfil;
+  $('modalPerfil').addEventListener('click', e=>{ if(e.target.id==='modalPerfil') fecharPerfil(); });
+  async function salvarPerfil(){
+    const nome=$('pNome').value.trim(); const senha=$('pSenha').value;
+    const msg=$('pMsg');
+    if(!nome){ msg.textContent='Nome obrigatório'; msg.style.color='var(--danger)'; return; }
+    const r=await api('/api/me',{method:'PUT', body: JSON.stringify({nome, senha: senha||undefined})});
+    const d=await r.json();
+    if(d.error){ msg.textContent=d.error; msg.style.color='var(--danger)'; return; }
+    msg.textContent='Salvo!'; msg.style.color='var(--ok)'; 
+    const u=JSON.parse(localStorage.getItem('user')||'{}'); u.nome=nome; localStorage.setItem('user', JSON.stringify(u)); $('userPill').textContent=nome;
+    setTimeout(fecharPerfil, 800); toast('Perfil atualizado');
+  }
+  window.salvarPerfil=salvarPerfil;
+
+  const socket = io({ auth: { token } });
+
+  async function api(url, opts = {}) {
+    opts.headers = { 'Authorization': 'Bearer ' + token, ...(opts.headers || {}) };
+    if (opts.body && !(opts.body instanceof FormData)) opts.headers['Content-Type'] = 'application/json';
+    const r = await fetch(url, opts);
+    if (r.status === 401) { logout(); return null; }
+    return r;
+  }
+
+  // Estado
+  let equipe = [];
+  let materiais = [];
+  let fotos = [];
+  let editandoId = null;
+  let mapaHome = null;
+  let mapaFullMap = null;
+  let markerTecnico = null;
+  let markerLocal = null;
+  let markersTecnicos = {};
+  let watchId = null;
+  let meusDados = user;
+
+  // Navegacao
+  document.querySelectorAll('nav.tabs button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('nav.tabs button').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+      $('view-' + btn.dataset.view).classList.add('active');
+      if (btn.dataset.view === 'lista') renderLista();
+      if (btn.dataset.view === 'home') carregarHome();
+      if (btn.dataset.view === 'mapa') iniciarMapaFull();
+    });
+  });
+
+  // GPS com alta precisao e reverse geocoding
+  function iniciarGPS() {
+    if (!navigator.geolocation) { $('gpsStatus').textContent = 'GPS: indisponivel'; return; }
+    
+    $('gpsStatus').textContent = 'GPS: buscando...';
+    
+    watchId = navigator.geolocation.watchPosition(pos => {
+      const { latitude: lat, longitude: lng, accuracy } = pos.coords;
+      window._lastPos={lat,lng};
+      // Auto-detecção de chegada (150m)
+      checkAutoLocal(lat,lng);
+      // Atualizar card GPS
+      $('gpsCard').style.display = 'block';
+      $('gpsLat').textContent = lat.toFixed(6);
+      $('gpsLng').textContent = lng.toFixed(6);
+      $('gpsAcc').textContent = accuracy.toFixed(1) + 'm';
+      $('gpsStatus').textContent = 'GPS: ✓ ' + accuracy.toFixed(0) + 'm';
+      $('gpsCard').classList.remove('error');
+      
+      // Atualizar marker no mapa
+      if (markerTecnico) {
+        markerTecnico.setLatLng([lat, lng]);
+      } else if (mapaHome) {
+        markerTecnico = L.marker([lat, lng], { icon: criarIcone('#0057b8', true), zIndexOffset: 1000 }).addTo(mapaHome).bindPopup('<b>Voce esta aqui</b>');
+      }
+      
+      if (mapaHome) mapaHome.setView([lat, lng], 16);
+      
+      // Reverse geocoding
+      buscarEndereco(lat, lng);
+      
+      // Enviar presenca
+      enviarPresenca(lat, lng, accuracy);
+      
+    }, err => {
+      $('gpsStatus').textContent = 'GPS: erro';
+      $('gpsCard').classList.add('error');
+      $('gpsCard').style.display = 'block';
+      $('gpsEndereco').textContent = 'Erro: ' + err.message;
+    }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 5000 });
+  }
+
+  async function buscarEndereco(lat, lng) {
+    try {
+      const r = await fetch('https://nominatim.openstreetmap.org/reverse?format=json&lat=' + lat + '&lon=' + lng);
+      const d = await r.json();
+      $('gpsEndereco').textContent = d.display_name ? d.display_name.substring(0, 80) + '...' : 'Endereco nao encontrado';
+    } catch { $('gpsEndereco').textContent = 'Endereco indisponivel'; }
+  }
+
+  function enviarPresenca(lat, lng, accuracy) {
+    const obraId = $('f_obra') ? $('f_obra').value : null;
+    const localNome = $('f_local') ? $('f_local').value : '';
+    api('/api/presenca', { method: 'POST', body: JSON.stringify({ latitude: lat, longitude: lng, accuracy, obra_id: obraId || null, local_nome: localNome || '' }) });
+  }
+
+  function criarIcone(cor, pulse) {
+    return L.divIcon({
+      className: '',
+      html: '<div style="width:20px;height:20px;border-radius:50%;background:' + cor + ';border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.3)' + (pulse ? ';animation:pulse 1.5s infinite' : '') + '"></div>',
+      iconSize: [20, 20],
+      iconAnchor: [10, 10]
+    });
+  }
+  // Haversine e auto-detecção de local (150m)
+  window._lastPos=null; window._autoLocal=null;
+  function haversine(lat1, lon1, lat2, lon2){
+    const R=6371000, toRad=x=>x*Math.PI/180;
+    const dLat=toRad(lat2-lat1), dLon=toRad(lon2-lon1);
+    const a=Math.sin(dLat/2)**2 + Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLon/2)**2;
+    return R*2*Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  }
+  function checkAutoLocal(lat, lng){
+    const locais=window._equipeLocaisCache||[];
+    if(!locais.length) return;
+    let best=null, bestDist=Infinity;
+    locais.forEach(l=>{
+      if(!l.latitude||!l.longitude) return;
+      const d=haversine(lat,lng,parseFloat(l.latitude),parseFloat(l.longitude));
+      if(d<bestDist){ bestDist=d; best=l; }
+    });
+    if(best && bestDist<150){
+      window._autoLocal=best;
+      $('autoLocalBanner').style.display='block';
+      $('autoLocalNome').textContent=best.nome + ' • ' + (best.comarca||'');
+      $('autoLocalInfo').textContent=`${best.obra_nome||'Sem obra'} • ${best.obra_progresso||0}% • a ${Math.round(bestDist)}m de você`;
+      // no mapa, destaca
+      if(markerLocal) markerLocal.setLatLng([parseFloat(best.latitude), parseFloat(best.longitude)]);
+    } else {
+      // só esconde se estiver longe >300m para não piscar
+      if(bestDist>300) $('autoLocalBanner').style.display='none';
+    }
+  }
+  function selecionarLocalEquipe(nome){
+    document.querySelector('nav.tabs button[data-view=novo]').click();
+    setTimeout(async ()=>{
+      // tenta selecionar obra que contém o local
+      const obraSel=$('f_obra');
+      // se ainda não carregou obras, carrega
+      if(!obraSel.options.length) await carregarDados();
+      // procura local e sua obra
+      const loc = (window._equipeLocaisCache||[]).find(l=>l.nome===nome);
+      if(loc && loc.obra_id) obraSel.value=loc.obra_id;
+      obraSel.dispatchEvent(new Event('change'));
+      setTimeout(()=>{ $('f_local').value=nome; $('f_local').dispatchEvent(new Event('change')); toast('Local '+nome+' selecionado'); }, 300);
+    }, 100);
+  }
+  window.selecionarLocalEquipe=selecionarLocalEquipe;
+  function usarLocalDetectado(){
+    if(!window._autoLocal) return;
+    selecionarLocalEquipe(window._autoLocal.nome);
+    $('autoLocalBanner').style.display='none';
+  }
+  window.usarLocalDetectado=usarLocalDetectado;
+
+  // HOME - Melhorado para equipes (com Regiao/locais e presença da equipe)
+  let _minhaEquipeCache = null;
+  async function carregarHome() {
+    const minhaEquipe = await api('/api/minha-equipe').then(r => r.json());
+    _minhaEquipeCache = minhaEquipe;
+    const divEq = $('infoEquipe');
+    const badge = $('badgeEquipe');
+    if (minhaEquipe) {
+      badge.textContent = minhaEquipe.nome;
+      badge.style.background = minhaEquipe.cor || '#1565c0';
+      $('cardMinhaEquipe').style.borderLeftColor = minhaEquipe.cor || '#1565c0';
+      divEq.innerHTML = '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px"><div style="width:40px;height:40px;border-radius:50%;background:' + (minhaEquipe.cor || '#1565c0') + ';color:#fff;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700">' + minhaEquipe.nome.charAt(0) + '</div><div><strong style="font-size:15px">' + minhaEquipe.nome + '</strong><br><small style="color:var(--muted)">' + (minhaEquipe.membros ? minhaEquipe.membros.length : 0) + ' membros • clique para ver locais</small></div></div>' +
+        (minhaEquipe.membros ? minhaEquipe.membros.map(m => '<div class="equipe-card"><div class="avatar" style="background:'+(minhaEquipe.cor||'#1565c0')+'">' + m.nome.charAt(0) + '</div><div class="nome">' + m.nome + (m.id === meusDados.id ? ' (Você)' : '') + ' <small style="color:var(--muted)">'+m.email+'</small></div></div>').join('') : '');
+      // Locais da equipe via REGIAO com obra progresso (automatizado)
+      try{
+        const locaisEq = await api('/api/equipe/'+encodeURIComponent(minhaEquipe.nome)+'/locais').then(r=>r.json());
+        window._equipeLocaisCache = locaisEq;
+        const divLoc = $('listaEquipeLocais');
+        const wrap = $('equipeLocais');
+        if(locaisEq.length){
+          wrap.style.display='block';
+          // ordenar por progresso (menos concluído primeiro) e depois por proximidade se GPS disponível
+          let sorted = locaisEq.slice().sort((a,b)=>(a.obra_progresso||0)-(b.obra_progresso||0));
+          // se já temos GPS, ordenar por distância
+          if(window._lastPos){
+            sorted = sorted.map(l=>{
+              const d = l.latitude && l.longitude ? haversine(window._lastPos.lat, window._lastPos.lng, parseFloat(l.latitude), parseFloat(l.longitude)) : 999999;
+              return {...l, _dist: d};
+            }).sort((a,b)=>a._dist-b._dist);
+          }
+          divLoc.innerHTML = sorted.slice(0,10).map(l=>{
+            const prog = l.obra_progresso||0;
+            const cor = prog===100?'#2e7d32': prog>0?'#ef6c00':'#90a4ae';
+            const dist = l._dist!=null && l._dist<999999 ? (l._dist<1000? Math.round(l._dist)+'m' : (l._dist/1000).toFixed(1)+'km') : '';
+            return `<div onclick="selecionarLocalEquipe('${l.nome.replace(/'/g,"\\'")}')" style="cursor:pointer;padding:8px;background:#fff;border-radius:8px;margin-bottom:6px;border:1px solid var(--line);border-left:4px solid ${cor};font-size:11px">
+              <div style="display:flex;justify-content:space-between;align-items:center"><strong style="font-size:12px">${l.nome}</strong><span style="background:${cor};color:#fff;padding:1px 6px;border-radius:10px;font-size:10px">${prog}%</span></div>
+              <div style="color:var(--muted)">${l.comarca||''} • ${l.endereco||''} ${dist? '• 📍 '+dist:''}</div>
+              <div style="height:3px;background:var(--line);border-radius:99px;margin-top:4px;overflow:hidden"><div style="height:100%;background:${cor};width:${prog}%"></div></div>
+              <div style="color:var(--muted);margin-top:2px">${l.obra_nome||'Sem obra'} • 📷 ${l.cameras||0} (${l.cam_fixa||0}/${l.cam_analitica||0}/${l.cam_lpr||0})${l.latitude?' • GPS OK':' • sem GPS'}</div>
+            </div>`;
+          }).join('') + (locaisEq.length>10? `<div style="text-align:center;font-size:11px;color:var(--muted)">+${locaisEq.length-10} locais</div>`:'');
+          // checar auto-detect se já temos posição
+          if(window._lastPos) checkAutoLocal(window._lastPos.lat, window._lastPos.lng);
+        } else { $('equipeLocais').style.display='none'; }
+      }catch(e){ console.warn('locais equipe', e); }
+      renderEquipeMembrosRDO();
+    } else {
+      badge.textContent='Sem equipe'; badge.style.background='#90a4ae';
+      divEq.innerHTML = '<p class="empty-state">Sem equipe — peça ao gestor para vincular você em <strong>Painel → Equipes</strong></p>';
+      $('equipeLocais').style.display='none';
+    }
+
+    // Equipe em campo (todos da equipe, não só você)
+    let presencas = [];
+    if(minhaEquipe && minhaEquipe.id){
+      try{ presencas = await api('/api/presenca/equipe/'+minhaEquipe.id).then(r=>r.json()); }catch(e){ presencas = await api('/api/minha-presenca').then(r=>r.json()); }
+    } else {
+      presencas = await api('/api/minha-presenca').then(r=>r.json());
+    }
+    const divPres = $('listaPresenca');
+    if (presencas.length) {
+      divPres.innerHTML = presencas.map(p => {
+        const tempo = p.atualizado_em ? new Date(p.atualizado_em + 'Z').toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '';
+        const isMe = p.usuario_id===meusDados.id;
+        return '<div class="presenca-item"><div class="dot" style="background:'+(isMe?'var(--ok)':'#1565c0')+'"></div><div class="info"><strong>' + p.usuario_nome + (isMe?' (Você)':'') + '</strong><small>' + (p.local_nome || 'Sem local') + ' | ' + tempo + '</small></div><span style="font-size:10px;color:var(--muted)">'+(p.equipe_id?'Equipe '+p.equipe_id:'')+'</span></div>';
+      }).join('');
+      $('presencaInfo').textContent = presencas.length + ' técnico(s) da equipe com GPS ativo';
+    } else {
+      divPres.innerHTML = '<p class="empty-state">Nenhum técnico da equipe com GPS ainda</p>';
+      $('presencaInfo').textContent = 'Aguardando GPS dos colegas';
+    }
+
+    // Mapa
+    if (!mapaHome) {
+      mapaHome = L.map('mapaHome').setView([-5.5, -39.5], 7);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(mapaHome);
+      setTimeout(() => { mapaHome.invalidateSize(); iniciarGPS(); }, 200);
+    } else {
+      mapaHome.invalidateSize();
+    }
+
+    // Carregar tecnicos no mapa
+    await carregarTecnicosMapa();
+  }
+
+  async function carregarTecnicosMapa() {
+    const presencas = await api('/api/minha-presenca').then(r => r.json());
+    const mapa = mapaFullMap || mapaHome;
+    if (!mapa) return;
+    
+    // Limpar markers antigos
+    Object.values(markersTecnicos).forEach(m => mapa.removeLayer(m));
+    markersTecnicos = {};
+    
+    presencas.forEach(p => {
+      if (p.latitude && p.longitude) {
+        const icone = criarIcone('#1565c0', true);
+        const marker = L.marker([p.latitude, p.longitude], { icon: icone }).addTo(mapa);
+        marker.bindPopup('<b>Voce</b><br>' + (p.local_nome || 'Sem local'));
+        markersTecnicos[p.usuario_id] = marker;
+      }
+    });
+  }
+
+  // Quando selecionar local, mostrar no mapa
+  $('f_local').addEventListener('change', async function() {
+    const localNome = this.value;
+    $('f_cidade').value = '';
+    if (!localNome || localNome === '__outro') return;
+    
+    const locais = await api('/api/locais?busca=' + encodeURIComponent(localNome)).then(r => r.json());
+    const local = locais.find(l => l.nome === localNome);
+    
+    if (local) $('f_cidade').value = local.comarca || '';
+
+    if (local && local.latitude && local.longitude) {
+      const lat = parseFloat(local.latitude);
+      const lng = parseFloat(local.longitude);
+      
+      if (!isNaN(lat) && !isNaN(lng)) {
+        const mapa = mapaHome || mapaFullMap;
+        if (mapa) {
+          if (markerLocal) markerLocal.setLatLng([lat, lng]);
+          else markerLocal = L.marker([lat, lng], { icon: criarIcone('#ff7a33', false) }).addTo(mapa);
+          
+          markerLocal.setPopupContent('<strong>' + local.nome + '</strong><br>' + (local.endereco || '')).openPopup();
+          
+          if (markerTecnico) {
+            const bounds = L.latLngBounds([markerTecnico.getLatLng(), [lat, lng]]);
+            mapa.fitBounds(bounds, { padding: [50, 50] });
+          } else {
+            mapa.setView([lat, lng], 15);
+          }
+        }
+      }
+    }
+
+    // Enviar presenca
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(pos => {
+        enviarPresenca(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy);
+      });
+    }
+  });
+
+  // MAPA FULL
+  let markersRDOs = [];
+
+  function iniciarMapaFull() {
+    if (!mapaFullMap) {
+      mapaFullMap = L.map('mapaFull').setView([-5.5, -39.5], 7);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(mapaFullMap);
+      setTimeout(() => { mapaFullMap.invalidateSize(); centralizarMapa(); }, 200);
+    } else {
+      mapaFullMap.invalidateSize();
+      centralizarMapa();
+    }
+    carregarTecnicosMapa();
+    carregarRDOsMapa();
+  }
+
+  async function carregarRDOsMapa() {
+    if (!mapaFullMap) return;
+    
+    // Limpar markers antigos
+    markersRDOs.forEach(m => mapaFullMap.removeLayer(m));
+    markersRDOs = [];
+    
+    const rdos = await api('/api/rdos?usuario_id=' + user.id).then(r => r.json());
+    
+    if (!rdos.length) {
+      $('mapaStatus').textContent = 'Nenhum RDO registrado';
+      return;
+    }
+    
+    let comCoordenadas = 0;
+    const bounds = [];
+    
+    rdos.forEach(rdo => {
+      if (rdo.local_lat && rdo.local_lng) {
+        const lat = parseFloat(rdo.local_lat);
+        const lng = parseFloat(rdo.local_lng);
+        if (!isNaN(lat) && !isNaN(lng)) {
+          comCoordenadas++;
+          const dataFormatada = formatarData(rdo.data);
+          const cor = rdo.parou === 'sim' ? '#dc2626' : '#16a34a';
+          
+          const icone = L.divIcon({
+            className: '',
+            html: '<div style="width:28px;height:28px;border-radius:50%;background:' + cor + ';border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:700">📍</div>',
+            iconSize: [28, 28],
+            iconAnchor: [14, 14]
+          });
+          
+          const marker = L.marker([lat, lng], { icon: icone }).addTo(mapaFullMap);
+          
+          const mats = JSON.parse(rdo.materiais_json || '[]');
+          const eq = JSON.parse(rdo.equipe_json || '[]');
+          
+          let popup = '<div style="min-width:180px">';
+          popup += '<strong style="font-size:14px">' + rdo.local + '</strong><br>';
+          popup += '<span style="color:#6b7280;font-size:12px">📅 ' + dataFormatada + '</span><br>';
+          popup += '<span style="color:#6b7280;font-size:12px">🏗️ ' + (rdo.obra_nome || '-') + '</span><br>';
+          popup += '<span style="color:#6b7280;font-size:12px">🔧 ' + (rdo.atividade || '-') + '</span><br>';
+          if (eq.length) popup += '<span style="color:#6b7280;font-size:12px">👥 ' + eq.join(', ') + '</span><br>';
+          if (mats.length) popup += '<span style="color:#6b7280;font-size:12px">📦 ' + mats.length + ' material(is)</span><br>';
+          if (rdo.parou === 'sim') popup += '<span style="color:#dc2626;font-size:12px">⚠️ Atraso: ' + (rdo.motivo_parada || '') + '</span>';
+          popup += '</div>';
+          
+          marker.bindPopup(popup);
+          markersRDOs.push(marker);
+          bounds.push([lat, lng]);
+        }
+      }
+    });
+    
+    $('mapaStatus').textContent = comCoordenadas + '/' + rdos.length + ' RDOs no mapa';
+    
+    // Ajustar mapa para mostrar todos os RDOs
+    if (bounds.length > 0) {
+      if (bounds.length === 1) {
+        mapaFullMap.setView(bounds[0], 15);
+      } else {
+        mapaFullMap.fitBounds(bounds, { padding: [50, 50] });
+      }
+    }
+  }
+
+  function centralizarMapa() {
+    if (!navigator.geolocation) { toast('GPS indisponivel'); return; }
+    navigator.geolocation.getCurrentPosition(pos => {
+      const { latitude: lat, longitude: lng } = pos.coords;
+      if (mapaFullMap) {
+        if (!markerTecnico) {
+          markerTecnico = L.marker([lat, lng], { icon: criarIcone('#0057b8', true), zIndexOffset: 1000 }).addTo(mapaFullMap).bindPopup('<b>Voce</b>');
+        } else {
+          markerTecnico.setLatLng([lat, lng]);
+        }
+        mapaFullMap.setView([lat, lng], 16);
+        $('mapaStatus').textContent = 'GPS: ✓';
+      }
+    }, err => { toast('Erro GPS: ' + err.message); }, { enableHighAccuracy: true, timeout: 10000 });
+  }
+  window.centralizarMapa = centralizarMapa;
+
+  // Carregar dados
+  async function carregarDados() {
+    const [obras, atividades] = await Promise.all([api('/api/obras').then(r => r.json()), api('/api/atividades').then(r => r.json())]);
+    const selObra = $('f_obra');
+    selObra.innerHTML = '<option value="">Selecione a obra</option>';
+    obras.forEach(o => { selObra.innerHTML += '<option value="' + o.id + '">' + o.nome + (o.comarca ? ' - ' + o.comarca : '') + '</option>'; });
+
+    const selAtv = $('f_atividade');
+    selAtv.innerHTML = '<option value="">Selecione</option>' + atividades.map(a => '<option>' + a.nome + '</option>').join('') + '<option value="__outro">Outra...</option>';
+  }
+
+  $('f_obra').addEventListener('change', async function() {
+    const obraId = this.value;
+    const selLocal = $('f_local');
+    if (!obraId) { selLocal.innerHTML = '<option value="">Selecione a obra primeiro</option>'; return; }
+    const locais = await api('/api/locais?obra_id=' + obraId).then(r => r.json());
+    selLocal.innerHTML = '<option value="">Selecione o local</option>';
+    locais.forEach(l => { selLocal.innerHTML += '<option value="' + l.nome + '">' + l.nome + (l.comarca ? ' - ' + l.comarca : '') + '</option>'; });
+    selLocal.innerHTML += '<option value="__outro">Outro...</option>';
+  });
+
+  $('f_local').addEventListener('change', function() { $('f_local_outro').style.display = this.value === '__outro' ? 'block' : 'none'; });
+  $('f_atividade').addEventListener('change', function() { $('f_atividade_outro').style.display = this.value === '__outro' ? 'block' : 'none'; });
+
+  // Equipe chips + seleção rápida dos membros da equipe (usuários vinculados)
+  function renderEquipe() {
+    const container = $('chipEquipe');
+    container.querySelectorAll('.chip').forEach(c => c.remove());
+    equipe.forEach((nome, idx) => {
+      const chip = document.createElement('span');
+      chip.className = 'chip';
+      chip.innerHTML = nome + ' <button type="button">&times;</button>';
+      chip.querySelector('button').addEventListener('click', () => { equipe.splice(idx, 1); renderEquipe(); renderEquipeMembrosRDO(); });
+      container.insertBefore(chip, $('f_equipe_input'));
+    });
+    renderEquipeMembrosRDO();
+  }
+  function renderEquipeMembrosRDO(){
+    const div = $('equipeMembrosRDO');
+    if(!div) return;
+    const eq = _minhaEquipeCache;
+    if(!eq || !eq.membros || !eq.membros.length){
+      div.innerHTML = '<span style="font-size:11px;color:var(--muted)">Sem equipe — digite manualmente</span>';
+      return;
+    }
+    div.innerHTML = eq.membros.map(m=>{
+      const sel = equipe.includes(m.nome);
+      return `<button type="button" onclick="toggleMembroEquipe('${m.nome.replace(/'/g,"\\'")}')" style="padding:6px 10px;border-radius:20px;border:1.5px solid ${sel?'var(--primary)': 'var(--line)'};background:${sel?'var(--primary)':'#fff'};color:${sel?'#fff':'var(--text)'};font-size:12px;font-weight:600;cursor:pointer">${sel?'✓ ':''}${m.nome}${m.id===meusDados.id?' (Você)':''}</button>`;
+    }).join('');
+    $('equipeRDOInfo').textContent = equipe.length + ' selecionado(s) de ' + eq.membros.length + ' da equipe';
+  }
+  window.toggleMembroEquipe = function(nome){
+    const i = equipe.indexOf(nome);
+    if(i>=0) equipe.splice(i,1); else equipe.push(nome);
+    renderEquipe();
+  };
+  $('f_equipe_input').addEventListener('keydown', function(e) {
+    if ((e.key === 'Enter' || e.key === ',') && this.value.trim()) { e.preventDefault(); const v=this.value.trim(); if(!equipe.includes(v)) equipe.push(v); this.value = ''; renderEquipe(); }
+  });
+  $('f_equipe_input').addEventListener('blur', function() { if (this.value.trim()) { const v=this.value.trim(); if(!equipe.includes(v)) equipe.push(v); this.value = ''; renderEquipe(); } });
+
+  // Auto-preencher equipe do tecnico (todos da equipe já marcados)
+  async function carregarMinhaEquipe() {
+    const minhaEquipe = await api('/api/minha-equipe').then(r => r.json());
+    _minhaEquipeCache = minhaEquipe;
+    if (minhaEquipe && minhaEquipe.membros && minhaEquipe.membros.length) {
+      equipe = minhaEquipe.membros.map(m => m.nome);
+      renderEquipe();
+    } else {
+      renderEquipeMembrosRDO();
+    }
+  }
+
+  // Materiais
+  function addMaterial(nome, categoria) {
+    const existente = materiais.find(m => m.nome === nome);
+    if (existente) { existente.qtd += 1; } else { materiais.push({ nome, categoria: categoria || 'Geral', qtd: 1 }); }
+    renderMatList();
+  }
+  window.addMaterial = addMaterial;
+
+  function renderMatList() {
+    const ul = $('matList'); ul.innerHTML = '';
+    $('matEmptyHint').style.display = materiais.length ? 'none' : 'block';
+    materiais.forEach((m, idx) => {
+      const li = document.createElement('li');
+      li.innerHTML = '<div class="mname">' + m.nome + '</div><input type="number" min="1" value="' + m.qtd + '"><button type="button" class="rm">&times;</button>';
+      li.querySelector('input').addEventListener('input', function() { materiais[idx].qtd = parseFloat(this.value) || 1; });
+      li.querySelector('.rm').addEventListener('click', () => { materiais.splice(idx, 1); renderMatList(); });
+      ul.appendChild(li);
+    });
+  }
+
+  let buscaMatTimer;
+  $('matBusca').addEventListener('input', function() {
+    clearTimeout(buscaMatTimer);
+    const texto = this.value.trim();
+    if (texto.length < 2) { $('matBuscaResult').innerHTML = ''; return; }
+    buscaMatTimer = setTimeout(async () => {
+      const mats = await api('/api/materiais?busca=' + encodeURIComponent(texto)).then(r => r.json());
+      const container = $('matBuscaResult');
+      container.innerHTML = '';
+      
+      if (!mats.length) {
+        const btnAdd = document.createElement('div');
+        btnAdd.style.cssText = 'padding:8px;background:var(--ok-bg);border-radius:6px;font-size:12px;cursor:pointer;color:var(--ok);font-weight:600';
+        btnAdd.textContent = '+ Adicionar "' + texto + '"?';
+        btnAdd.addEventListener('click', () => { addMaterial(texto, 'Geral'); $('matBusca').value = ''; container.innerHTML = ''; });
+        container.appendChild(btnAdd);
+      } else {
+        const list = document.createElement('div');
+        list.style.cssText = 'max-height:200px;overflow-y:auto';
+        mats.forEach(m => {
+          const item = document.createElement('div');
+          item.style.cssText = 'display:flex;align-items:center;gap:8px;padding:10px;background:#f7f9fa;border-radius:6px;margin-bottom:3px;cursor:pointer;border:1px solid var(--line)';
+          item.innerHTML = '<span style="font-size:13px;flex:1">' + m.nome + '</span><span style="font-size:11px;color:var(--muted)">' + m.categoria + '</span>';
+          item.addEventListener('click', () => { addMaterial(m.nome, m.categoria); $('matBusca').value = ''; container.innerHTML = ''; });
+          list.appendChild(item);
+        });
+        container.appendChild(list);
+      }
+    }, 250);
+  });
+
+  // Toggles
+  function setupToggle(groupId, condId) {
+    const group = $(groupId); group.dataset.value = 'nao';
+    group.querySelectorAll('button').forEach(btn => {
+      btn.addEventListener('click', () => {
+        group.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active'); group.dataset.value = btn.dataset.val;
+        $(condId).classList.toggle('show', btn.dataset.val === 'sim');
+      });
+    });
+  }
+  setupToggle('toggleParou', 'condParou');
+  setupToggle('toggleSwitch', 'condSwitch');
+  setupToggle('toggleCamera', 'condCamera');
+
+  // Fotos
+  $('f_fotos').addEventListener('change', function() {
+    Array.from(this.files).forEach(file => {
+      const reader = new FileReader();
+      reader.onload = e => { fotos.push(e.target.result); renderFotos(); };
+      reader.readAsDataURL(file);
+    });
+    this.value = '';
+  });
+  function renderFotos() {
+    const grid = $('fotoGrid'); grid.innerHTML = '';
+    fotos.forEach((src, idx) => {
+      const div = document.createElement('div'); div.className = 'foto-thumb';
+      div.innerHTML = '<img src="' + src + '"><button type="button">&times;</button>';
+      div.querySelector('button').addEventListener('click', () => { fotos.splice(idx, 1); renderFotos(); });
+      grid.appendChild(div);
+    });
+  }
+
+  // Salvar RDO
+  $('rdoForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const obraId = $('f_obra').value;
+    const local = $('f_local').value === '__outro' ? $('f_local_outro').value.trim() : $('f_local').value;
+    const atividade = $('f_atividade').value === '__outro' ? $('f_atividade_outro').value.trim() : $('f_atividade').value;
+    if (!obraId) { toast('Selecione a obra'); return; }
+    if (!local) { toast('Informe o local'); return; }
+
+    let fotosUrls = [];
+    if (fotos.length > 0) {
+      const fd = new FormData();
+      fotos.forEach((src, i) => {
+        const arr = src.split(',');
+        const mime = arr[0].match(/:(.*?);/)[1];
+        const bstr = atob(arr[1]);
+        let n = bstr.length;
+        const u8arr = new Uint8Array(n);
+        while (n--) u8arr[n] = bstr.charCodeAt(n);
+        fd.append('fotos', new Blob([u8arr], { type: mime }), 'foto_' + i + '.jpg');
+      });
+      try {
+        const r = await fetch('/api/upload', { method: 'POST', headers: { 'Authorization': 'Bearer ' + token }, body: fd });
+        const d = await r.json();
+        if (d.ok) fotosUrls = d.urls;
+      } catch (err) { console.error(err); }
+    }
+
+    const entry = {
+      obra_id: parseInt(obraId),
+      data: $('f_data').value,
+      local, atividade,
+      equipe: equipe.slice(),
+      materiais: materiais.map(m => ({ ...m })),
+      entrada_manha: $('f_entradaM').value,
+      saida_manha: $('f_saidaM').value,
+      entrada_tarde: $('f_entradaT').value,
+      saida_tarde: $('f_saidaT').value,
+      parou: $('toggleParou').dataset.value,
+      motivo_parada: $('f_motivoParada').value.trim(),
+      switch_instalado: $('toggleSwitch').dataset.value,
+      nom_switch: $('f_nomSwitch').value.trim(),
+      local_switch: $('f_localSwitch').value.trim(),
+      camera_instalada: $('toggleCamera').dataset.value,
+      nom_camera: $('f_nomCamera').value.trim(),
+      local_camera: $('f_localCamera').value.trim(),
+      fotos: fotosUrls
+    };
+
+    const method = editandoId ? 'PUT' : 'POST';
+    const url = editandoId ? '/api/rdos/' + editandoId : '/api/rdos';
+    const r = await api(url, { method, body: JSON.stringify(entry) });
+    const d = await r.json();
+    if (d.ok) {
+      toast(editandoId ? 'RDO atualizado!' : 'RDO salvo!');
+      socket.emit('novo_rdo', entry);
+      resetForm();
+    } else {
+      toast('Erro: ' + (d.error || 'tente novamente'));
+    }
+  });
+
+  function resetForm() {
+    $('rdoForm').reset();
+    $('f_data').valueAsDate = new Date();
+    $('f_entradaM').value = '08:00'; $('f_saidaM').value = '12:00';
+    $('f_entradaT').value = '13:00'; $('f_saidaT').value = '17:00';
+    equipe = []; materiais = []; fotos = []; editandoId = null;
+    renderEquipe(); renderMatList(); renderFotos();
+    $('f_local_outro').style.display = 'none';
+    $('f_atividade_outro').style.display = 'none';
+    ['toggleParou', 'toggleSwitch', 'toggleCamera'].forEach(id => {
+      const g = $(id); g.dataset.value = 'nao';
+      g.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.val === 'nao'));
+    });
+    $('condParou').classList.remove('show');
+    $('condSwitch').classList.remove('show');
+    $('condCamera').classList.remove('show');
+  }
+
+  // Toast
+  let toastTimer;
+  function toast(msg) { const t = $('toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 2600); }
+  window.toast = toast;
+
+  // Lista de RDOs
+  async function renderLista() {
+    const rdos = await api('/api/rdos?usuario_id=' + user.id).then(r => r.json());
+    const container = $('listaContainer'); container.innerHTML = '';
+    if (!rdos.length) { container.innerHTML = '<div class="empty-state"><span class="ic">📋</span>Nenhum RDO registrado</div>'; return; }
+    rdos.forEach(entry => {
+      const eq = JSON.parse(entry.equipe_json || '[]');
+      const mats = JSON.parse(entry.materiais_json || '[]');
+      const ft = JSON.parse(entry.fotos_json || '[]');
+      const totalItens = mats.reduce((s, m) => s + Number(m.qtd || 0), 0);
+      const div = document.createElement('div'); div.className = 'rdo-item';
+      div.innerHTML = '<div class="top"><div><strong style="font-size:14px">' + entry.local + '</strong><span style="display:block;font-size:12px;color:var(--muted);margin-top:2px">' + formatarData(entry.data) + ' · ' + (entry.cidade || '') + '</span><span style="display:block;font-size:12px;color:var(--primary);margin-top:2px">' + (entry.atividade || '-') + '</span></div><span class="badge" style="background:' + (entry.parou === 'sim' ? 'var(--danger)' : 'var(--primary)') + '">' + (entry.parou === 'sim' ? '⚠ Parada' : mats.length + ' mat') + '</span></div>' +
+      '<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">' + 
+      (eq.length ? '<span style="background:#e3f2fd;color:#1565c0;padding:2px 8px;border-radius:12px;font-size:11px">👥 ' + eq.length + ' técnicos</span>' : '') +
+      '<span style="background:#f3e5f5;color:#7b1fa2;padding:2px 8px;border-radius:12px;font-size:11px">📦 ' + totalItens + ' itens</span>' +
+      (ft.length ? '<span style="background:#e8f5e9;color:#2e7d32;padding:2px 8px;border-radius:12px;font-size:11px">📷 ' + ft.length + ' fotos</span>' : '') +
+      (entry.switch_instalado === 'sim' ? '<span style="background:#fff3e0;color:#ef6c00;padding:2px 8px;border-radius:12px;font-size:11px">🔌 Switch</span>' : '') +
+      (entry.camera_instalada === 'sim' ? '<span style="background:#fce4ec;color:#c62828;padding:2px 8px;border-radius:12px;font-size:11px">📹 Câmera</span>' : '') +
+      '</div>' +
+      '<div class="actions"><button data-act="ver" style="background:var(--primary);color:#fff">Ver Completo</button><button data-act="editar">Editar</button><button class="del" data-act="excluir">Excluir</button></div>';
+      div.querySelector('[data-act=ver]').addEventListener('click', () => verDetalhe(entry));
+      div.querySelector('[data-act=editar]').addEventListener('click', () => editarEntry(entry));
+      div.querySelector('[data-act=excluir]').addEventListener('click', () => excluirEntry(entry.id));
+      container.appendChild(div);
+    });
+  }
+
+  function formatarData(iso) { if (!iso) return '-'; const [y, m, d] = iso.split('-'); return d + '/' + m + '/' + y; }
+
+  function verDetalhe(entry) {
+    const eq = JSON.parse(entry.equipe_json || '[]');
+    const mats = JSON.parse(entry.materiais_json || '[]');
+    const ft = JSON.parse(entry.fotos_json || '[]');
+    const body = $('modalBody');
+    
+    const matHtml = mats.length ? '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:6px;margin-top:8px">' + 
+      mats.map(m => '<div style="display:flex;justify-content:space-between;padding:6px 8px;background:#f7f9fa;border-radius:6px;font-size:12px"><span style="font-weight:600">' + m.nome + '</span><span style="color:var(--muted)">x' + m.qtd + '</span></div>').join('') + '</div>' : 
+      '<div style="padding:10px;text-align:center;color:var(--muted);font-size:12px">Nenhum material</div>';
+    
+    const fotosHtml = ft.length ? '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px;margin-top:8px">' + 
+      ft.map(f => '<div style="aspect-ratio:1;border-radius:8px;overflow:hidden;border:1px solid var(--line)"><img src="' + f + '" style="width:100%;height:100%;object-fit:cover"></div>').join('') + '</div>' : '';
+    
+    const statusHtml = entry.parou === 'sim' ? '<div style="background:var(--danger-bg);color:var(--danger);padding:8px 12px;border-radius:8px;margin-top:12px;font-size:12px"><strong>⚠ Parada/Atraso:</strong> ' + (entry.motivo_parada || 'Sem motivo informado') + '</div>' : '';
+    
+    const instalacoesHtml = [];
+    if (entry.switch_instalado === 'sim') instalacoesHtml.push('<div style="padding:8px 12px;background:#e3f2fd;border-radius:8px;font-size:12px"><strong>Switch:</strong> ' + entry.nom_switch + ' em ' + entry.local_switch + '</div>');
+    if (entry.camera_instalada === 'sim') instalacoesHtml.push('<div style="padding:8px 12px;background:#e8f5e9;border-radius:8px;font-size:12px"><strong>Câmera:</strong> ' + entry.nom_camera + ' em ' + entry.local_camera + '</div>');
+    
+    body.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px"><h3 style="margin:0">RDO #' + entry.id + '</h3><span style="background:var(--primary);color:#fff;padding:4px 10px;border-radius:20px;font-size:12px">' + formatarData(entry.data) + '</span></div>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">' +
+      '<div style="padding:12px;background:#f7f9fa;border-radius:8px"><div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px">Obra</div><div style="font-weight:600;font-size:13px">' + (entry.obra_nome || '-') + '</div></div>' +
+      '<div style="padding:12px;background:#f7f9fa;border-radius:8px"><div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px">Cidade</div><div style="font-weight:600;font-size:13px">' + (entry.cidade || '-') + '</div></div>' +
+      '<div style="padding:12px;background:#f7f9fa;border-radius:8px"><div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px">Local</div><div style="font-weight:600;font-size:13px">' + (entry.local || '-') + '</div></div>' +
+      '<div style="padding:12px;background:#f7f9fa;border-radius:8px"><div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px">Atividade</div><div style="font-weight:600;font-size:13px">' + (entry.atividade || '-') + '</div></div>' +
+      '</div>' +
+      '<div style="margin-bottom:16px"><div style="font-size:12px;font-weight:600;margin-bottom:8px;color:var(--primary)">👥 Equipe</div><div style="display:flex;flex-wrap:wrap;gap:6px">' + (eq.map(e => '<span style="background:#e3f2fd;color:#1565c0;padding:4px 10px;border-radius:20px;font-size:12px">' + e + '</span>').join('') || '<span style="color:var(--muted);font-size:12px">Nenhuma equipe</span>') + '</div></div>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">' +
+      '<div style="padding:12px;background:#f7f9fa;border-radius:8px"><div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px">Manhã</div><div style="font-weight:600;font-size:13px">' + (entry.entrada_manha || '-') + ' - ' + (entry.saida_manha || '-') + '</div></div>' +
+      '<div style="padding:12px;background:#f7f9fa;border-radius:8px"><div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px">Tarde</div><div style="font-weight:600;font-size:13px">' + (entry.entrada_tarde || '-') + ' - ' + (entry.saida_tarde || '-') + '</div></div>' +
+      '</div>' +
+      statusHtml +
+      (instalacoesHtml.length ? '<div style="margin-top:12px;display:grid;gap:8px">' + instalacoesHtml.join('') + '</div>' : '') +
+      '<div style="margin-top:16px"><div style="font-size:12px;font-weight:600;margin-bottom:8px;color:var(--primary)">📦 Materiais (' + mats.length + ')</div>' + matHtml + '</div>' +
+      (fotosHtml ? '<div style="margin-top:16px"><div style="font-size:12px;font-weight:600;margin-bottom:8px;color:var(--primary)">📷 Fotos (' + ft.length + ')</div>' + fotosHtml + '</div>' : '') +
+      '<div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--line);display:flex;justify-content:space-between;font-size:11px;color:var(--muted)"><span>Registrado por: ' + (entry.usuario_nome || '-') + '</span><span>' + (entry.criado_em ? new Date(entry.criado_em).toLocaleString('pt-BR') : '') + '</span></div>' +
+      '<button class="close-modal" style="margin-top:16px">Fechar</button>';
+    body.querySelector('.close-modal').addEventListener('click', closeModal);
+    $('modalBg').classList.add('show');
+  }
+  $('modalBg').addEventListener('click', e => { if (e.target.id === 'modalBg') closeModal(); });
+  function closeModal() { $('modalBg').classList.remove('show'); }
+
+  async function editarEntry(entry) {
+    editandoId = entry.id;
+    document.querySelector('nav.tabs button[data-view=novo]').click();
+    $('f_data').value = entry.data;
+    const localExiste = Array.from($('f_local').options).some(o => o.value === entry.local);
+    if (localExiste) { $('f_local').value = entry.local; } else { $('f_local').value = '__outro'; $('f_local_outro').style.display = 'block'; $('f_local_outro').value = entry.local; }
+    $('f_cidade').value = entry.cidade || '';
+    const atvExiste = Array.from($('f_atividade').options).some(o => o.value === entry.atividade);
+    if (atvExiste) { $('f_atividade').value = entry.atividade; } else { $('f_atividade').value = '__outro'; $('f_atividade_outro').style.display = 'block'; $('f_atividade_outro').value = entry.atividade; }
+    equipe = JSON.parse(entry.equipe_json || '[]'); renderEquipe();
+    materiais = JSON.parse(entry.materiais_json || '[]'); renderMatList();
+    fotos = JSON.parse(entry.fotos_json || '[]'); renderFotos();
+    $('f_entradaM').value = entry.entrada_manha || ''; $('f_saidaM').value = entry.saida_manha || '';
+    $('f_entradaT').value = entry.entrada_tarde || ''; $('f_saidaT').value = entry.saida_tarde || '';
+    setToggle('toggleParou', entry.parou); $('condParou').classList.toggle('show', entry.parou === 'sim'); $('f_motivoParada').value = entry.motivo_parada || '';
+    setToggle('toggleSwitch', entry.switch_instalado); $('condSwitch').classList.toggle('show', entry.switch_instalado === 'sim'); $('f_nomSwitch').value = entry.nom_switch || ''; $('f_localSwitch').value = entry.local_switch || '';
+    setToggle('toggleCamera', entry.camera_instalada); $('condCamera').classList.toggle('show', entry.camera_instalada === 'sim'); $('f_nomCamera').value = entry.nom_camera || ''; $('f_localCamera').value = entry.local_camera || '';
+    toast('Editando RDO');
+  }
+  function setToggle(groupId, val) { const g = $(groupId); g.dataset.value = val; g.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.val === val)); }
+
+  async function excluirEntry(id) {
+    if (!confirm('Excluir este RDO?')) return;
+    await api('/api/rdos/' + id, { method: 'DELETE' });
+    renderLista(); toast('RDO excluido');
+  }
+
+  // Export JSON
+  window.exportarJSON = async function() {
+    const rdos = await api('/api/rdos?usuario_id=' + user.id).then(r => r.json());
+    if (!rdos.length) { toast('Nenhum RDO'); return; }
+    download('rdos_' + Date.now() + '.json', JSON.stringify(rdos, null, 2), 'application/json');
+  };
+
+  // Export CSV
+  window.exportarCSV = async function() {
+    const rdos = await api('/api/rdos?usuario_id=' + user.id).then(r => r.json());
+    if (!rdos.length) { toast('Nenhum RDO'); return; }
+    const linhas = [['Data', 'Obra', 'Cidade', 'Local', 'Endereco', 'Atividade', 'Equipe', 'Materiais', 'Qtd Total', 'Manha', 'Tarde', 'Horas Trab.', 'Parada', 'Switch', 'Camera', 'Fotos', 'Responsavel', 'Status Obra', 'Latitude', 'Longitude', 'Registrado por'].join(';')];
+    rdos.forEach(e => {
+      const eq = JSON.parse(e.equipe_json || '[]').join(', ');
+      const mats = JSON.parse(e.materiais_json || '[]');
+      const ft = JSON.parse(e.fotos_json || '[]');
+      const manha = (e.entrada_manha && e.saida_manha) ? e.entrada_manha + '-' + e.saida_manha : '-';
+      const tarde = (e.entrada_tarde && e.saida_tarde) ? e.entrada_tarde + '-' + e.saida_tarde : '-';
+      const parada = e.parou === 'sim' ? 'Sim: ' + (e.motivo_parada || '') : 'Nao';
+      const sw = e.switch_instalado === 'sim' ? e.nom_switch + ' / ' + e.local_switch : 'Nao';
+      const cam = e.camera_instalada === 'sim' ? e.nom_camera + ' / ' + e.local_camera : 'Nao';
+      const totalItens = mats.reduce((s, m) => s + Number(m.qtd || 0), 0);
+      
+      // Calcular horas trabalhadas
+      let horasTrab = '-';
+      if (e.entrada_manha && e.saida_manha && e.entrada_tarde && e.saida_tarde) {
+        const [hm1, mm1] = e.entrada_manha.split(':').map(Number);
+        const [hm2, mm2] = e.saida_manha.split(':').map(Number);
+        const [ht1, mt1] = e.entrada_tarde.split(':').map(Number);
+        const [ht2, mt2] = e.saida_tarde.split(':').map(Number);
+        const minManha = (hm2 * 60 + mm2) - (hm1 * 60 + mm1);
+        const minTarde = (ht2 * 60 + mt2) - (ht1 * 60 + mt1);
+        const totalMin = minManha + minTarde;
+        const horas = Math.floor(totalMin / 60);
+        const mins = totalMin % 60;
+        horasTrab = horas + 'h' + (mins > 0 ? mins + 'min' : '');
+      }
+
+      if (mats.length === 0) {
+        linhas.push([e.data, e.obra_nome || '', e.cidade || '', e.local, e.local_endereco || '', e.atividade || '', eq || '-', '-', totalItens, manha, tarde, horasTrab, parada, sw, cam, ft.length, e.obra_responsavel || '', e.obra_status || '', e.local_lat || '', e.local_lng || '', e.usuario_nome || '-'].map(csvEsc).join(';'));
+      } else {
+        mats.forEach((m, i) => {
+          if (i === 0) {
+            linhas.push([e.data, e.obra_nome || '', e.cidade || '', e.local, e.local_endereco || '', e.atividade || '', eq || '-', m.nome + ' (' + m.qtd + ')', totalItens, manha, tarde, horasTrab, parada, sw, cam, ft.length, e.obra_responsavel || '', e.obra_status || '', e.local_lat || '', e.local_lng || '', e.usuario_nome || '-'].map(csvEsc).join(';'));
+          } else {
+            linhas.push(['', '', '', '', '', '', '', m.nome + ' (' + m.qtd + ')', '', '', '', '', '', '', '', '', '', '', '', '', ''].map(csvEsc).join(';'));
+          }
+        });
+      }
+    });
+    download('rdos_' + Date.now() + '.csv', '\uFEFF' + linhas.join('\n'), 'text/csv');
+  };
+
+  // Export Excel Profissional
+  window.exportarExcel = async function() {
+    const rdos = await api('/api/rdos?usuario_id=' + user.id).then(r => r.json());
+    if (!rdos.length) { toast('Nenhum RDO'); return; }
+
+    const cabecalho = ['Data', 'Obra', 'Cidade', 'Local', 'Endereco', 'Atividade', 'Equipe', 'Materiais', 'Qtd Total', 'Manha', 'Tarde', 'Horas Trab.', 'Parada', 'Switch', 'Camera', 'Fotos', 'Responsavel', 'Status Obra', 'Latitude', 'Longitude', 'Registrado por'];
+    const linhas = [cabecalho];
+
+    rdos.forEach(e => {
+      const eq = JSON.parse(e.equipe_json || '[]').join(', ');
+      const mats = JSON.parse(e.materiais_json || '[]');
+      const ft = JSON.parse(e.fotos_json || '[]');
+      const manha = (e.entrada_manha && e.saida_manha) ? e.entrada_manha + '-' + e.saida_manha : '-';
+      const tarde = (e.entrada_tarde && e.saida_tarde) ? e.entrada_tarde + '-' + e.saida_tarde : '-';
+      const parada = e.parou === 'sim' ? 'Sim: ' + (e.motivo_parada || '') : 'Nao';
+      const sw = e.switch_instalado === 'sim' ? e.nom_switch + ' / ' + e.local_switch : 'Nao';
+      const cam = e.camera_instalada === 'sim' ? e.nom_camera + ' / ' + e.local_camera : 'Nao';
+      const totalItens = mats.reduce((s, m) => s + Number(m.qtd || 0), 0);
+      
+      // Calcular horas trabalhadas
+      let horasTrab = '-';
+      if (e.entrada_manha && e.saida_manha && e.entrada_tarde && e.saida_tarde) {
+        const [hm1, mm1] = e.entrada_manha.split(':').map(Number);
+        const [hm2, mm2] = e.saida_manha.split(':').map(Number);
+        const [ht1, mt1] = e.entrada_tarde.split(':').map(Number);
+        const [ht2, mt2] = e.saida_tarde.split(':').map(Number);
+        const minManha = (hm2 * 60 + mm2) - (hm1 * 60 + mm1);
+        const minTarde = (ht2 * 60 + mt2) - (ht1 * 60 + mt1);
+        const totalMin = minManha + minTarde;
+        const horas = Math.floor(totalMin / 60);
+        const mins = totalMin % 60;
+        horasTrab = horas + 'h' + (mins > 0 ? mins + 'min' : '');
+      }
+
+      if (mats.length === 0) {
+        linhas.push([e.data, e.obra_nome || '-', e.cidade || '-', e.local, e.local_endereco || '-', e.atividade || '-', eq || '-', '-', totalItens, manha, tarde, horasTrab, parada, sw, cam, ft.length, e.obra_responsavel || '-', e.obra_status || '-', e.local_lat || '-', e.local_lng || '-', e.usuario_nome || '-']);
+      } else {
+        mats.forEach((m, i) => {
+          if (i === 0) {
+            linhas.push([e.data, e.obra_nome || '-', e.cidade || '-', e.local, e.local_endereco || '-', e.atividade || '-', eq || '-', m.nome + ' (' + m.qtd + ')', totalItens, manha, tarde, horasTrab, parada, sw, cam, ft.length, e.obra_responsavel || '-', e.obra_status || '-', e.local_lat || '-', e.local_lng || '-', e.usuario_nome || '-']);
+          } else {
+            linhas.push(['', '', '', '', '', '', '', m.nome + ' (' + m.qtd + ')', '', '', '', '', '', '', '', '', '', '', '', '', '']);
+          }
+        });
+      }
+    });
+
+    const ws = XLSX.utils.aoa_to_sheet(linhas);
+
+    // Largura das colunas
+    ws['!cols'] = [
+      { wch: 12 }, { wch: 18 }, { wch: 16 }, { wch: 22 }, { wch: 30 }, { wch: 20 }, { wch: 16 },
+      { wch: 32 }, { wch: 10 }, { wch: 14 }, { wch: 14 }, { wch: 12 }, { wch: 18 }, { wch: 22 },
+      { wch: 22 }, { wch: 8 }, { wch: 16 }, { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 18 }
+    ];
+
+    // Estilos
+    const corPrimaria = '0F3D4C';
+    const corBranco = 'FFFFFF';
+    const corLinhaPar = 'F7F9FA';
+    const corLinhaImpar = 'FFFFFF';
+    const corBorda = 'D0D5DD';
+    const fonteCab = { name: 'Calibri', bold: true, sz: 11, color: { rgb: corBranco } };
+    const fonteCel = { name: 'Calibri', sz: 10 };
+    const bordaFina = { style: 'thin', color: { rgb: corBorda } };
+    const borda = { top: bordaFina, bottom: bordaFina, left: bordaFina, right: bordaFina };
+    const alinhCentro = { horizontal: 'center', vertical: 'center' };
+    const alinhEsq = { horizontal: 'left', vertical: 'center' };
+
+    // Estilizar cabecalho (linha 0)
+    for (let c = 0; c < cabecalho.length; c++) {
+      const ref = XLSX.utils.encode_cell({ r: 0, c });
+      if (ws[ref]) {
+        ws[ref].s = { font: fonteCab, fill: { fgColor: { rgb: corPrimaria } }, border: borda, alignment: alinhCentro };
+      }
+    }
+    // Altura da linha de cabecalho
+    ws['!rows'] = [{ hpt: 28 }];
+
+    // Estilizar linhas de dados
+    const centroIdx = [0, 7, 8, 12]; // Data, Manha, Tarde, Fotos
+    for (let r = 1; r < linhas.length; r++) {
+      const corFundo = r % 2 === 0 ? corLinhaPar : corLinhaImpar;
+      for (let c = 0; c < cabecalho.length; c++) {
+        const ref = XLSX.utils.encode_cell({ r, c });
+        if (!ws[ref]) ws[ref] = { v: '', t: 's' };
+        ws[ref].s = {
+          font: fonteCel,
+          fill: { fgColor: { rgb: corFundo } },
+          border: borda,
+          alignment: centroIdx.includes(c) ? alinhCentro : alinhEsq
+        };
+      }
+    }
+
+    // Congelar cabecalho
+    ws['!freeze'] = { xSplit: 0, ySplit: 1 };
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'RDOs');
+    XLSX.writeFile(wb, 'rdos_' + Date.now() + '.xlsx');
+    toast('Excel exportado!');
+  };
+
+  function download(filename, content, type) { const blob = new Blob([content], { type }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = filename; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url); }
+  function csvEsc(v) { v = String(v || ''); if (v.includes(';') || v.includes('"') || v.includes('\n')) return '"' + v.replace(/"/g, '""') + '"'; return v; }
+
+  // Socket
+  socket.on('rdo_novo', () => { if (document.querySelector('.view.active') && document.querySelector('.view.active').id === 'view-lista') renderLista(); });
+
+  // Init
+  $('f_data').valueAsDate = new Date();
+  renderEquipe(); renderMatList(); renderFotos();
+  carregarDados();
+  carregarHome();
+  carregarMinhaEquipe();
+
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,231 @@
+============================================================
+ ALTERACOES REALIZADAS - CRM OBRAS
+ Data: 18/08/2026
+============================================================
+
+------------------------------------------------------------
+ 1. PLANILHA EXCEL - MATERIAIS EM LINHAS SEPARADAS
+------------------------------------------------------------
+ Arquivo: public/app.html - funcao exportarExcel()
+ 
+ ANTES: Todos os materiais ficavam em uma unica celula,
+        concatenados por virgula.
+        Ex: "Aprafuso (100), Tubo PVC (5), Conector (20)"
+
+ DEPOIS: Cada material ocupa sua propria linha no Excel.
+         A primeira linha do RDO preenche todas as colunas.
+         As linhas extras (materiais) so preenchem a coluna
+         "Materiais", resto fica vazio.
+
+------------------------------------------------------------
+ 2. FORMATO DOS HORARIOS - MANHA E TARDE
+------------------------------------------------------------
+ Arquivo: public/app.html - funcoes exportarExcel() e exportarCSV()
+
+ ANTES: "08:00 as 12:00"
+ DEPOIS: "08:00-12:00"
+
+------------------------------------------------------------
+ 3. PLANILHA EXCEL - VISUAL PROFISSIONAL
+------------------------------------------------------------
+ Arquivo: public/app.html - funcao exportarExcel()
+ Biblioteca: xlsx substituido por xlsx-js-style (CDN linha 9)
+
+ Estilos aplicados:
+ - Cabecalho: fundo azul escuro #0F3D4C, texto branco,
+   negrito, Calibri 11pt, centralizado, altura 28px
+ - Linhas pares: fundo cinza claro #F7F9FA
+ - Linhas impares: fundo branco #FFFFFF
+ - Bordas: linha fina cinza #D0D5DD em todas as celulas
+ - Fonte: Calibri 10pt
+ - Alinhamento: Data, Manha, Tarde, Fotos centralizados;
+   demais a esquerda
+ - Colunas: larguras personalizadas por conteudo
+ - Congelamento: cabecalho fixo ao rolar
+
+------------------------------------------------------------
+ 4. COLUNA "CIDADE" ADICIONADA
+------------------------------------------------------------
+
+ 4a. EXPORTACAO EXCEL E CSV
+     Arquivo: public/app.html
+     Coluna "Cidade" adicionada apos "Obra"
+     Ordem: Data, Obra, Cidade, Local, Atividade, Equipe,
+            Materiais, Manha, Tarde, Parada, Switch,
+            Camera, Fotos, Registrado por
+
+ 4b. ENDPOINT API /api/rdos (listagem)
+     Arquivo: server.js linha 479
+     Adicionado: l.comarca as cidade
+     LEFT JOIN locais l ON (r.local = l.nome OR ...)
+
+ 4c. ENDPOINT API /api/rdos/:id (individual)
+     Arquivo: server.js linha 493
+     Adicionado: LEFT JOIN locais e l.comarca as cidade
+     ANTES: SELECT r.*, o.nome as obra_nome
+     DEPOIS: SELECT r.*, o.nome as obra_nome, l.comarca as cidade
+
+ 4d. FORMULARIO DE CADASTRO/EDICAO
+     Arquivo: public/app.html linha 173
+     Campo "Cidade" readonly entre Obra e Local
+     Preenchido automaticamente ao selecionar o local
+     Estilo: fundo cinza, texto muted, cursor default
+
+ 4e. DETALHE DO RDO (app.html)
+     Arquivo: public/app.html linha 834
+     Linha "Cidade" no modal de detalhes
+
+ 4f. DETALHE DO RDO (index.html)
+     Arquivo: public/index.html linha 434
+     Linha "Cidade" no modal de detalhes
+
+ 4g. CARDS DA LISTAGEM
+     Arquivo: public/app.html linha 815
+     Cidade exibida na meta do card do RDO
+
+ 4h. EDICAO DE RDO
+     Arquivo: public/app.html linha 857
+     Campo f_cidade preenchido com entry.cidade
+
+------------------------------------------------------------
+ 5. CORRECAO DE CACHE - CIDADE NAO APARECIA
+------------------------------------------------------------
+
+ 5a. SERVICE WORKER - FORCAR RE-CACHE
+     Arquivo: public/sw.js linha 1
+     ANTES: CACHE_NAME = 'ipq-rdo-v1'
+     DEPOIS: CACHE_NAME = 'ipq-rdo-v2'
+
+ 5b. SERVIDOR - HEADERS SEM CACHE
+     Arquivo: server.js linha 195
+     Adicionado Cache-Control: no-cache, no-store, 
+     must-revalidate em arquivos .html e .js
+     Evita que o navegador sirva versoes antigas
+
+------------------------------------------------------------
+ 6. ARQUIVOS MODIFICADOS
+------------------------------------------------------------
+ - public/app.html (linhas 9, 173-174, 444-448, 815,
+   834, 857, 879-905, 908-993)
+ - server.js (linhas 195-201, 479, 493-498)
+ - public/index.html (linhas 433-434)
+ - public/sw.js (linha 1)
+
+============================================================
+ 7. MELHORIAS NA ADMINISTRACAO E UX
+============================================================
+ Data: 19/08/2026
+
+ 7a. ATIVIDADES INICIAIS ADICIONADAS
+     Banco de dados populado com 10 atividades:
+     - Infraestrutura, Cabeamento, Conectorização
+     - Instalação de Equipamentos, Configuração de Rede
+     - Instalação de Câmeras, Manutenção Preventiva
+     - Manutenção Corretiva, Vistoria, Outros
+     
+     Arquivo: public/app.html - função carregarDados()
+     ANTES: Atividades hardcoded no HTML
+     DEPOIS: Carregadas dinamicamente da API /api/atividades
+
+ 7b. NOMES DAS OBRAS CORRIGIDOS
+     ANTES: Todas se chamavam "TJ-CEARA"
+     DEPOIS: "TJ-CEARA - ABAIARA", "TJ-CEARA - ACOPIARA", 
+             "TJ-CEARA - ARACATI"
+
+ 7c. LOCAIS VINCULADOS A OBRAS
+     Locais foram vinculados às obras por comarca:
+     - ABAIARA → Obra 1
+     - ACOPIARA → Obra 2
+     - ARACATI → Obra 3
+
+ 7d. LISTA DE MATERIAIS - VISUAL COMPACTO
+     Arquivo: public/app.html - CSS .mat-list
+     
+     ANTES: Lista vertical ocupando muito espaço
+     DEPOIS: Grid responsivo com cards compactos
+     - Colunas automáticas (min 280px)
+     - Hover com destaque
+     - Texto truncado com ellipsis
+     - Botão remover mais discreto
+
+ 7e. LISTA DE RDOs - INFORMAÇÕES VISUAIS
+     Arquivo: public/app.html - função renderLista()
+     
+     ANTES: Apenas texto simples
+     DEPOIS: Chips coloridos por tipo de informação
+     - 👥 Técnicos (azul)
+     - 📦 Itens (roxo)
+     - 📷 Fotos (verde)
+     - 🔌 Switch (laranja)
+     - 📹 Câmera (vermelho)
+     - Badge muda cor se houver parada
+
+ 7f. DETALHE DO RDO - VISUAL COMPLETO
+     Arquivo: public/app.html - função verDetalhe()
+     
+     ANTES: Lista simples de detalhes
+     DEPOIS: Layout em cards organizados
+     - Header com ID e data em destaque
+     - Grid 2x2 para Obra, Cidade, Local, Atividade
+     - Equipe em chips coloridos
+     - Horários em cards separados
+     - Alerta de parada em destaque
+     - Instalações em cards coloridos
+     - Materiais em grid compacto
+     - Fotos em grid responsivo
+     - Footer com registrado por e timestamp
+
+ 7g. SEGURANÇA - DELETE DE RDO PROTEGIDO
+     Arquivo: server.js - endpoint DELETE /api/rdos/:id
+     
+     ANTES: Qualquer usuário podia deletar qualquer RDO
+     DEPOIS: Verificação de permissão adicionada
+     - Só o dono do RDO pode deletar
+     - Gestores podem deletar qualquer RDO
+     - Retorna 403 se não tiver permissão
+     - Retorna 404 se RDO não existir
+
+ 7h. EXPORTAÇÃO EXCEL/CSV - COLUNAS EXPANDIDAS
+     Arquivo: public/app.html - funções exportarExcel() e exportarCSV()
+     
+     COLUNAS ANTERIORES (14):
+     Data, Obra, Cidade, Local, Atividade, Equipe, Materiais,
+     Manha, Tarde, Parada, Switch, Camera, Fotos, Registrado por
+     
+     COLUNAS NOVAS (21):
+     Data, Obra, Cidade, Local, Endereco, Atividade, Equipe,
+     Materiais, Qtd Total, Manha, Tarde, Horas Trab., Parada,
+     Switch, Camera, Fotos, Responsavel, Status Obra, Latitude,
+     Longitude, Registrado por
+     
+     NOVAS COLUNAS ADICIONADAS:
+     - Endereco: Endereço completo do local
+     - Qtd Total: Soma total de todos os materiais
+     - Horas Trab.: Cálculo automático das horas trabalhadas
+     - Responsavel: Responsável pela obra
+     - Status Obra: Status da obra (planejamento, em_andamento, concluida)
+     - Latitude: Coordenada GPS do local
+     - Longitude: Coordenada GPS do local
+
+ 7i. API /api/rdos - DADOS EXPANDIDOS
+     Arquivo: server.js - endpoint GET /api/rdos
+     
+     DADOS ADICIONADOS NA QUERY:
+     - o.responsavel as obra_responsavel
+     - o.status as obra_status
+     
+     Já existia:
+     - l.latitude as local_lat
+     - l.longitude as local_lng
+     - l.endereco as local_endereco
+
+============================================================
+ ARQUIVOS MODIFICADOS NESTA ATUALIZACAO
+============================================================
+ - public/app.html (CSS, carregarDados, renderLista, verDetalhe, exportarExcel, exportarCSV)
+ - server.js (DELETE /api/rdos/:id, GET /api/rdos)
+ - data/crm.db (atividades, obras, locais)
+
+============================================================
+ FIM
+============================================================
