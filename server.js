@@ -1028,6 +1028,61 @@ app.get('/api/dashboard/por-equipe', gestor, async (req, res) => {
   res.json(resultado);
 });
 
+// Dashboard de desempenho por etapa (inteligente para engenheiro)
+app.get('/api/dashboard/etapas-desempenho', gestor, async (req,res)=>{
+  const tjce = await db.prepare("SELECT id FROM obras WHERE UPPER(REPLACE(REPLACE(nome,'-',''),' ',''))=UPPER(?) AND ativo=1").get('TJCE');
+  if(!tjce) return res.json({etapas:[], locais:[], totalLocais:0});
+  const template = await db.prepare('SELECT id,nome,ordem FROM etapas WHERE obra_id=? AND (local_id IS NULL OR local_id=0) ORDER BY ordem').all(tjce.id);
+  const totalLocais = (await db.prepare('SELECT COUNT(*) c FROM locais WHERE ativo=1').get()).c;
+  // agregados por etapa - concluidas per-local
+  const conclPorEtapa = await db.prepare("SELECT UPPER(nome) as n, COUNT(*) c FROM etapas WHERE obra_id=? AND local_id IS NOT NULL AND status='concluida' GROUP BY UPPER(nome)").all(tjce.id);
+  const mapConcl = Object.fromEntries(conclPorEtapa.map(r=>[r.n, r.c]));
+  const rdosPorEtapa = await db.prepare("SELECT UPPER(atividade) as n, COUNT(*) c FROM rdos WHERE atividade IS NOT NULL AND atividade!='' GROUP BY UPPER(atividade)").all();
+  const mapRdosEtapa = Object.fromEntries(rdosPorEtapa.map(r=>[r.n, r.c]));
+  const rdosHojePorEtapa = await db.prepare("SELECT UPPER(atividade) as n, COUNT(*) c FROM rdos WHERE data=date('now') GROUP BY UPPER(atividade)").all();
+  const mapHoje = Object.fromEntries(rdosHojePorEtapa.map(r=>[r.n, r.c]));
+  const etapas = template.map(t=>{
+    const key = t.nome.toUpperCase();
+    const concl = mapConcl[key] || 0;
+    return {
+      nome: t.nome, ordem: t.ordem,
+      concluidos: concl, pendentes: totalLocais - concl,
+      totalRdos: mapRdosEtapa[key] || 0, rdosHoje: mapHoje[key] || 0,
+      pct: totalLocais ? Math.round(concl/totalLocais*100) : 0
+    };
+  });
+  // per-local
+  const locais = await db.prepare('SELECT id,nome,comarca,regiao FROM locais WHERE ativo=1 ORDER BY regiao, comarca').all();
+  const conclPorLocal = await db.prepare("SELECT local_id, COUNT(*) c FROM etapas WHERE obra_id=? AND local_id IS NOT NULL AND status='concluida' GROUP BY local_id").all(tjce.id);
+  const mapConclLocal = Object.fromEntries(conclPorLocal.map(r=>[String(r.local_id), r.c]));
+  const rdosPorLocal = await db.prepare('SELECT local, COUNT(*) c FROM rdos GROUP BY local').all();
+  const mapRdosLocal = Object.fromEntries(rdosPorLocal.map(r=>[r.local, r.c]));
+  // ultimo RDO por local (mais recente)
+  const ultimosRows = await db.prepare('SELECT local, data, atividade, usuario_nome FROM rdos ORDER BY data DESC, criado_em DESC').all();
+  const mapUltimo = {};
+  for(const r of ultimosRows){ if(!mapUltimo[r.local]) mapUltimo[r.local]=r; }
+  const totalTpl = template.length || 1;
+  let perLocal = locais.map(l=>{
+    const concl = mapConclLocal[String(l.id)] || 0;
+    return {
+      ...l,
+      concluidas: concl, total: totalTpl,
+      progresso: Math.round(concl/totalTpl*100),
+      totalRdos: mapRdosLocal[l.nome] || 0,
+      ultimoRdo: mapUltimo[l.nome] ? `${mapUltimo[l.nome].data} - ${mapUltimo[l.nome].atividade} (${mapUltimo[l.nome].usuario_nome})` : null
+    };
+  });
+  if(req.query.regiao) perLocal = perLocal.filter(l=> (l.regiao||'SEM EQUIPE')===req.query.regiao);
+  if(req.query.busca) {
+    const b=req.query.busca.toLowerCase();
+    perLocal = perLocal.filter(l=> (l.nome+l.comarca+l.regiao).toLowerCase().includes(b));
+  }
+  perLocal.sort((a,b)=> a.progresso - b.progresso);
+  // limita para não pesar
+  const limit = parseInt(req.query.limit||'200');
+  res.json({etapas, locais: perLocal.slice(0,limit), totalLocais, totalTpl, totalFiltrados: perLocal.length});
+});
+
 // ============================================================
 // SOCKET.IO
 // ============================================================

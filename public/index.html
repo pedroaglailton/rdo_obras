@@ -77,6 +77,7 @@
   <nav class="tabs">
     <button data-view="dashboard" class="active">Dashboard</button>
     <button data-view="por-equipe">Por Equipe</button>
+    <button data-view="desempenho">Desempenho</button>
     <button data-view="obras">Obras</button>
     <button data-view="rdos">RDOs</button>
     <button data-view="locais">Locais</button>
@@ -115,6 +116,29 @@
         <input type="text" id="buscaPorEquipe" placeholder="Buscar comarca/endereço..." oninput="filtrarPorEquipe()">
       </div>
       <div id="listaPorEquipe" style="margin-top:10px"></div>
+    </div>
+  </section>
+
+  <!-- DESEMPENHO POR ETAPA (engenheiro) -->
+  <section class="view" id="view-desempenho">
+    <div class="card" style="border-left:4px solid #0f3d4c">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+        <h2 style="margin:0">📊 Desempenho por Etapa — TJ-CE</h2>
+        <button class="btn-small" onclick="carregarDesempenho()" style="background:#0f3d4c">↻ Atualizar</button>
+      </div>
+      <p style="font-size:11px;color:var(--muted);margin:6px 0 0">Cada RDO com <code>atividade</code> marca a etapa correspondente como <strong>concluída</strong> naquele local. Progresso = etapas concluídas / 4.</p>
+      <div id="desempenhoEtapas" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-top:12px"></div>
+    </div>
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+        <h2 style="margin:0">Locais — progresso e RDOs</h2>
+        <span id="desempenhoInfo" style="font-size:11px;color:var(--muted)"></span>
+      </div>
+      <div class="form-row" style="margin-top:8px">
+        <select id="filtroDesempenhoRegiao" onchange="carregarDesempenho()"><option value="">Todas equipes</option></select>
+        <input type="text" id="buscaDesempenho" placeholder="Buscar local/comarca..." oninput="filtrarDesempenhoLocal()">
+      </div>
+      <div id="listaDesempenho" style="margin-top:10px"></div>
     </div>
   </section>
 
@@ -356,7 +380,7 @@ document.querySelectorAll('nav.tabs button').forEach(btn => {
     btn.classList.add('active');
     document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
     document.getElementById('view-' + btn.dataset.view).classList.add('active');
-    const loaders = { dashboard: carregarDashboard, 'por-equipe': carregarPorEquipe, obras: carregarObras, rdos: carregarRdos, locais: carregarLocais, atividades: carregarAtividades, materiais: carregarMateriais, equipes: carregarEquipes, usuarios: carregarUsuarios };
+    const loaders = { dashboard: carregarDashboard, 'por-equipe': carregarPorEquipe, desempenho: carregarDesempenho, obras: carregarObras, rdos: carregarRdos, locais: carregarLocais, atividades: carregarAtividades, materiais: carregarMateriais, equipes: carregarEquipes, usuarios: carregarUsuarios };
     if (loaders[btn.dataset.view]) loaders[btn.dataset.view]();
   });
 });
@@ -422,6 +446,50 @@ function filtrarPorEquipe(){
   `).join('') || '<p class="empty-state">Nenhum local com esse filtro</p>';
   if(lista.length>200) document.getElementById('listaPorEquipe').innerHTML += `<p style="text-align:center;font-size:11px;color:var(--muted)">Mostrando 200 de ${lista.length} — refine o filtro</p>`;
 }
+let desempenhoCache=null;
+async function carregarDesempenho(){
+  const reg = document.getElementById('filtroDesempenhoRegiao')?.value || '';
+  const url = '/api/dashboard/etapas-desempenho' + (reg ? '?regiao='+encodeURIComponent(reg) : '');
+  const data = await api(url).then(r=>r.json());
+  desempenhoCache=data;
+  document.getElementById('desempenhoEtapas').innerHTML = data.etapas.map(e=>`
+    <div style="padding:12px;background:#fff;border-radius:10px;border:1px solid var(--line);border-left:4px solid ${e.pct===100?'#2e7d32':e.pct>0?'#ef6c00':'#90a4ae'}">
+      <div style="font-size:12px;font-weight:700">${e.ordem}. ${e.nome}</div>
+      <div style="font-size:22px;font-weight:800;color:${e.pct===100?'#2e7d32':'#0f3d4c'}">${e.pct}%</div>
+      <div style="font-size:11px;color:var(--muted)">${e.concluidos}/${e.concluidos+e.pendentes} locais • ${e.totalRdos} RDOs (${e.rdosHoje} hoje)</div>
+      <div style="height:6px;background:var(--line);border-radius:99px;overflow:hidden;margin-top:6px"><div style="height:100%;background:${e.pct===100?'#2e7d32':'#0f3d4c'};width:${e.pct}%"></div></div>
+    </div>
+  `).join('') || '<p class="empty-state">Sem etapas template</p>';
+  const sel=document.getElementById('filtroDesempenhoRegiao');
+  if(sel && sel.options.length===1){
+    try{
+      const regs=[...new Set((await api('/api/locais').then(r=>r.json())).map(l=>l.regiao||'SEM EQUIPE'))].sort();
+      const cur=sel.value;
+      sel.innerHTML='<option value="">Todas equipes</option>'+regs.map(r=>`<option>${r}</option>`).join('');
+      sel.value=cur;
+    }catch(e){}
+  }
+  document.getElementById('desempenhoInfo').textContent=`${data.totalFiltrados}/${data.totalLocais} locais • ${data.totalTpl} etapas`;
+  renderDesempenhoLista();
+}
+function renderDesempenhoLista(){
+  if(!desempenhoCache) return;
+  const busca=(document.getElementById('buscaDesempenho').value||'').toLowerCase();
+  let lista=desempenhoCache.locais;
+  if(busca) lista=lista.filter(l=> (l.nome+l.comarca+l.regiao).toLowerCase().includes(busca));
+  document.getElementById('listaDesempenho').innerHTML=lista.slice(0,200).map(l=>{
+    const cor=l.progresso===100?'#2e7d32':l.progresso>0?'#ef6c00':'#90a4ae';
+    return `<div style="padding:10px;background:#fff;border-radius:9px;margin-bottom:6px;border:1px solid var(--line);border-left:4px solid ${cor};display:flex;gap:8px;align-items:center">
+      <div style="flex:1;min-width:0">
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><strong style="font-size:13px">${l.nome}</strong><span style="font-size:10px;background:${cor};color:#fff;padding:2px 6px;border-radius:8px">${l.progresso}% ${l.concluidas}/${l.total}</span><span style="font-size:10px;background:#f7f9fa;border:1px solid var(--line);padding:2px 6px;border-radius:8px">${l.regiao||'SEM EQUIPE'}</span></div>
+        <div style="font-size:11px;color:var(--muted)">${l.comarca||''} • ${l.totalRdos} RDOs ${l.ultimoRdo?'• último: '+l.ultimoRdo:''}</div>
+        <div style="height:4px;background:var(--line);border-radius:99px;overflow:hidden;margin-top:4px"><div style="height:100%;background:${cor};width:${l.progresso}%"></div></div>
+      </div>
+    </div>`;
+  }).join('') || '<p class="empty-state">Nenhum local</p>';
+  if(lista.length>200) document.getElementById('listaDesempenho').innerHTML+=`<p style="text-align:center;font-size:11px;color:var(--muted)">Mostrando 200 de ${lista.length}</p>`;
+}
+function filtrarDesempenhoLocal(){ renderDesempenhoLista(); }
 
 // Importar Mesclado
 async function importarMesclado(){
