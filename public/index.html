@@ -627,15 +627,24 @@ async function carregarMapa3D(){
       marcadores3d.push(m);
     });
     document.getElementById('mapa3dInfo').textContent=`${presencas.length} equipe(s) ativa(s) • ${locaisFiltr.length} locais`+(filtroEquipe?` • ${filtroEquipe}`:'');
-    // quando filtra por equipe, voa direto para a área dela (inteligente)
+    // quando filtra por equipe, aplica zoom no local da equipe (onde ela está / vai trabalhar) - com ruas detalhadas
     if(filtroEquipe){
       setTimeout(()=>{
         try{ mapa3d.resize(); }catch(e){}
-        const pts=[...presencas.filter(p=>p.latitude&&p.longitude).map(p=>[p.longitude,p.latitude]), ...locaisFiltr.filter(l=>l.latitude&&l.longitude).map(l=>[parseFloat(l.longitude), parseFloat(l.latitude)])];
-        if(pts.length){
+        const presEquipe=presencas.filter(p=>p.latitude&&p.longitude);
+        if(presEquipe.length){
+          const pts=presEquipe.map(p=>[p.longitude,p.latitude]);
           const bounds=new maplibregl.LngLatBounds(); pts.forEach(c=> bounds.extend(c));
-          try{ mapa3d.fitBounds(bounds, {padding:70, maxZoom:13, duration:1000}); }catch(e){}
+          try{ mapa3d.fitBounds(bounds, {padding:80, maxZoom:16, duration:1000}); }catch(e){}
+          setTimeout(()=>{ try{ mapa3d.easeTo({pitch:45, duration:800}); }catch(e){} }, 1100);
           setTimeout(()=>{ try{ mapa3d.resize(); }catch(e){} }, 600);
+        } else if(locaisFiltr.length){
+          // sem presença ativa: voa para o primeiro local da equipe com zoom de rua (15) para ver detalhes e 3D
+          const alvo=locaisFiltr.find(l=>l.latitude&&l.longitude) || locaisFiltr[0];
+          if(alvo && alvo.latitude){
+            try{ mapa3d.flyTo({center:[parseFloat(alvo.longitude), parseFloat(alvo.latitude)], zoom:15, pitch:45, bearing:0, duration:1200}); }catch(e){}
+            setTimeout(()=>{ try{ mapa3d.resize(); }catch(e){} }, 600);
+          }
         }
       }, 350);
     }
