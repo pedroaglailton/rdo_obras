@@ -603,11 +603,12 @@ async function carregarMapa3D(){
     ]);
     let locaisFiltr=locais;
     if(filtroEquipe) locaisFiltr=locais.filter(l=> (l.regiao||'SEM EQUIPE')===filtroEquipe);
-    // locais como pontos discretos (cinza claro) - não poluído, só contorno
+    // locais - visual mais visível: cor da própria equipe (quando Todas) ou da equipe filtrada
     locaisFiltr.forEach(l=>{
       if(!l.latitude || !l.longitude) return;
+      const cor = filtroEquipe ? (equipes.find(e=>e.nome===filtroEquipe)?.cor || '#0f3d4c') : (equipes.find(e=>e.nome===l.regiao)?.cor || '#90a4ae');
       const el=document.createElement('div');
-      el.style.cssText='width:8px;height:8px;background:#e1e5ea;border:1px solid #fff;border-radius:50%;box-shadow:0 1px 3px rgba(0,0,0,0.3)';
+      el.style.cssText=`width:11px;height:11px;background:${cor};border:2px solid #fff;border-radius:50%;box-shadow:0 2px 6px rgba(0,0,0,0.35)`;
       el.title=l.nome+' - '+l.comarca;
       const m=new maplibregl.Marker({element:el, anchor:'center'}).setLngLat([parseFloat(l.longitude), parseFloat(l.latitude)]).setPopup(new maplibregl.Popup({offset:12}).setHTML(`<strong>${l.nome}</strong><br>${l.comarca||''}<br><small>${l.regiao||'SEM EQUIPE'}</small>`)).addTo(mapa3d);
       marcadores3d.push(m);
