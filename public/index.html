@@ -632,20 +632,23 @@ async function carregarMapa3D(){
     if(filtroEquipe){
       setTimeout(()=>{
         try{ mapa3d.resize(); }catch(e){}
+        // mostra todos os locais da equipe (azul) + onde a equipe está (pino 3D) juntos
         const presEquipe=presencas.filter(p=>p.latitude&&p.longitude);
-        if(presEquipe.length){
-          const pts=presEquipe.map(p=>[p.longitude,p.latitude]);
-          const bounds=new maplibregl.LngLatBounds(); pts.forEach(c=> bounds.extend(c));
-          try{ mapa3d.fitBounds(bounds, {padding:80, maxZoom:16, duration:1000}); }catch(e){}
-          setTimeout(()=>{ try{ mapa3d.easeTo({pitch:45, duration:800}); }catch(e){} }, 1100);
-          setTimeout(()=>{ try{ mapa3d.resize(); }catch(e){} }, 600);
+        let pts=[];
+        if(presEquipe.length && locaisFiltr.length){
+          pts=[...presEquipe.map(p=>[p.longitude,p.latitude]), ...locaisFiltr.filter(l=>l.latitude&&l.longitude).map(l=>[parseFloat(l.longitude), parseFloat(l.latitude)])];
+        } else if(presEquipe.length){
+          pts=presEquipe.map(p=>[p.longitude,p.latitude]);
         } else if(locaisFiltr.length){
-          // sem presença ativa: voa para o primeiro local da equipe com zoom de rua (15) para ver detalhes e 3D
-          const alvo=locaisFiltr.find(l=>l.latitude&&l.longitude) || locaisFiltr[0];
-          if(alvo && alvo.latitude){
-            try{ mapa3d.flyTo({center:[parseFloat(alvo.longitude), parseFloat(alvo.latitude)], zoom:15, pitch:45, bearing:0, duration:1200}); }catch(e){}
-            setTimeout(()=>{ try{ mapa3d.resize(); }catch(e){} }, 600);
-          }
+          pts=locaisFiltr.filter(l=>l.latitude&&l.longitude).map(l=>[parseFloat(l.longitude), parseFloat(l.latitude)]);
+        }
+        if(pts.length){
+          const bounds=new maplibregl.LngLatBounds(); pts.forEach(c=> bounds.extend(c));
+          // se tem presença + locais, mostra tudo (overview da equipe); se só locais, também overview; se só presença, zoom de rua
+          const maxZ = presEquipe.length && locaisFiltr.length ? 11 : presEquipe.length ? 16 : 12;
+          try{ mapa3d.fitBounds(bounds, {padding:60, maxZoom:maxZ, duration:1000}); }catch(e){}
+          if(presEquipe.length) setTimeout(()=>{ try{ mapa3d.easeTo({pitch:35, duration:700}); }catch(e){} }, 1100);
+          setTimeout(()=>{ try{ mapa3d.resize(); }catch(e){} }, 600);
         }
       }, 350);
     }
