@@ -692,9 +692,43 @@ app.post('/api/locais', gestor, async (req, res) => {
 });
 
 app.put('/api/locais/:id', gestor, async (req, res) => {
-  const { nome, comarca, nome_imovel, tipo, ocupacao, endereco, area, longitude, latitude, google_maps_link, street_view_link, cameras } = req.body;
-  await db.prepare('UPDATE locais SET nome=?,comarca=?,nome_imovel=?,tipo=?,ocupacao=?,endereco=?,area=?,longitude=?,latitude=?,google_maps_link=?,street_view_link=?,cameras=? WHERE id=?')
-    .run(nome, comarca, nome_imovel, tipo, ocupacao, endereco, area, longitude, latitude, google_maps_link, street_view_link, cameras, req.params.id);
+  const atual = await db.prepare('SELECT * FROM locais WHERE id=?').get(req.params.id);
+  if (!atual) return res.status(404).json({ error: 'Local nao encontrado' });
+  const { nome, comarca, nome_imovel, tipo, ocupacao, endereco, area, longitude, latitude, google_maps_link, street_view_link, cameras, obra_id, equipe_id, regiao } = req.body;
+  // Merge com atual para permitir PATCH parcial (usado por vincular/desvincular)
+  const novoNome = nome !== undefined ? nome : atual.nome;
+  const novoComarca = comarca !== undefined ? comarca : atual.comarca;
+  const novoNomeImovel = nome_imovel !== undefined ? nome_imovel : atual.nome_imovel;
+  const novoTipo = tipo !== undefined ? tipo : atual.tipo;
+  const novoOcupacao = ocupacao !== undefined ? ocupacao : atual.ocupacao;
+  const novoEndereco = endereco !== undefined ? endereco : atual.endereco;
+  const novoArea = area !== undefined ? area : atual.area;
+  const novoLon = longitude !== undefined ? longitude : atual.longitude;
+  const novoLat = latitude !== undefined ? latitude : atual.latitude;
+  const novoGmaps = google_maps_link !== undefined ? google_maps_link : atual.google_maps_link;
+  const novoStreet = street_view_link !== undefined ? street_view_link : atual.street_view_link;
+  const novoCams = cameras !== undefined ? cameras : atual.cameras;
+  let novoObraId = obra_id !== undefined ? (obra_id ? Number(obra_id) : null) : atual.obra_id;
+  let novoEquipeId = equipe_id !== undefined ? (equipe_id ? Number(equipe_id) : null) : atual.equipe_id;
+  let novoRegiao = regiao !== undefined ? regiao : atual.regiao;
+  if (equipe_id !== undefined) {
+    if (equipe_id) {
+      const eq = await db.prepare('SELECT nome FROM equipes WHERE id=?').get(Number(equipe_id));
+      if (eq) novoRegiao = eq.nome;
+    } else {
+      novoRegiao = '';
+    }
+  } else if (regiao !== undefined) {
+    novoRegiao = regiao;
+    if (regiao) {
+      const eq = await db.prepare('SELECT id FROM equipes WHERE nome=?').get(regiao);
+      if (eq) novoEquipeId = eq.id;
+    } else {
+      novoEquipeId = null;
+    }
+  }
+  await db.prepare('UPDATE locais SET nome=?,comarca=?,nome_imovel=?,tipo=?,ocupacao=?,endereco=?,area=?,longitude=?,latitude=?,google_maps_link=?,street_view_link=?,cameras=?,obra_id=?,equipe_id=?,regiao=? WHERE id=?')
+    .run(novoNome, novoComarca, novoNomeImovel, novoTipo, novoOcupacao, novoEndereco, novoArea, novoLon, novoLat, novoGmaps, novoStreet, novoCams, novoObraId, novoEquipeId, novoRegiao, req.params.id);
   res.json({ ok: true });
 });
 

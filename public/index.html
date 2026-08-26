@@ -261,13 +261,20 @@
       </div>
       <div id="msgAtribuir" style="font-size:11px;margin-top:6px;min-height:14px"></div>
     </div>
-    <div class="card">
-      <h2>Vincular Local a Obra</h2>
-      <div class="form-row">
-        <select id="localObraSelect"><option value="">Selecione a obra</option></select>
-        <select id="localSelect"><option value="">Selecione o local</option></select>
+    <div class="card" style="border-left:4px solid #6a1b9a">
+      <h2>🔗 Vincular Locais à Obra</h2>
+      <p style="font-size:11px;color:var(--muted);margin:4px 0 8px">Selecione a obra e veja os locais já vinculados (cadastrados em <em>Obras</em>). Adicione ou remova locais dinamicamente.</p>
+      <label>Obra</label>
+      <select id="localObraSelect" onchange="carregarVinculoObra()"><option value="">Selecione a obra</option></select>
+      <div id="vinculoObraInfo" style="font-size:11px;color:var(--muted);margin:6px 0"></div>
+      <div id="listaVinculoObra" style="max-height:240px;overflow:auto;border:1.5px solid var(--line);border-radius:8px;padding:8px;background:#f7f9fa;margin-top:6px;display:none"></div>
+      <div style="margin-top:8px">
+        <label>Adicionar local à obra selecionada</label>
+        <div class="form-row">
+          <select id="localSelect"><option value="">Selecione o local</option></select>
+          <button class="btn-small" onclick="vincularLocalObra()" style="background:#6a1b9a">+ Vincular</button>
+        </div>
       </div>
-      <button class="btn-primary" onclick="vincularLocalObra()">Vincular</button>
     </div>
     <div class="card">
       <h2>Imoveis TJCE (<span id="countLocais">0</span>)</h2>
@@ -1080,16 +1087,55 @@ function toggleSelecionarTodosLocais(){
   chks.forEach(c=>c.checked=marcar);
 }
 
+async function carregarVinculoObra(){
+  const obraId=document.getElementById('localObraSelect').value;
+  const info=document.getElementById('vinculoObraInfo');
+  const lista=document.getElementById('listaVinculoObra');
+  if(!obraId){ info.textContent='Selecione uma obra acima'; lista.style.display='none'; lista.innerHTML=''; return; }
+  info.textContent='Carregando...'; lista.style.display='block';
+  const obra=await api('/api/obras/'+obraId).then(r=>r.json()).catch(()=>({nome:'Obra'}));
+  const locaisObra=await api('/api/locais?obra_id='+obraId).then(r=>r.json()).catch(()=>[]);
+  info.textContent=`${obra.nome} — ${locaisObra.length} local(is) vinculado(s)`;
+  if(!locaisObra.length){
+    lista.innerHTML='<p class="empty-state">Nenhum local vinculado a esta obra. Use o seletor abaixo para adicionar.</p>';
+  } else {
+    lista.innerHTML=locaisObra.map(l=>`
+      <div style="display:flex;align-items:center;gap:8px;padding:8px;background:#fff;border:1px solid var(--line);border-radius:8px;margin-bottom:6px">
+        <div style="flex:1;min-width:0"><strong style="font-size:13px">${l.nome}</strong><br><small style="color:var(--muted)">${l.comarca||''} • ${l.endereco||''}</small></div>
+        <button class="btn-small" onclick="desvincularLocalObra(${l.id})" style="background:#fce4ec;color:#c62828;border:1px solid #ef9a9a">Remover</button>
+      </div>
+    `).join('');
+  }
+  // Filtra o select de adicionar para mostrar só locais ainda não vinculados à obra selecionada (ou todos se quiser)
+  const todos=await api('/api/locais').then(r=>r.json()).catch(()=>[]);
+  const sel=document.getElementById('localSelect');
+  const vinculadosIds=new Set(locaisObra.map(l=>String(l.id)));
+  const disponiveis=todos.filter(l=> !vinculadosIds.has(String(l.id)));
+  const cur=sel.value;
+  sel.innerHTML='<option value="">Selecione o local</option>'+disponiveis.map(l=>`<option value="${l.id}">${l.nome} - ${l.comarca||''}${l.obra_id?` [${l.obra_id===Number(obraId)?'já nesta obra': 'outra obra'}]`:''}</option>`).join('');
+  sel.value=cur;
+}
 async function vincularLocalObra() {
   const obraId = document.getElementById('localObraSelect').value;
   const localId = document.getElementById('localSelect').value;
   if (!obraId || !localId) { toast('Selecione a obra e o local'); return; }
-  const local = await api('/api/locais/' + localId).then(r => r.json());
-  await api('/api/locais/' + localId, { method: 'PUT', body: JSON.stringify({ ...local, obra_id: parseInt(obraId) }) });
-  carregarLocais(); toast('Local vinculado a obra!');
+  await api('/api/locais/' + localId, { method: 'PUT', body: JSON.stringify({ obra_id: parseInt(obraId) }) });
+  toast('Local vinculado a obra!');
+  carregarVinculoObra(); carregarLocais();
+}
+async function desvincularLocalObra(localId){
+  const obraId=document.getElementById('localObraSelect').value;
+  if(!obraId) return;
+  if(!confirm('Remover vínculo deste local com a obra?')) return;
+  // Desvincula voltando para TJ-CE (obra_id = TJ-CE) ou null se não houver TJ-CE
+  const tjce=await api('/api/obras').then(r=>r.json()).then(all=> all.find(o=> o.nome.replace(/[-\s]/g,'').toUpperCase()==='TJCE')).catch(()=>null);
+  const novoObraId = tjce ? tjce.id : null;
+  await api('/api/locais/' + localId, { method: 'PUT', body: JSON.stringify({ obra_id: novoObraId }) });
+  toast('Vínculo removido');
+  carregarVinculoObra(); carregarLocais();
 }
 
-async function excluirLocal(id) { await api('/api/locais/' + id, { method: 'DELETE' }); carregarLocais(); }
+async function excluirLocal(id) { await api('/api/locais/' + id, { method: 'DELETE' }); carregarLocais(); carregarVinculoObra(); }
 
 // ATIVIDADES - Visual profissional com contagem de RDOs e vínculo com template
 let atividadesCache=[];
