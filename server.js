@@ -70,7 +70,9 @@ const SQL_CREATE = [
     google_maps_link TEXT,
     street_view_link TEXT,
     cameras INTEGER DEFAULT 0,
-    ativo INTEGER DEFAULT 1
+    ativo INTEGER DEFAULT 1,
+    obra_id INTEGER REFERENCES obras(id) ON DELETE SET NULL,
+    equipe_id INTEGER REFERENCES equipes(id) ON DELETE SET NULL
   )`,
   `CREATE TABLE IF NOT EXISTS etapas (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -101,6 +103,7 @@ const SQL_CREATE = [
     obra_id INTEGER,
     data TEXT,
     local TEXT,
+    local_id INTEGER REFERENCES locais(id) ON DELETE SET NULL,
     atividade TEXT,
     equipe_json TEXT DEFAULT '[]',
     materiais_json TEXT DEFAULT '[]',
@@ -131,6 +134,7 @@ const SQL_CREATE = [
     latitude REAL,
     longitude REAL,
     obra_id INTEGER,
+    local_id INTEGER REFERENCES locais(id) ON DELETE SET NULL,
     local_nome TEXT,
     atualizado_em TEXT DEFAULT (datetime('now')),
     FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
@@ -140,8 +144,15 @@ const SQL_CREATE = [
 async function initDb(){
   if (db.isPostgres) {
     await db.init();
-    // Garante coluna local_id em etapas para progresso per-local (TJ-CE) - Postgres
+    // Garante colunas para multi-obra e per-local (F0) - Postgres
     try { await db.exec('ALTER TABLE etapas ADD COLUMN IF NOT EXISTS local_id INTEGER REFERENCES locais(id) ON DELETE CASCADE'); console.log('[migracao] etapas.local_id Postgres'); } catch(e){}
+    try { await db.exec('ALTER TABLE locais ADD COLUMN IF NOT EXISTS obra_id INTEGER REFERENCES obras(id) ON DELETE SET NULL'); console.log('[migracao] locais.obra_id Postgres'); } catch(e){}
+    try { await db.exec('ALTER TABLE locais ADD COLUMN IF NOT EXISTS equipe_id INTEGER REFERENCES equipes(id) ON DELETE SET NULL'); console.log('[migracao] locais.equipe_id Postgres'); } catch(e){}
+    try { await db.exec('ALTER TABLE rdos ADD COLUMN IF NOT EXISTS local_id INTEGER REFERENCES locais(id) ON DELETE SET NULL'); console.log('[migracao] rdos.local_id Postgres'); } catch(e){}
+    try { await db.exec('ALTER TABLE presenca ADD COLUMN IF NOT EXISTS local_id INTEGER REFERENCES locais(id) ON DELETE SET NULL'); console.log('[migracao] presenca.local_id Postgres'); } catch(e){}
+    try { await db.exec('CREATE INDEX IF NOT EXISTS idx_locais_obra ON locais(obra_id)'); } catch(e){}
+    try { await db.exec('CREATE INDEX IF NOT EXISTS idx_locais_equipe ON locais(equipe_id)'); } catch(e){}
+    try { await db.exec('CREATE INDEX IF NOT EXISTS idx_rdos_local_id ON rdos(local_id)'); } catch(e){}
   } else {
     for (const sql of SQL_CREATE) await db.exec(sql);
     async function ensureColumn(table, col, def) {
@@ -161,6 +172,13 @@ async function initDb(){
     await ensureColumn('locais', 'terceirizada', 'INTEGER DEFAULT 0');
     await ensureColumn('obras', 'comarca', 'TEXT');
     await ensureColumn('etapas', 'local_id', 'INTEGER REFERENCES locais(id) ON DELETE CASCADE');
+    await ensureColumn('locais', 'obra_id', 'INTEGER REFERENCES obras(id) ON DELETE SET NULL');
+    await ensureColumn('locais', 'equipe_id', 'INTEGER REFERENCES equipes(id) ON DELETE SET NULL');
+    await ensureColumn('rdos', 'local_id', 'INTEGER REFERENCES locais(id) ON DELETE SET NULL');
+    await ensureColumn('presenca', 'local_id', 'INTEGER REFERENCES locais(id) ON DELETE SET NULL');
+    try { await db.exec('CREATE INDEX IF NOT EXISTS idx_locais_obra ON locais(obra_id)'); } catch(e){}
+    try { await db.exec('CREATE INDEX IF NOT EXISTS idx_locais_equipe ON locais(equipe_id)'); } catch(e){}
+    try { await db.exec('CREATE INDEX IF NOT EXISTS idx_rdos_local_id ON rdos(local_id)'); } catch(e){}
   }
   // Admin padrao (async para ambos)
   const admin = await db.prepare('SELECT id FROM usuarios WHERE email=?').get('admin@ipq.com');
@@ -197,6 +215,36 @@ async function initDb(){
       if (!ex) await db.prepare('INSERT INTO atividades (nome, ativo) VALUES (?,1)').run(n);
       else await db.prepare('UPDATE atividades SET ativo=1 WHERE nome=?').run(n);
     }
+  }
+  // Backfill F0: popula obra_id/equipe_id em locais e local_id em rdos (idempotente, preserva TJ-CE)
+  if (tjceFinal) {
+    try {
+      const c1 = (await db.prepare('SELECT COUNT(*) as c FROM locais WHERE obra_id IS NULL AND ativo=1').get()).c;
+      if (c1>0) {
+        await db.prepare('UPDATE locais SET obra_id=? WHERE obra_id IS NULL AND ativo=1').run(tjceFinal.id);
+        console.log(`[migracao] locais.obra_id backfill ${c1} TJ-CE`);
+      }
+    } catch(e){ console.log('[migracao] obra_id', e.message); }
+    try {
+      const regs = await db.prepare("SELECT DISTINCT regiao FROM locais WHERE regiao IS NOT NULL AND regiao<>'' AND (equipe_id IS NULL OR equipe_id=0)").all();
+      for (const r of regs) {
+        const eq = await db.prepare('SELECT id FROM equipes WHERE nome=? AND ativo=1').get(r.regiao);
+        if (eq) await db.prepare('UPDATE locais SET equipe_id=? WHERE regiao=? AND (equipe_id IS NULL OR equipe_id=0)').run(eq.id, r.regiao);
+      }
+      console.log('[migracao] locais.equipe_id backfill');
+    } catch(e){ console.log('[migracao] equipe_id', e.message); }
+    try {
+      const c3 = (await db.prepare('SELECT COUNT(*) as c FROM rdos WHERE local_id IS NULL AND local IS NOT NULL').get()).c;
+      if (c3>0) {
+        // compatível SQLite e Postgres (subquery) - LIMIT 1 evita múltiplas linhas se houver homônimos
+        if (db.isPostgres) {
+          await db.exec(`UPDATE rdos SET local_id=(SELECT id FROM locais WHERE locais.nome=rdos.local LIMIT 1) WHERE local_id IS NULL AND local IS NOT NULL`);
+        } else {
+          await db.exec(`UPDATE rdos SET local_id=(SELECT id FROM locais WHERE locais.nome=rdos.local LIMIT 1) WHERE local_id IS NULL AND local IS NOT NULL`);
+        }
+        console.log(`[migracao] rdos.local_id backfill ${c3}`);
+      }
+    } catch(e){ console.log('[migracao] rdos.local_id', e.message); }
   }
 }
 const dbReady = initDb();
