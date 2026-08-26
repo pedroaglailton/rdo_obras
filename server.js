@@ -189,6 +189,13 @@ async function initDb(){
       }
       console.log('[db] template etapas TJ-CE criado (4)');
     }
+    // Garante atividades correspondentes para o select de RDO (app)
+    const nomesAtiv = ['Levantamento','Infraestrutura','Cabeamento','Instalação e Testes'];
+    for (const n of nomesAtiv) {
+      const ex = await db.prepare('SELECT id FROM atividades WHERE nome=?').get(n);
+      if (!ex) await db.prepare('INSERT INTO atividades (nome, ativo) VALUES (?,1)').run(n);
+      else await db.prepare('UPDATE atividades SET ativo=1 WHERE nome=?').run(n);
+    }
   }
 }
 const dbReady = initDb();
