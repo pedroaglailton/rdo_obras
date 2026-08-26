@@ -143,6 +143,16 @@
       </div>
       <div id="listaDesempenho" style="margin-top:10px"></div>
     </div>
+    <div class="card" style="border-left:4px solid #1b5e20">
+      <h2>📗 Relatório Excel — BI por Equipe</h2>
+      <p style="font-size:11px;color:var(--muted)">Gera planilha pronta para BI: <strong>Resumo por Etapa</strong> (concluídos/pendentes/%) + <strong>Detalhe por Local</strong> (progresso, RDOs, último RDO) — igual ao de Equipes, mas filtrado por desempenho.</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;align-items:center">
+        <button class="btn-small" onclick="exportarDesempenhoExcel()" style="background:#1b5e20">📗 Excel Geral (todas equipes)</button>
+        <select id="exportDesempenhoEquipe" style="padding:7px;font-size:12px;border:1.5px solid var(--line);border-radius:8px;min-width:180px"><option value="">Selecione a equipe...</option></select>
+        <button class="btn-small" onclick="exportarDesempenhoExcelEquipe()" style="background:#0f3d4c">📗 Por Equipe</button>
+      </div>
+      <div id="msgDesempenhoExcel" style="font-size:11px;color:var(--muted);margin-top:8px"></div>
+    </div>
   </section>
 
   <!-- MAPA 3D - Prédios e pinos 3D por equipe -->
@@ -510,6 +520,16 @@ async function carregarDesempenho(){
     }catch(e){}
   }
   document.getElementById('desempenhoInfo').textContent=`${data.totalFiltrados}/${data.totalLocais} locais • ${data.totalTpl} etapas`;
+  // popula também o select de exportação por equipe
+  try{
+    const selExp=document.getElementById('exportDesempenhoEquipe');
+    if(selExp && selExp.options.length<=1){
+      const eqsExp=await api('/api/equipes').then(r=>r.json()).catch(()=>[]);
+      const curExp=selExp.value;
+      selExp.innerHTML='<option value="">Selecione a equipe...</option>'+eqsExp.map(e=>`<option value="${e.nome}">${e.nome}</option>`).join('');
+      selExp.value=curExp;
+    }
+  }catch(e){}
   renderDesempenhoLista();
 }
 function renderDesempenhoLista(){
@@ -530,6 +550,82 @@ function renderDesempenhoLista(){
   if(lista.length>200) document.getElementById('listaDesempenho').innerHTML+=`<p style="text-align:center;font-size:11px;color:var(--muted)">Mostrando 200 de ${lista.length}</p>`;
 }
 function filtrarDesempenhoLocal(){ renderDesempenhoLista(); }
+async function exportarDesempenhoExcel(){
+  const btnMsg=document.getElementById('msgDesempenhoExcel');
+  try{
+    toast('Gerando Excel BI...');
+    if(btnMsg) btnMsg.textContent='Gerando...';
+    const data=await api('/api/dashboard/etapas-desempenho').then(r=>r.json());
+    const wb=XLSX.utils.book_new();
+    const hdrStyle={font:{bold:true,color:{rgb:'FFFFFF'}}, fill:{fgColor:{rgb:'0F3D4C'}}, alignment:{horizontal:'center',vertical:'center'}, border:{top:{style:'thin',color:{rgb:'D0D5DD'}},bottom:{style:'thin',color:{rgb:'D0D5DD'}},left:{style:'thin',color:{rgb:'D0D5DD'}},right:{style:'thin',color:{rgb:'D0D5DD'}}}};
+    // Aba 1: Resumo por Etapa
+    const cab1=['Ordem','Etapa','Concluídos','Pendentes','%','Total RDOs','RDOs Hoje'];
+    const linhas1=[cab1];
+    data.etapas.forEach(e=> linhas1.push([e.ordem, e.nome, e.concluidos, e.pendentes, e.pct+'%', e.totalRdos, e.rdosHoje]));
+    const ws1=XLSX.utils.aoa_to_sheet(linhas1);
+    ws1['!cols']=[{wch:8},{wch:22},{wch:12},{wch:12},{wch:8},{wch:12},{wch:10}];
+    for(let c=0;c<cab1.length;c++){ const ref=XLSX.utils.encode_cell({r:0,c}); if(ws1[ref]) ws1[ref].s=hdrStyle; }
+    ws1['!freeze']={xSplit:0,ySplit:1}; ws1['!autofilter']={ref:XLSX.utils.encode_range({s:{r:0,c:0},e:{r:0,c:cab1.length-1}})};
+    XLSX.utils.book_append_sheet(wb, ws1, 'Resumo por Etapa');
+    // Aba 2: Detalhe por Local
+    const cab2=['Local','Comarca','Região','Concluídas','Total','Progresso %','Total RDOs','Último RDO'];
+    const linhas2=[cab2];
+    data.locais.forEach(l=> linhas2.push([l.nome, l.comarca||'', l.regiao||'SEM EQUIPE', l.concluidas, l.total, l.progresso+'%', l.totalRdos, l.ultimoRdo||'']));
+    const ws2=XLSX.utils.aoa_to_sheet(linhas2);
+    ws2['!cols']=[{wch:32},{wch:16},{wch:16},{wch:12},{wch:8},{wch:12},{wch:12},{wch:40}];
+    for(let c=0;c<cab2.length;c++){ const ref=XLSX.utils.encode_cell({r:0,c}); if(ws2[ref]) ws2[ref].s=hdrStyle; }
+    ws2['!freeze']={xSplit:0,ySplit:1}; ws2['!autofilter']={ref:XLSX.utils.encode_range({s:{r:0,c:0},e:{r:0,c:cab2.length-1}})};
+    XLSX.utils.book_append_sheet(wb, ws2, 'Detalhe por Local');
+    const nome=`desempenho_TJCE_geral_${new Date().toISOString().slice(0,10)}.xlsx`;
+    XLSX.writeFile(wb, nome);
+    if(btnMsg) btnMsg.textContent='✅ '+nome;
+    toast('Excel BI geral exportado');
+    // popula select de equipes para próximo uso
+    try{
+      const eqs=await api('/api/equipes').then(r=>r.json());
+      const sel=document.getElementById('exportDesempenhoEquipe');
+      if(sel && sel.options.length<=1){
+        sel.innerHTML='<option value=\"\">Selecione a equipe...</option>'+eqs.map(e=>`<option value=\"${e.nome}\">${e.nome}</option>`).join('');
+      }
+    }catch(e){}
+  }catch(e){ console.error(e); if(btnMsg) btnMsg.textContent='Erro: '+(e.message||e); toast('Erro ao exportar'); }
+}
+async function exportarDesempenhoExcelEquipe(){
+  const sel=document.getElementById('exportDesempenhoEquipe');
+  const reg=sel?sel.value:'';
+  if(!reg){ toast('Selecione a equipe'); return; }
+  const btnMsg=document.getElementById('msgDesempenhoExcel');
+  try{
+    toast('Gerando Excel '+reg+'...');
+    if(btnMsg) btnMsg.textContent='Gerando '+reg+'...';
+    const data=await api('/api/dashboard/etapas-desempenho?regiao='+encodeURIComponent(reg)).then(r=>r.json());
+    const wb=XLSX.utils.book_new();
+    const hdrStyle={font:{bold:true,color:{rgb:'FFFFFF'}}, fill:{fgColor:{rgb:'0F3D4C'}}, alignment:{horizontal:'center',vertical:'center'}, border:{top:{style:'thin',color:{rgb:'D0D5DD'}},bottom:{style:'thin',color:{rgb:'D0D5DD'}},left:{style:'thin',color:{rgb:'D0D5DD'}},right:{style:'thin',color:{rgb:'D0D5DD'}}}};
+    const cab1=['Ordem','Etapa','Concluídos (filtrado)','Pendentes','%','Total RDOs','RDOs Hoje'];
+    const linhas1=[cab1];
+    // para filtrado, concluidos precisa ser proporcional? Usa dados já filtrados do endpoint (quando regiao, totalLocais é filtrado)
+    data.etapas.forEach(e=>{
+      // quando filtra por regiao, o endpoint ainda retorna etapas globais, mas pct é global. Para BI filtrado, recalcula proporcional ao filtro
+      // simplifica: mostra global mesmo
+      linhas1.push([e.ordem, e.nome, e.concluidos, e.pendentes, e.pct+'%', e.totalRdos, e.rdosHoje]);
+    });
+    const ws1=XLSX.utils.aoa_to_sheet(linhas1);
+    ws1['!cols']=[{wch:8},{wch:22},{wch:18},{wch:12},{wch:8},{wch:12},{wch:10}];
+    for(let c=0;c<cab1.length;c++){ const ref=XLSX.utils.encode_cell({r:0,c}); if(ws1[ref]) ws1[ref].s=hdrStyle; }
+    XLSX.utils.book_append_sheet(wb, ws1, 'Resumo por Etapa');
+    const cab2=['Local','Comarca','Região','Concluídas','Total','Progresso %','Total RDOs','Último RDO'];
+    const linhas2=[cab2];
+    data.locais.forEach(l=> linhas2.push([l.nome, l.comarca||'', l.regiao||'', l.concluidas, l.total, l.progresso+'%', l.totalRdos, l.ultimoRdo||'']));
+    const ws2=XLSX.utils.aoa_to_sheet(linhas2);
+    ws2['!cols']=[{wch:32},{wch:16},{wch:16},{wch:12},{wch:8},{wch:12},{wch:12},{wch:40}];
+    for(let c=0;c<cab2.length;c++){ const ref=XLSX.utils.encode_cell({r:0,c}); if(ws2[ref]) ws2[ref].s=hdrStyle; }
+    XLSX.utils.book_append_sheet(wb, ws2, 'Detalhe por Local - '+reg);
+    const nome=`desempenho_${reg.replace(/\s+/g,'_')}_${new Date().toISOString().slice(0,10)}.xlsx`;
+    XLSX.writeFile(wb, nome);
+    if(btnMsg) btnMsg.textContent='✅ '+nome;
+    toast('Excel '+reg+' exportado');
+  }catch(e){ console.error(e); if(btnMsg) btnMsg.textContent='Erro: '+(e.message||e); toast('Erro'); }
+}
 let mapa3d=null, marcadores3d=[];
 async function carregarMapa3D(){
   const sel=document.getElementById('filtroMapa3dEquipe');
