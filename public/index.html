@@ -232,13 +232,30 @@
     </div>
   </section>
 
-  <!-- ATIVIDADES -->
+  <!-- ATIVIDADES - Visual profissional -->
   <section class="view" id="view-atividades">
+    <div class="card" style="border-left:4px solid #0f3d4c">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+        <h2 style="margin:0">🔧 Atividades / Etapas</h2>
+        <span style="font-size:11px;background:#f7f9fa;border:1px solid var(--line);padding:4px 10px;border-radius:20px"><span id="countAtividades">0</span> atividades • <span id="countAtvTemplate">0</span> do template TJ-CE</span>
+      </div>
+      <p style="font-size:11px;color:var(--muted);margin:6px 0 0">Atividades viram <strong>etapas per-local</strong> automaticamente: cada RDO com essa atividade marca a etapa como concluída naquele local (progresso 25%/50%...).</p>
+    </div>
     <div class="card">
       <h2>Nova Atividade</h2>
-      <div class="form-row"><input type="text" id="nomeAtividade" placeholder="Nome da atividade"><button class="btn-primary" onclick="adicionarAtividade()">Adicionar</button></div>
+      <div class="form-row" style="align-items:end">
+        <div style="flex:1"><label style="margin:0 0 4px">Nome da atividade *</label><input type="text" id="nomeAtividade" placeholder="Ex: Levantamento, Infraestrutura..."></div>
+        <button class="btn-primary" onclick="adicionarAtividade()" style="width:auto;padding:10px 18px;white-space:nowrap">+ Adicionar</button>
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-top:6px">Dica: use os 4 nomes do template para atualizar o progresso automaticamente.</div>
     </div>
-    <div class="card"><h2>Atividades</h2><div id="listaAtividades"></div></div>
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+        <h2 style="margin:0">Atividades Cadastradas</h2>
+        <input type="text" id="buscaAtividade" placeholder="Buscar..." oninput="filtrarAtividades()" style="width:160px;padding:7px;font-size:12px;border:1.5px solid var(--line);border-radius:8px">
+      </div>
+      <div id="listaAtividades" style="margin-top:12px;display:grid;gap:8px"></div>
+    </div>
   </section>
 
   <!-- MATERIAIS - Organizado visualmente -->
@@ -795,11 +812,35 @@ async function vincularLocalObra() {
 
 async function excluirLocal(id) { await api('/api/locais/' + id, { method: 'DELETE' }); carregarLocais(); }
 
-// ATIVIDADES
+// ATIVIDADES - Visual profissional com contagem de RDOs e vínculo com template
+let atividadesCache=[];
 async function carregarAtividades() {
-  const atvs = await api('/api/atividades').then(r => r.json());
-  document.getElementById('listaAtividades').innerHTML = atvs.map(a => '<li><strong>' + a.nome + '</strong><button class="btn-delete" onclick="excluirAtividade(' + a.id + ')">&times;</button></li>').join('') || '<p class="empty-state">Nenhuma atividade</p>';
+  const [atvs, rdos] = await Promise.all([api('/api/atividades').then(r=>r.json()), api('/api/rdos').then(r=>r.json()).catch(()=>[])]);
+  atividadesCache=atvs;
+  const tplNomes=['Levantamento','Infraestrutura','Cabeamento','Instalação e Testes'];
+  document.getElementById('countAtividades').textContent=atvs.length;
+  document.getElementById('countAtvTemplate').textContent=atvs.filter(a=> tplNomes.some(t=> t.toLowerCase()===a.nome.toLowerCase())).length;
+  const countPorAtv={}; rdos.forEach(r=>{ if(r.atividade) countPorAtv[r.atividade]=(countPorAtv[r.atividade]||0)+1; });
+  const busca=(document.getElementById('buscaAtividade')?.value||'').toLowerCase();
+  let lista=atvs; if(busca) lista=lista.filter(a=> a.nome.toLowerCase().includes(busca));
+  document.getElementById('listaAtividades').innerHTML = lista.map(a=>{
+    const isTpl=tplNomes.some(t=> t.toLowerCase()===a.nome.toLowerCase());
+    const ordem=tplNomes.findIndex(t=> t.toLowerCase()===a.nome.toLowerCase())+1;
+    const qtd=countPorAtv[a.nome]||0;
+    const cor=isTpl?'#0f3d4c':'#68767f'; const bg=isTpl?'#e8f5e9':'#f7f9fa';
+    const badgeTpl=isTpl?`<span style="font-size:10px;background:#0f3d4c;color:#fff;padding:2px 7px;border-radius:8px">Etapa ${ordem} TJ-CE</span>`:`<span style="font-size:10px;background:#e1e5ea;color:#68767f;padding:2px 7px;border-radius:8px">Custom</span>`;
+    const badgeUso=qtd?`<span style="font-size:10px;background:#fff3e0;color:#ef6c00;padding:2px 7px;border-radius:8px">${qtd} RDOs</span>`:`<span style="font-size:10px;background:#f7f9fa;color:#68767f;padding:2px 7px;border-radius:8px;border:1px solid var(--line)">0 RDOs</span>`;
+    return `<div style="display:flex;align-items:center;gap:12px;padding:12px;background:${bg};border:1px solid var(--line);border-left:4px solid ${cor};border-radius:10px">
+      <div style="width:36px;height:36px;border-radius:8px;background:${cor};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px">${a.nome.charAt(0).toUpperCase()}</div>
+      <div style="flex:1;min-width:0">
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><strong style="font-size:14px">${a.nome}</strong> ${badgeTpl} ${badgeUso}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px">${isTpl?'Faz parte do progresso automático (25% por etapa)':'Atividade avulsa — cria etapa per-local com ordem 999'}</div>
+      </div>
+      <button onclick="excluirAtividade(${a.id})" title="Excluir" style="width:32px;height:32px;border-radius:8px;background:#fff;border:1px solid var(--line);color:var(--danger);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:18px">×</button>
+    </div>`;
+  }).join('') || '<p class="empty-state">Nenhuma atividade — adicione acima</p>';
 }
+function filtrarAtividades(){ carregarAtividades(); }
 async function adicionarAtividade() {
   const nome = document.getElementById('nomeAtividade').value.trim();
   if (!nome) { toast('Nome obrigatorio'); return; }
@@ -807,7 +848,7 @@ async function adicionarAtividade() {
   document.getElementById('nomeAtividade').value = '';
   carregarAtividades(); toast('Atividade adicionada!');
 }
-async function excluirAtividade(id) { await api('/api/atividades/' + id, { method: 'DELETE' }); carregarAtividades(); }
+async function excluirAtividade(id) { if(!confirm('Excluir atividade?')) return; await api('/api/atividades/' + id, { method: 'DELETE' }); carregarAtividades(); toast('Excluída'); }
 
 // MATERIAIS - Organizado visualmente por categorias
 let materiaisCache = [];
