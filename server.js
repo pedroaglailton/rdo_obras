@@ -164,6 +164,16 @@ async function initDb(){
       .run('Administrador', 'admin@ipq.com', hash('admin123'), 'gestor');
     console.log('[db] admin criado');
   }
+  // Obra global TJ-CE — modo obra única (todos os locais pertencem a ela, sem vincular 1 a 1)
+  // Nenhuma mudança de schema: apenas garante 1 registro global com local_id NULL
+  const tjce = await db.prepare("SELECT id FROM obras WHERE UPPER(REPLACE(nome,' ',''))=UPPER(?) AND ativo=1").get('TJ-CE');
+  // também tenta sem hífen para compatibilidade
+  const tjce2 = tjce || await db.prepare("SELECT id FROM obras WHERE UPPER(REPLACE(REPLACE(nome,'-',''), ' ',''))=UPPER(?) AND ativo=1").get('TJCE');
+  if (!tjce && !tjce2) {
+    await db.prepare("INSERT INTO obras (nome, local_id, comarca, status, progresso, descricao) VALUES (?,?,?,?,?,?)")
+      .run('TJ-CE', null, '', 'em_andamento', 0, 'Obra global - todos os locais TJCE');
+    console.log('[db] obra TJ-CE criada (global, sem local_id)');
+  }
 }
 const dbReady = initDb();
 
@@ -501,10 +511,13 @@ app.get('/api/locais', async (req, res) => {
   let sql = 'SELECT * FROM locais WHERE ativo=1';
   const p = [];
   if (req.query.obra_id) { 
-    // Buscar comarca da obra e filtrar locais por comarca
-    const obra = await db.prepare('SELECT comarca FROM obras WHERE id=?').get(req.query.obra_id);
-    if (obra && obra.comarca) { sql += ' AND UPPER(comarca)=UPPER(?)'; p.push(obra.comarca); }
-    else { sql += ' AND 1=0'; } // Se obra nao tem comarca, retorna vazio
+    // Modo obra única TJ-CE: retorna TODOS os locais (sem filtro por comarca) — economiza cadastro 1 a 1
+    const obra = await db.prepare('SELECT comarca, nome FROM obras WHERE id=?').get(req.query.obra_id);
+    const isGlobal = obra && obra.nome && obra.nome.trim().toUpperCase().replace(/[-\s]/g,'') === 'TJCE';
+    if (isGlobal) {
+      // não filtra por comarca — TJ-CE engloba todas as comarcas
+    } else if (obra && obra.comarca) { sql += ' AND UPPER(comarca)=UPPER(?)'; p.push(obra.comarca); }
+    else { sql += ' AND 1=0'; } // obra sem comarca e não-global retorna vazio (legado)
   }
   if (req.query.comarca) { sql += ' AND UPPER(comarca)=UPPER(?)'; p.push(req.query.comarca); }
   if (req.query.regiao) { sql += ' AND regiao=?'; p.push(req.query.regiao); }
@@ -516,25 +529,30 @@ app.get('/api/locais/comarcas', async (req, res) => {
   res.json((await db.prepare('SELECT DISTINCT comarca FROM locais WHERE ativo=1 AND comarca IS NOT NULL ORDER BY comarca').all()).map(r => r.comarca));
 });
 
-// Locais da equipe com progresso da obra (automatizado para app)
+// Locais da equipe com progresso da obra (automatizado para app) — suporta modo TJ-CE global
 app.get('/api/equipe/:regiao/locais', async (req, res) => {
   const reg = req.params.regiao;
+  const tjce = await db.prepare("SELECT id, nome, progresso, status, prazo_dias, data_inicio FROM obras WHERE UPPER(REPLACE(REPLACE(nome,'-',''),' ',''))=UPPER(?) AND ativo=1").get('TJCE');
   const rows = await db.prepare(`
     SELECT l.*, o.id as obra_id, o.nome as obra_nome, o.progresso as obra_progresso, o.status as obra_status, o.prazo_dias, o.data_inicio
     FROM locais l LEFT JOIN obras o ON o.local_id = l.id AND o.ativo=1
     WHERE l.ativo=1 AND l.regiao = ?
     ORDER BY o.progresso ASC, l.comarca
   `).all(reg);
-  // para SEM EQUIPE busca regiao IS NULL ou ''
+  // Fallback global: se local não tem obra própria (modo TJ-CE), usa obra global
+  const applyGlobal = r => {
+    if (!r.obra_id && tjce) { r.obra_id = tjce.id; r.obra_nome = tjce.nome; r.obra_progresso = tjce.progresso; r.obra_status = tjce.status; r.prazo_dias = tjce.prazo_dias; r.data_inicio = tjce.data_inicio; }
+    return r;
+  };
   if (reg==='SEM EQUIPE') {
     const sem = await db.prepare(`
       SELECT l.*, o.id as obra_id, o.nome as obra_nome, o.progresso as obra_progresso, o.status as obra_status FROM locais l LEFT JOIN obras o ON o.local_id=l.id AND o.ativo=1
       WHERE l.ativo=1 AND (l.regiao IS NULL OR l.regiao='')
       ORDER BY l.comarca LIMIT 100
     `).all();
-    return res.json(sem);
+    return res.json(sem.map(applyGlobal));
   }
-  res.json(rows);
+  res.json(rows.map(applyGlobal));
 });
 
 // Atribuir locais a equipe (dashboard define onde cada equipe vai trabalhar)
@@ -549,16 +567,20 @@ app.post('/api/locais/atribuir-equipe', gestor, async (req, res) => {
   for (const id of ids) {
     await db.prepare('UPDATE locais SET regiao=? WHERE id=?').run(regNorm==='SEM EQUIPE'?'':regNorm, Number(id));
   }
-  // garantir obra para cada local atribuído (se não tem, cria com progresso 0)
-  for (const id of ids) {
-    const loc = await db.prepare('SELECT id, nome, comarca, endereco FROM locais WHERE id=?').get(Number(id));
-    if(!loc) continue;
-    const obraExiste = await db.prepare('SELECT id FROM obras WHERE local_id=? AND ativo=1').get(loc.id);
-    if(!obraExiste && regNorm){
-      await db.prepare('INSERT INTO obras (nome, local_id, comarca, status, progresso) VALUES (?,?,?, ?,0)').run(loc.nome, loc.id, loc.comarca||'', 'planejamento');
+  // Modo TJ-CE global: NÃO cria obra por local (economiza 233 cadastros). Todos os locais já pertencem à TJ-CE implícita.
+  const tjceGlobal = await db.prepare("SELECT id FROM obras WHERE UPPER(REPLACE(REPLACE(nome,'-',''),' ',''))=UPPER(?) AND ativo=1").get('TJCE');
+  if (!tjceGlobal) {
+    // fallback legado: se não há TJ-CE, mantém comportamento antigo (1 obra por local)
+    for (const id of ids) {
+      const loc = await db.prepare('SELECT id, nome, comarca, endereco FROM locais WHERE id=?').get(Number(id));
+      if(!loc) continue;
+      const obraExiste = await db.prepare('SELECT id FROM obras WHERE local_id=? AND ativo=1').get(loc.id);
+      if(!obraExiste && regNorm){
+        await db.prepare('INSERT INTO obras (nome, local_id, comarca, status, progresso) VALUES (?,?,?, ?,0)').run(loc.nome, loc.id, loc.comarca||'', 'planejamento');
+      }
     }
   }
-  res.json({ok:true, atualizados: ids.length});
+  res.json({ok:true, atualizados: ids.length, modo_global: !!tjceGlobal});
 });
 
 app.get('/api/locais/:id', async (req, res) => {
@@ -794,12 +816,18 @@ app.get('/api/rdos/:id', async (req, res) => {
 app.post('/api/rdos', async (req, res) => {
   const d = req.body;
   if (!d.data || !d.local) return res.status(400).json({ error: 'Data e local obrigatorios' });
+  // Modo TJ-CE global: se não informou obra, vincula automaticamente à TJ-CE (economiza seleção)
+  let obraId = d.obra_id || null;
+  if (!obraId) {
+    const tjce = await db.prepare("SELECT id FROM obras WHERE UPPER(REPLACE(REPLACE(nome,'-',''),' ',''))=UPPER(?) AND ativo=1").get('TJCE');
+    if (tjce) obraId = tjce.id;
+  }
   const r = await db.prepare(`INSERT INTO rdos (obra_id,data,local,atividade,equipe_json,materiais_json,
     entrada_manha,saida_manha,entrada_tarde,saida_tarde,
     parou,motivo_parada,switch_instalado,nom_switch,local_switch,
     camera_instalada,nom_camera,local_camera,fotos_json,usuario_id,usuario_nome)
     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
-    d.obra_id || null, d.data, d.local, d.atividade || '',
+    obraId, d.data, d.local, d.atividade || '',
     JSON.stringify(d.equipe || []), JSON.stringify(d.materiais || []),
     d.entrada_manha, d.saida_manha, d.entrada_tarde, d.saida_tarde,
     d.parou || 'nao', d.motivo_parada || '',

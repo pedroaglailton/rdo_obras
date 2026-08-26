@@ -766,28 +766,103 @@
   }
   window.centralizarMapa = centralizarMapa;
 
-  // Carregar dados
+  // Carregar dados — modo TJ-CE global inteligente: obra implícita, locais vêm da equipe já atribuída
   async function carregarDados() {
     const [obras, atividades] = await Promise.all([api('/api/obras').then(r => r.json()), api('/api/atividades').then(r => r.json())]);
     const selObra = $('f_obra');
     selObra.innerHTML = '<option value="">Selecione a obra</option>';
-    obras.forEach(o => { selObra.innerHTML += '<option value="' + o.id + '">' + o.nome + (o.comarca ? ' - ' + o.comarca : '') + '</option>'; });
+    obras.forEach(o => { selObra.innerHTML += '<option value="' + o.id + '">' + o.nome + (o.comarca ? ' - ' + o.comarca : '') + (o.nome && o.nome.replace(/[-\s]/g,'').toUpperCase()==='TJCE' ? ' ★' : '') + '</option>'; });
 
     const selAtv = $('f_atividade');
     selAtv.innerHTML = '<option value="">Selecione</option>' + atividades.map(a => '<option>' + a.nome + '</option>').join('') + '<option value="__outro">Outra...</option>';
+    const tjce = obras.find(o => o.nome && o.nome.replace(/[-\s]/g,'').toUpperCase()==='TJCE');
+    if (tjce) {
+      // Obra única TJ-CE → trava seleção (inteligente: não precisa escolher obra, só local da equipe)
+      selObra.value = tjce.id;
+      selObra.disabled = true;
+      selObra.style.background = '#e8f5e9';
+      selObra.style.borderColor = 'var(--ok)';
+      const labelObra = selObra.previousElementSibling;
+      if (labelObra && labelObra.tagName==='LABEL') {
+        const equipeNome = _minhaEquipeCache && _minhaEquipeCache.nome ? _minhaEquipeCache.nome : '';
+        labelObra.innerHTML = 'Obra <span style="color:var(--ok);font-weight:700">— TJ-CE (única) 🔒</span>' + (equipeNome ? ' <span style="font-weight:400;color:var(--muted)">· sua equipe: '+equipeNome+'</span>' : '');
+      }
+      // Garante que _minhaEquipeCache esteja carregado antes de buscar locais; se ainda não, carregaHome primeiro
+      if (!_minhaEquipeCache) {
+        try { _minhaEquipeCache = await api('/api/minha-equipe').then(r=>r.json()); } catch(e){}
+      }
+      selObra.dispatchEvent(new Event('change'));
+    } else if (obras.length===1) {
+      selObra.value = obras[0].id;
+      selObra.dispatchEvent(new Event('change'));
+    }
   }
 
   $('f_obra').addEventListener('change', async function() {
     const obraId = this.value;
     const selLocal = $('f_local');
     if (!obraId) { selLocal.innerHTML = '<option value="">Selecione a obra primeiro</option>'; return; }
-    const locais = await api('/api/locais?obra_id=' + obraId).then(r => r.json());
-    selLocal.innerHTML = '<option value="">Selecione o local</option>';
-    locais.forEach(l => { selLocal.innerHTML += '<option value="' + l.nome + '">' + l.nome + (l.comarca ? ' - ' + l.comarca : '') + '</option>'; });
-    selLocal.innerHTML += '<option value="__outro">Outro...</option>';
+    const selText = this.options[this.selectedIndex]?.text || '';
+    const isTJCE = selText.replace(/[-\s]/g,'').toUpperCase().includes('TJCE');
+    selLocal.innerHTML = '<option value="">Carregando...</option>';
+    let locais = [];
+    // Inteligente: se TJ-CE e técnico tem equipe, busca SÓ os locais atribuídos a ela (via /api/equipe/:regiao/locais)
+    // Isso reaproveita o que o gestor já fez em Locais → Atribuir selecionados, sem recadastrar
+    let equipeNome = _minhaEquipeCache && _minhaEquipeCache.nome ? _minhaEquipeCache.nome : null;
+    if (isTJCE) {
+      if (!equipeNome) {
+        try { const me = await api('/api/minha-equipe').then(r=>r.json()); _minhaEquipeCache = me; equipeNome = me && me.nome ? me.nome : null; } catch(e){}
+      }
+      if (equipeNome) {
+        try { locais = await api('/api/equipe/'+encodeURIComponent(equipeNome)+'/locais').then(r=>r.json()); } catch(e){ locais = await api('/api/locais?obra_id='+obraId).then(r=>r.json()); }
+      } else {
+        // sem equipe: gestor vê todos (233), técnico sem equipe vê só SEM EQUIPE (161)
+        const isGestor = (user && user.perfil === 'gestor');
+        if (isGestor) {
+          locais = await api('/api/locais?obra_id='+obraId).then(r=>r.json());
+        } else {
+          try { locais = await api('/api/equipe/SEM%20EQUIPE/locais').then(r=>r.json()); } catch(e){ locais = await api('/api/locais?obra_id='+obraId).then(r=>r.json()); }
+        }
+      }
+      // Fallback: se equipe não tem locais atribuídos, mostra todos com aviso
+      if (!locais.length) locais = await api('/api/locais?obra_id='+obraId).then(r=>r.json());
+    } else {
+      locais = await api('/api/locais?obra_id=' + obraId).then(r => r.json());
+    }
+    // Guarda cache para auto-detecção GPS e seleção rápida
+    if (isTJCE && equipeNome) window._equipeLocaisCache = locais;
+    selLocal.innerHTML = '<option value="">Selecione o local ('+locais.length+' da sua equipe)</option>';
+    locais.forEach(l => {
+      const prog = l.obra_progresso!=null ? ' · '+l.obra_progresso+'%' : '';
+      const cam = l.cameras ? ' · 📷'+l.cameras : '';
+      selLocal.innerHTML += '<option value="' + l.nome + '">' + l.nome + (l.comarca ? ' - ' + l.comarca : '') + prog + cam + (isTJCE ? '' : (l.regiao ? ' ['+l.regiao+']':'')) + '</option>';
+    });
+    // Link para expandir para todos os 233 quando filtrado por equipe
+    if (isTJCE && equipeNome && locais.length < 233) {
+      selLocal.innerHTML += '<option disabled>──</option>';
+      selLocal.innerHTML += '<option value="__ver_todos">🔍 Ver todos os 233 locais TJ-CE...</option>';
+    }
+    selLocal.innerHTML += '<option value="__outro">✏️ Outro (digitar)</option>';
+    // Handler para "ver todos"
+    selLocal.onchange = async function() {
+      if (this.value === '__ver_todos') {
+        this.innerHTML = '<option>Carregando todos...</option>';
+        const todos = await api('/api/locais?obra_id='+obraId).then(r=>r.json());
+        this.innerHTML = '<option value="">Selecione o local (todos: '+todos.length+')</option>';
+        todos.forEach(l => { this.innerHTML += '<option value="' + l.nome + '">' + l.nome + (l.comarca ? ' - ' + l.comarca : '') + (l.regiao ? ' ['+l.regiao+']' : '') + '</option>'; });
+        this.innerHTML += '<option value="__outro">✏️ Outro</option>';
+        return;
+      }
+      $('f_local_outro').style.display = this.value === '__outro' ? 'block' : 'none';
+      // cidade auto
+      if (this.value && this.value!=='__outro' && this.value!=='__ver_todos') {
+        const loc = locais.find(x=>x.nome===this.value) || (await api('/api/locais?busca='+encodeURIComponent(this.value)).then(r=>r.json()).then(a=>a[0]));
+        if (loc) $('f_cidade').value = loc.comarca || '';
+      }
+    };
   });
 
-  $('f_local').addEventListener('change', function() { $('f_local_outro').style.display = this.value === '__outro' ? 'block' : 'none'; });
+  // f_local change já tratado dentro do handler de f_obra (usa cache da equipe, evita buscar todos 233)
   $('f_atividade').addEventListener('change', function() { $('f_atividade_outro').style.display = this.value === '__outro' ? 'block' : 'none'; });
 
   // Equipe chips + seleção rápida dos membros da equipe (usuários vinculados)
