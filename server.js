@@ -1,6 +1,7 @@
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
+// deploy trigger 2026-08-26 - força Render a reimplantar aba Atividades
 const path = require('path');
 const multer = require('multer');
 const fs = require('fs');
