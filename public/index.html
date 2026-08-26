@@ -185,8 +185,19 @@
       <input type="hidden" id="obraEditId">
       <label>Nome da obra</label>
       <input type="text" id="obraNome" placeholder="Nome da obra">
-      <label>Local (Imovel TJCE)</label>
-      <select id="obraLocal"><option value="">Selecione o local</option></select>
+      <label>Local <span style="font-weight:400;color:var(--muted)">(opcional para TJ-CE — global)</span></label>
+      <div style="display:flex;gap:6px;align-items:center">
+        <select id="obraLocal" style="flex:1"><option value="">Selecione o local</option></select>
+        <button type="button" class="btn-small" onclick="abrirNovoLocalObra()" style="white-space:nowrap;background:#e3f2fd;color:#1565c0;border:1px solid #90caf9">+ Novo Local</button>
+      </div>
+      <div id="novoLocalObraBox" style="display:none;margin-top:8px;padding:10px;background:#f7f9fa;border:1px solid var(--line);border-radius:8px">
+        <div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:6px">Novo local para esta obra (fora TJ-CE)</div>
+        <input type="text" id="novoLocalNome" placeholder="Nome do imóvel *">
+        <div class="form-row" style="margin-top:6px"><input type="text" id="novoLocalComarca" placeholder="Comarca"><input type="text" id="novoLocalEndereco" placeholder="Endereço"></div>
+        <div style="display:flex;gap:6px;margin-top:6px"><button type="button" class="btn-small" onclick="criarLocalParaObra()" style="background:#0f3d4c">Criar e selecionar</button><button type="button" class="btn-small" onclick="fecharNovoLocalObra()" style="background:#e0e0e0;color:#333">Cancelar</button></div>
+        <div id="msgNovoLocalObra" style="font-size:11px;margin-top:6px"></div>
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-top:4px">TJ-CE é global (sem local). Para outras obras, selecione ou crie um local específico. Gerencie todos em <em>Locais</em>.</div>
       <div class="form-row">
         <div><label>Prazo (dias)</label><input type="number" id="obraPrazo" placeholder="Prazo" value="30"></div>
         <div><label>Data inicio</label><input type="date" id="obraInicio"></div>
@@ -869,6 +880,23 @@ function cancelarObra() {
   document.getElementById('tituloObra').textContent = 'Nova Obra';
   document.getElementById('btnObra').textContent = 'Criar Obra';
   document.getElementById('btnCancelObra').style.display = 'none';
+  fecharNovoLocalObra();
+}
+function abrirNovoLocalObra(){ document.getElementById('novoLocalObraBox').style.display='block'; }
+function fecharNovoLocalObra(){ const b=document.getElementById('novoLocalObraBox'); if(b) b.style.display='none'; const m=document.getElementById('msgNovoLocalObra'); if(m) m.textContent=''; }
+async function criarLocalParaObra(){
+  const nome=document.getElementById('novoLocalNome').value.trim();
+  const comarca=document.getElementById('novoLocalComarca').value.trim();
+  const endereco=document.getElementById('novoLocalEndereco').value.trim();
+  const msg=document.getElementById('msgNovoLocalObra');
+  if(!nome){ msg.textContent='Nome obrigatório'; msg.style.color='var(--danger)'; return; }
+  msg.textContent='Criando...'; msg.style.color='var(--muted)';
+  const r=await api('/api/locais',{method:'POST', body: JSON.stringify({nome, comarca, endereco})});
+  const d=await r.json();
+  if(d.error){ msg.textContent=d.error; msg.style.color='var(--danger)'; return; }
+  msg.textContent='Criado!'; msg.style.color='var(--ok)';
+  await carregarObras();
+  setTimeout(()=>{ document.getElementById('obraLocal').value=d.id; fecharNovoLocalObra(); toast('Local criado e selecionado'); }, 300);
 }
 
 async function toggleObra(id) {
