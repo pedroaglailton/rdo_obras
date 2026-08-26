@@ -563,7 +563,7 @@ async function exportarDesempenhoExcel(){
   try{
     toast('Gerando Excel BI...');
     if(btnMsg) btnMsg.textContent='Gerando...';
-    const data=await api('/api/dashboard/etapas-desempenho').then(r=>r.json());
+    const data=await api('/api/dashboard/etapas-desempenho?limit=1000').then(r=>r.json());
     const wb=XLSX.utils.book_new();
     const hdrStyle={font:{bold:true,color:{rgb:'FFFFFF'}}, fill:{fgColor:{rgb:'0F3D4C'}}, alignment:{horizontal:'center',vertical:'center'}, border:{top:{style:'thin',color:{rgb:'D0D5DD'}},bottom:{style:'thin',color:{rgb:'D0D5DD'}},left:{style:'thin',color:{rgb:'D0D5DD'}},right:{style:'thin',color:{rgb:'D0D5DD'}}}};
     // Aba 1: Resumo por Etapa
@@ -606,7 +606,7 @@ async function exportarDesempenhoExcelEquipe(){
   try{
     toast('Gerando Excel '+reg+'...');
     if(btnMsg) btnMsg.textContent='Gerando '+reg+'...';
-    const data=await api('/api/dashboard/etapas-desempenho?regiao='+encodeURIComponent(reg)).then(r=>r.json());
+    const data=await api('/api/dashboard/etapas-desempenho?regiao='+encodeURIComponent(reg)+'&limit=1000').then(r=>r.json());
     const wb=XLSX.utils.book_new();
     const hdrStyle={font:{bold:true,color:{rgb:'FFFFFF'}}, fill:{fgColor:{rgb:'0F3D4C'}}, alignment:{horizontal:'center',vertical:'center'}, border:{top:{style:'thin',color:{rgb:'D0D5DD'}},bottom:{style:'thin',color:{rgb:'D0D5DD'}},left:{style:'thin',color:{rgb:'D0D5DD'}},right:{style:'thin',color:{rgb:'D0D5DD'}}}};
     const cab1=['Ordem','Etapa','Concluídos (filtrado)','Pendentes','%','Total RDOs','RDOs Hoje'];
