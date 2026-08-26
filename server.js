@@ -74,6 +74,7 @@ const SQL_CREATE = [
   `CREATE TABLE IF NOT EXISTS etapas (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     obra_id INTEGER NOT NULL,
+    local_id INTEGER REFERENCES locais(id) ON DELETE CASCADE,
     nome TEXT NOT NULL,
     ordem INTEGER DEFAULT 1,
     status TEXT DEFAULT 'pendente',
@@ -138,6 +139,8 @@ const SQL_CREATE = [
 async function initDb(){
   if (db.isPostgres) {
     await db.init();
+    // Garante coluna local_id em etapas para progresso per-local (TJ-CE) - Postgres
+    try { await db.exec('ALTER TABLE etapas ADD COLUMN IF NOT EXISTS local_id INTEGER REFERENCES locais(id) ON DELETE CASCADE'); console.log('[migracao] etapas.local_id Postgres'); } catch(e){}
   } else {
     for (const sql of SQL_CREATE) await db.exec(sql);
     async function ensureColumn(table, col, def) {
@@ -156,6 +159,7 @@ async function initDb(){
     await ensureColumn('locais', 'cronograma', 'TEXT');
     await ensureColumn('locais', 'terceirizada', 'INTEGER DEFAULT 0');
     await ensureColumn('obras', 'comarca', 'TEXT');
+    await ensureColumn('etapas', 'local_id', 'INTEGER REFERENCES locais(id) ON DELETE CASCADE');
   }
   // Admin padrao (async para ambos)
   const admin = await db.prepare('SELECT id FROM usuarios WHERE email=?').get('admin@ipq.com');
@@ -173,6 +177,18 @@ async function initDb(){
     await db.prepare("INSERT INTO obras (nome, local_id, comarca, status, progresso, descricao) VALUES (?,?,?,?,?,?)")
       .run('TJ-CE', null, '', 'em_andamento', 0, 'Obra global - todos os locais TJCE');
     console.log('[db] obra TJ-CE criada (global, sem local_id)');
+  }
+  // Template de etapas para TJ-CE (base para progresso per-local dinâmico via RDO)
+  const tjceFinal = await db.prepare("SELECT id FROM obras WHERE UPPER(REPLACE(REPLACE(nome,'-',''),' ',''))=UPPER(?) AND ativo=1").get('TJCE');
+  if (tjceFinal) {
+    const tmplCount = (await db.prepare('SELECT COUNT(*) as c FROM etapas WHERE obra_id=? AND (local_id IS NULL OR local_id=0)').get(tjceFinal.id)).c;
+    if (tmplCount === 0) {
+      const nomes = ['Levantamento','Infraestrutura','Cabeamento','Instalação e Testes'];
+      for (let i=0;i<nomes.length;i++) {
+        await db.prepare('INSERT INTO etapas (obra_id, local_id, nome, ordem, status) VALUES (?,?,?,?,?)').run(tjceFinal.id, null, nomes[i], i+1, 'pendente');
+      }
+      console.log('[db] template etapas TJ-CE criado (4)');
+    }
   }
 }
 const dbReady = initDb();
@@ -529,30 +545,45 @@ app.get('/api/locais/comarcas', async (req, res) => {
   res.json((await db.prepare('SELECT DISTINCT comarca FROM locais WHERE ativo=1 AND comarca IS NOT NULL ORDER BY comarca').all()).map(r => r.comarca));
 });
 
-// Locais da equipe com progresso da obra (automatizado para app) — suporta modo TJ-CE global
+// Locais da equipe com progresso dinâmico per-local via RDO/etapas — modo TJ-CE global
 app.get('/api/equipe/:regiao/locais', async (req, res) => {
   const reg = req.params.regiao;
   const tjce = await db.prepare("SELECT id, nome, progresso, status, prazo_dias, data_inicio FROM obras WHERE UPPER(REPLACE(REPLACE(nome,'-',''),' ',''))=UPPER(?) AND ativo=1").get('TJCE');
+  // progresso dinâmico: template vs etapas per-local concluídas
+  const totalTpl = tjce ? (await db.prepare('SELECT COUNT(*) as c FROM etapas WHERE obra_id=? AND (local_id IS NULL OR local_id=0)').get(tjce.id)).c : 0;
+  async function enrich(rows){
+    for (const r of rows){
+      // fallback global para obra
+      if (!r.obra_id && tjce) { r.obra_id = tjce.id; r.obra_nome = tjce.nome; r.obra_status = tjce.status; r.prazo_dias = tjce.prazo_dias; r.data_inicio = tjce.data_inicio; }
+      if (tjce && totalTpl>0) {
+        const concl = (await db.prepare("SELECT COUNT(*) as c FROM etapas WHERE obra_id=? AND local_id=? AND status='concluida'").get(tjce.id, r.id)).c;
+        r.obra_progresso = Math.round(concl/totalTpl*100);
+        r.etapas_concluidas = concl; r.etapas_total = totalTpl;
+      } else if (tjce) {
+        // sem template, usa 1 etapa por RDO como progresso (0/100)
+        const hasRdo = (await db.prepare('SELECT COUNT(*) as c FROM rdos WHERE local=?').get(r.nome)).c;
+        r.obra_progresso = hasRdo>0 ? 100 : 0;
+      }
+    }
+    // ordena por progresso (menos concluído primeiro) para priorizar frentes atrasadas
+    rows.sort((a,b)=>(a.obra_progresso||0)-(b.obra_progresso||0));
+    return rows;
+  }
   const rows = await db.prepare(`
     SELECT l.*, o.id as obra_id, o.nome as obra_nome, o.progresso as obra_progresso, o.status as obra_status, o.prazo_dias, o.data_inicio
     FROM locais l LEFT JOIN obras o ON o.local_id = l.id AND o.ativo=1
     WHERE l.ativo=1 AND l.regiao = ?
-    ORDER BY o.progresso ASC, l.comarca
+    ORDER BY l.comarca
   `).all(reg);
-  // Fallback global: se local não tem obra própria (modo TJ-CE), usa obra global
-  const applyGlobal = r => {
-    if (!r.obra_id && tjce) { r.obra_id = tjce.id; r.obra_nome = tjce.nome; r.obra_progresso = tjce.progresso; r.obra_status = tjce.status; r.prazo_dias = tjce.prazo_dias; r.data_inicio = tjce.data_inicio; }
-    return r;
-  };
   if (reg==='SEM EQUIPE') {
     const sem = await db.prepare(`
       SELECT l.*, o.id as obra_id, o.nome as obra_nome, o.progresso as obra_progresso, o.status as obra_status FROM locais l LEFT JOIN obras o ON o.local_id=l.id AND o.ativo=1
       WHERE l.ativo=1 AND (l.regiao IS NULL OR l.regiao='')
       ORDER BY l.comarca LIMIT 100
     `).all();
-    return res.json(sem.map(applyGlobal));
+    return res.json(await enrich(sem));
   }
-  res.json(rows.map(applyGlobal));
+  res.json(await enrich(rows));
 });
 
 // Atribuir locais a equipe (dashboard define onde cada equipe vai trabalhar)
@@ -836,6 +867,24 @@ app.post('/api/rdos', async (req, res) => {
     JSON.stringify(d.fotos || []),
     req.user ? req.user.id : null, req.user ? req.user.nome : 'Anonimo'
   );
+  // Inteligente: auto-etapa per-local — cada RDO com atividade marca a etapa correspondente como concluída
+  try {
+    const localRow = await db.prepare('SELECT id FROM locais WHERE nome=? AND ativo=1').get(d.local);
+    const ativ = (d.atividade||'').toString().trim();
+    if (localRow && ativ) {
+      const tjce2 = await db.prepare("SELECT id FROM obras WHERE UPPER(REPLACE(REPLACE(nome,'-',''),' ',''))=UPPER(?) AND ativo=1").get('TJCE');
+      if (tjce2) {
+        const tmpl = await db.prepare("SELECT ordem FROM etapas WHERE obra_id=? AND (local_id IS NULL OR local_id=0) AND UPPER(nome)=UPPER(?)").get(tjce2.id, ativ);
+        const ordem = tmpl ? tmpl.ordem : 999;
+        const existe = await db.prepare("SELECT id FROM etapas WHERE obra_id=? AND local_id=? AND UPPER(nome)=UPPER(?)").get(tjce2.id, localRow.id, ativ);
+        if (!existe) {
+          await db.prepare("INSERT INTO etapas (obra_id, local_id, nome, ordem, status) VALUES (?,?,?,?,?)").run(tjce2.id, localRow.id, ativ, ordem, 'concluida');
+        } else {
+          await db.prepare("UPDATE etapas SET status='concluida' WHERE id=?").run(existe.id);
+        }
+      }
+    }
+  } catch(e){ console.error('[etapa-auto]', e.message); }
   res.json({ ok: true, id: r.lastInsertRowid });
 });
 
