@@ -134,6 +134,7 @@
       </div>
       <div id="msgDesempenhoExcel" style="font-size:11px;color:var(--muted);margin-top:8px"></div>
     </div>
+
     <div class="card" style="border-left:4px solid #0f3d4c">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
         <h2 style="margin:0">📊 Desempenho por Etapa — TJ-CE</h2>
@@ -142,6 +143,7 @@
       <p style="font-size:11px;color:var(--muted);margin:6px 0 0">Cada RDO com <code>atividade</code> marca a etapa correspondente como <strong>concluída</strong> naquele local. Progresso = etapas concluídas / 4.</p>
       <div id="desempenhoEtapas" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-top:12px"></div>
     </div>
+
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
         <h2 style="margin:0">Locais — progresso e RDOs</h2>
@@ -152,6 +154,27 @@
         <input type="text" id="buscaDesempenho" placeholder="Buscar local/comarca..." oninput="filtrarDesempenhoLocal()">
       </div>
       <div id="listaDesempenho" style="margin-top:10px"></div>
+    </div>
+
+  </section>
+
+  <!-- MAPA 3D - Prédios e pinos 3D por equipe -->
+  <section class="view" id="view-mapa3d">
+    <div class="card" style="border-left:4px solid #0f3d4c">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+        <h2 style="margin:0">🗺️ Mapa 3D — Equipes e Locais</h2>
+        <div style="display:flex;gap:6px;align-items:center">
+          <select id="filtroMapa3dEquipe" onchange="carregarMapa3D()" style="padding:6px 8px;font-size:12px;border:1.5px solid var(--line);border-radius:8px"><option value="">Todas equipes</option></select>
+          <button class="btn-small" onclick="carregarMapa3D()" style="background:#0f3d4c">↻ Atualizar</button>
+        </div>
+      </div>
+      <p style="font-size:11px;color:var(--muted);margin:6px 0 0">Prédios em 3D (fill-extrusion) aparecem ao dar zoom na cidade • pinos 3D por equipe (cor da equipe). Visual limpo — só locais e presença ativa.</p>
+      <div id="map3d" style="width:100%;height:520px;border-radius:10px;border:1px solid var(--line);margin-top:12px;overflow:hidden;display:block"></div>
+      <div style="display:flex;gap:12px;margin-top:8px;font-size:11px;flex-wrap:wrap">
+        <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#0f3d4c"></span> Prédios 3D</span>
+        <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--accent)"></span> Pino 3D equipe</span>
+        <span id="mapa3dInfo" style="color:var(--muted)"></span>
+      </div>
     </div>
   </section>
 
