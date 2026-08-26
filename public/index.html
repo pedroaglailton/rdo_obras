@@ -9,6 +9,8 @@
 <link rel="manifest" href="/manifest.json">
 <link rel="apple-touch-icon" href="/icon-192.svg">
 <title>Painel - IPQ Tecnologia</title>
+<link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" />
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
 <style>
   :root{--primary:#0f3d4c;--primary-dark:#0a2c37;--accent:#ff7a33;--bg:#f2f4f6;--card:#fff;--line:#e1e5ea;--text:#1c2b33;--muted:#68767f;--ok:#1f8a4c;--danger:#c6392f;--radius:12px;font-size:16px}
   *{box-sizing:border-box}
@@ -78,6 +80,7 @@
     <button data-view="dashboard" class="active">Dashboard</button>
     <button data-view="por-equipe">Por Equipe</button>
     <button data-view="desempenho">Desempenho</button>
+    <button data-view="mapa3d">Mapa 3D</button>
     <button data-view="obras">Obras</button>
     <button data-view="rdos">RDOs</button>
     <button data-view="locais">Locais</button>
@@ -139,6 +142,26 @@
         <input type="text" id="buscaDesempenho" placeholder="Buscar local/comarca..." oninput="filtrarDesempenhoLocal()">
       </div>
       <div id="listaDesempenho" style="margin-top:10px"></div>
+    </div>
+  </section>
+
+  <!-- MAPA 3D - Prédios e pinos 3D por equipe -->
+  <section class="view" id="view-mapa3d">
+    <div class="card" style="border-left:4px solid #0f3d4c">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+        <h2 style="margin:0">🗺️ Mapa 3D — Equipes e Locais</h2>
+        <div style="display:flex;gap:6px;align-items:center">
+          <select id="filtroMapa3dEquipe" onchange="carregarMapa3D()" style="padding:6px 8px;font-size:12px;border:1.5px solid var(--line);border-radius:8px"><option value="">Todas equipes</option></select>
+          <button class="btn-small" onclick="carregarMapa3D()" style="background:#0f3d4c">↻ Atualizar</button>
+        </div>
+      </div>
+      <p style="font-size:11px;color:var(--muted);margin:6px 0 0">Prédios em 3D (fill-extrusion) aparecem ao dar zoom na cidade • pinos 3D por equipe (cor da equipe). Visual limpo — só locais e presença ativa.</p>
+      <div id="map3d" style="width:100%;height:520px;border-radius:10px;border:1px solid var(--line);margin-top:12px;overflow:hidden;display:block"></div>
+      <div style="display:flex;gap:12px;margin-top:8px;font-size:11px;flex-wrap:wrap">
+        <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#0f3d4c"></span> Prédios 3D</span>
+        <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--accent)"></span> Pino 3D equipe</span>
+        <span id="mapa3dInfo" style="color:var(--muted)"></span>
+      </div>
     </div>
   </section>
 
@@ -397,7 +420,7 @@ document.querySelectorAll('nav.tabs button').forEach(btn => {
     btn.classList.add('active');
     document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
     document.getElementById('view-' + btn.dataset.view).classList.add('active');
-    const loaders = { dashboard: carregarDashboard, 'por-equipe': carregarPorEquipe, desempenho: carregarDesempenho, obras: carregarObras, rdos: carregarRdos, locais: carregarLocais, atividades: carregarAtividades, materiais: carregarMateriais, equipes: carregarEquipes, usuarios: carregarUsuarios };
+    const loaders = { dashboard: carregarDashboard, 'por-equipe': carregarPorEquipe, desempenho: carregarDesempenho, mapa3d: carregarMapa3D, obras: carregarObras, rdos: carregarRdos, locais: carregarLocais, atividades: carregarAtividades, materiais: carregarMateriais, equipes: carregarEquipes, usuarios: carregarUsuarios };
     if (loaders[btn.dataset.view]) loaders[btn.dataset.view]();
   });
 });
@@ -507,6 +530,116 @@ function renderDesempenhoLista(){
   if(lista.length>200) document.getElementById('listaDesempenho').innerHTML+=`<p style="text-align:center;font-size:11px;color:var(--muted)">Mostrando 200 de ${lista.length}</p>`;
 }
 function filtrarDesempenhoLocal(){ renderDesempenhoLista(); }
+let mapa3d=null, marcadores3d=[];
+async function carregarMapa3D(){
+  const sel=document.getElementById('filtroMapa3dEquipe');
+  // popula filtro de equipes na primeira carga
+  if(sel && sel.options.length===1){
+    try{
+      const eqs=await api('/api/equipes').then(r=>r.json());
+      const cur=sel.value;
+      sel.innerHTML='<option value="">Todas equipes</option>'+eqs.map(e=>`<option value="${e.nome}">${e.nome}</option>`).join('');
+      sel.value=cur;
+    }catch(e){}
+  }
+  const filtroEquipe=sel?sel.value:'';
+  // inicializa mapa se ainda não existe
+  if(!mapa3d){
+    if(typeof maplibregl==='undefined'){ document.getElementById('mapa3dInfo').textContent='MapLibre não carregou'; return; }
+    mapa3d=new maplibregl.Map({
+      container:'map3d',
+      style:'https://demotiles.maplibre.org/style.json',
+      center: [-39.2,-5.0],
+      zoom: 6.6,
+      pitch: 0,
+      bearing: 0,
+      antialias:true
+    });
+    // garante que o mapa ocupe 100% após a aba ficar visível (evita meia-tela)
+    setTimeout(()=>{ try{ mapa3d.resize(); }catch(e){} }, 300);
+    setTimeout(()=>{ try{ mapa3d.resize(); }catch(e){} }, 1200);
+    mapa3d.addControl(new maplibregl.NavigationControl({visualizePitch:true}), 'top-right');
+    mapa3d.on('load', ()=>{
+      // prédios 3D - fill-extrusion como no exemplo leafmap.org
+      try{
+        const layers=mapa3d.getStyle().layers;
+        let labelId=null;
+        for(const l of layers){ if(l.type==='symbol' && l.layout && l.layout['text-field']){ labelId=l.id; break; } }
+        mapa3d.addLayer({
+          id:'3d-buildings',
+          source:'openmaptiles',
+          'source-layer':'building',
+          type:'fill-extrusion',
+          minzoom:14,
+          paint:{
+            'fill-extrusion-color':'#d1d9e0',
+            'fill-extrusion-height':['interpolate',['linear'],['zoom'],14,0,14.5,['get','render_height']],
+            'fill-extrusion-base':['interpolate',['linear'],['zoom'],14,0,14.5,['get','render_min_height']],
+            'fill-extrusion-opacity':0.6
+          }
+        }, labelId);
+      }catch(e){ console.warn('3d buildings',e); }
+      // após carregar estilo, busca dados
+      atualizarMarcadores3D();
+    });
+    // se já está loaded (cache), chama direto
+    if(mapa3d.loaded()) atualizarMarcadores3D();
+  } else {
+    mapa3d.resize();
+    atualizarMarcadores3D();
+  }
+  async function atualizarMarcadores3D(){
+    if(!mapa3d) return;
+    // limpa antigos
+    marcadores3d.forEach(m=>m.remove()); marcadores3d=[];
+    let urlPres='/api/presenca';
+    // filtro inteligente: se filtroEquipe, busca só daquela equipe via /api/presenca?equipe_id ou filtra local
+    let equipes=await api('/api/equipes').then(r=>r.json()).catch(()=>[]);
+    let equipeFiltro=equipes.find(e=>e.nome===filtroEquipe);
+    if(equipeFiltro) urlPres='/api/presenca?equipe_id='+equipeFiltro.id;
+    const [presencas, locais] = await Promise.all([
+      api(urlPres).then(r=>r.json()).catch(()=>[]),
+      api('/api/locais').then(r=>r.json()).catch(()=>[])
+    ]);
+    let locaisFiltr=locais;
+    if(filtroEquipe) locaisFiltr=locais.filter(l=> (l.regiao||'SEM EQUIPE')===filtroEquipe);
+    // locais como pontos discretos (cinza claro) - não poluído, só contorno
+    locaisFiltr.forEach(l=>{
+      if(!l.latitude || !l.longitude) return;
+      const el=document.createElement('div');
+      el.style.cssText='width:8px;height:8px;background:#e1e5ea;border:1px solid #fff;border-radius:50%;box-shadow:0 1px 3px rgba(0,0,0,0.3)';
+      el.title=l.nome+' - '+l.comarca;
+      const m=new maplibregl.Marker({element:el, anchor:'center'}).setLngLat([parseFloat(l.longitude), parseFloat(l.latitude)]).setPopup(new maplibregl.Popup({offset:12}).setHTML(`<strong>${l.nome}</strong><br>${l.comarca||''}<br><small>${l.regiao||'SEM EQUIPE'}</small>`)).addTo(mapa3d);
+      marcadores3d.push(m);
+    });
+    // pinos 3D das equipes - volume e cor da equipe
+    const porEquipe=Object.fromEntries(equipes.map(e=>[String(e.id), e]));
+    presencas.forEach(p=>{
+      if(!p.latitude || !p.longitude) return;
+      const eq=porEquipe[String(p.equipe_id)];
+      const cor=eq?eq.cor:'#ff7a33';
+      const el=document.createElement('div');
+      // pino 3D: base + haste + sombra para volume
+      el.style.cssText=`width:22px;height:32px;position:relative;cursor:pointer;filter:drop-shadow(0 4px 3px rgba(0,0,0,0.4));`;
+      el.innerHTML=`<div style="width:22px;height:22px;background:${cor};border:2.5px solid #fff;border-radius:50% 50% 50% 0;transform:rotate(-45deg);box-shadow:0 2px 6px rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center"><span style="transform:rotate(45deg);color:#fff;font-size:10px;font-weight:800">${(p.usuario_nome||'?').charAt(0)}</span></div><div style="width:3px;height:10px;background:${cor};margin:0 auto;margin-top:-2px;opacity:0.9"></div>`;
+      el.title=`${p.usuario_nome} — ${p.local_nome|| p.equipe_id? (porEquipe[String(p.equipe_id)]?.nome||'') : ''}`;
+      const m=new maplibregl.Marker({element:el, anchor:'bottom'}).setLngLat([p.longitude, p.latitude]).setPopup(new maplibregl.Popup({offset:18}).setHTML(`<strong>${p.usuario_nome}</strong><br><small>${eq?eq.nome:'Sem equipe'} • ${p.local_nome||'sem local'}</small><br><small>${p.atualizado_em? new Date(p.atualizado_em+'Z').toLocaleTimeString('pt-BR'):''}</small>`)).addTo(mapa3d);
+      marcadores3d.push(m);
+    });
+    document.getElementById('mapa3dInfo').textContent=`${presencas.length} equipe(s) ativa(s) • ${locaisFiltr.length} locais`+(filtroEquipe?` • ${filtroEquipe}`:'');
+    // fitBounds desativado para overview - mantém centro/zoom inicial para visual limpo e 100% largura
+    // Se quiser focar nas equipes ativas, descomente o bloco abaixo
+    // setTimeout(()=>{
+    //   try{ mapa3d.resize(); }catch(e){}
+    //   const pts=[...presencas.filter(p=>p.latitude&&p.longitude).map(p=>[p.longitude,p.latitude])];
+    //   if(pts.length){
+    //     const bounds=new maplibregl.LngLatBounds(); pts.forEach(c=> bounds.extend(c));
+    //     try{ mapa3d.fitBounds(bounds, {padding:80, maxZoom:13, duration:800}); }catch(e){}
+    //     setTimeout(()=>{ try{ mapa3d.resize(); }catch(e){} }, 500);
+    //   }
+    // }, 500);
+  }
+}
 
 // Importar Mesclado
 async function importarMesclado(){
