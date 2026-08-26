@@ -582,23 +582,24 @@ async function atualizarProgresso(obraId) {
 app.get('/api/locais', async (req, res) => {
   let sql = 'SELECT * FROM locais WHERE ativo=1';
   const p = [];
-  if (req.query.obra_id) { 
-    // Modo obra única TJ-CE: retorna TODOS os locais (sem filtro por comarca) — economiza cadastro 1 a 1
-    const obra = await db.prepare('SELECT comarca, nome FROM obras WHERE id=?').get(req.query.obra_id);
+  if (req.query.obra_id) {
+    // F1: filtra direto por obra_id (novo). Mantém fallback TJ-CE global para dados legados sem obra_id
+    const obra = await db.prepare('SELECT nome FROM obras WHERE id=?').get(req.query.obra_id);
     const isGlobal = obra && obra.nome && obra.nome.trim().toUpperCase().replace(/[-\s]/g,'') === 'TJCE';
-    if (isGlobal) {
-      // não filtra por comarca — TJ-CE engloba todas as comarcas
-    } else if (obra && obra.comarca) { sql += ' AND UPPER(comarca)=UPPER(?)'; p.push(obra.comarca); }
-    else { sql += ' AND 1=0'; } // obra sem comarca e não-global retorna vazio (legado)
+    sql += ' AND (obra_id=?' + (isGlobal ? ' OR obra_id IS NULL' : '') + ')'; p.push(req.query.obra_id);
   }
+  if (req.query.equipe_id) { sql += ' AND equipe_id=?'; p.push(req.query.equipe_id); }
   if (req.query.comarca) { sql += ' AND UPPER(comarca)=UPPER(?)'; p.push(req.query.comarca); }
-  if (req.query.regiao) { sql += ' AND regiao=?'; p.push(req.query.regiao); }
+  if (req.query.regiao) { sql += ' AND regiao=?'; p.push(req.query.regiao); } // deprecated, mantido para compat
   if (req.query.busca) { sql += ' AND (nome LIKE ? OR comarca LIKE ? OR endereco LIKE ?)'; p.push('%' + req.query.busca + '%', '%' + req.query.busca + '%', '%' + req.query.busca + '%'); }
   res.json(await db.prepare(sql + ' ORDER BY comarca, nome').all(...p));
 });
 
 app.get('/api/locais/comarcas', async (req, res) => {
-  res.json((await db.prepare('SELECT DISTINCT comarca FROM locais WHERE ativo=1 AND comarca IS NOT NULL ORDER BY comarca').all()).map(r => r.comarca));
+  let sql='SELECT DISTINCT comarca FROM locais WHERE ativo=1 AND comarca IS NOT NULL';
+  const p=[];
+  if(req.query.obra_id){ sql+=' AND obra_id=?'; p.push(req.query.obra_id); }
+  res.json((await db.prepare(sql+' ORDER BY comarca').all(...p)).map(r=>r.comarca));
 });
 
 // Locais da equipe com progresso dinâmico per-local via RDO/etapas — modo TJ-CE global
@@ -642,32 +643,33 @@ app.get('/api/equipe/:regiao/locais', async (req, res) => {
   res.json(await enrich(rows));
 });
 
-// Atribuir locais a equipe (dashboard define onde cada equipe vai trabalhar)
+// Atribuir locais a equipe/obra (F1 multi-obra) - suporta obra_id+equipe_id e legado regiao
 app.post('/api/locais/atribuir-equipe', gestor, async (req, res) => {
-  const { ids, regiao } = req.body;
+  const { ids, obra_id, equipe_id, regiao } = req.body;
   if (!ids || !Array.isArray(ids) || !ids.length) return res.status(400).json({error:'Selecione ao menos 1 local'});
-  // regiao pode ser '' para desatribuir
-  const regNorm = (regiao||'').toString().trim();
-  if (regNorm && !await db.prepare('SELECT id FROM equipes WHERE nome=? AND ativo=1').get(regNorm) && regNorm!=='SEM EQUIPE') {
-    return res.status(400).json({error:'Equipe não encontrada. Crie em Equipes primeiro.'});
+  // Resolve equipe_id/regiao (compat)
+  let eqId = equipe_id ? Number(equipe_id) : null;
+  let regNorm = (regiao||'').toString().trim();
+  let obraId = obra_id ? Number(obra_id) : null;
+  if (!eqId && regNorm && regNorm!=='SEM EQUIPE') {
+    const eq = await db.prepare('SELECT id FROM equipes WHERE nome=? AND ativo=1').get(regNorm);
+    if (!eq) return res.status(400).json({error:'Equipe não encontrada. Crie em Equipes primeiro.'});
+    eqId = eq.id;
+  } else if (eqId) {
+    const eq = await db.prepare('SELECT id, nome FROM equipes WHERE id=? AND ativo=1').get(eqId);
+    if (!eq) return res.status(400).json({error:'Equipe não encontrada'});
+    regNorm = eq.nome;
+  }
+  if (regNorm==='SEM EQUIPE') { eqId=null; regNorm=''; }
+  // Se obra_id não veio, tenta inferir da primeira local ou usa TJ-CE como fallback
+  if (!obraId) {
+    const tjce = await db.prepare("SELECT id FROM obras WHERE UPPER(REPLACE(REPLACE(nome,'-',''),' ',''))=UPPER(?) AND ativo=1").get('TJCE');
+    obraId = tjce ? tjce.id : null;
   }
   for (const id of ids) {
-    await db.prepare('UPDATE locais SET regiao=? WHERE id=?').run(regNorm==='SEM EQUIPE'?'':regNorm, Number(id));
+    await db.prepare('UPDATE locais SET regiao=?, equipe_id=?, obra_id=? WHERE id=?').run(regNorm, eqId, obraId, Number(id));
   }
-  // Modo TJ-CE global: NÃO cria obra por local (economiza 233 cadastros). Todos os locais já pertencem à TJ-CE implícita.
-  const tjceGlobal = await db.prepare("SELECT id FROM obras WHERE UPPER(REPLACE(REPLACE(nome,'-',''),' ',''))=UPPER(?) AND ativo=1").get('TJCE');
-  if (!tjceGlobal) {
-    // fallback legado: se não há TJ-CE, mantém comportamento antigo (1 obra por local)
-    for (const id of ids) {
-      const loc = await db.prepare('SELECT id, nome, comarca, endereco FROM locais WHERE id=?').get(Number(id));
-      if(!loc) continue;
-      const obraExiste = await db.prepare('SELECT id FROM obras WHERE local_id=? AND ativo=1').get(loc.id);
-      if(!obraExiste && regNorm){
-        await db.prepare('INSERT INTO obras (nome, local_id, comarca, status, progresso) VALUES (?,?,?, ?,0)').run(loc.nome, loc.id, loc.comarca||'', 'planejamento');
-      }
-    }
-  }
-  res.json({ok:true, atualizados: ids.length, modo_global: !!tjceGlobal});
+  res.json({ok:true, atualizados: ids.length, obra_id: obraId, equipe_id: eqId});
 });
 
 app.get('/api/locais/:id', async (req, res) => {
@@ -677,10 +679,15 @@ app.get('/api/locais/:id', async (req, res) => {
 });
 
 app.post('/api/locais', gestor, async (req, res) => {
-  const { nome, comarca, nome_imovel, tipo, ocupacao, endereco, area, longitude, latitude, google_maps_link, street_view_link, cameras } = req.body;
+  const { nome, comarca, nome_imovel, tipo, ocupacao, endereco, area, longitude, latitude, google_maps_link, street_view_link, cameras, obra_id, equipe_id } = req.body;
   if (!nome) return res.status(400).json({ error: 'Nome obrigatorio' });
-  const r = await db.prepare('INSERT INTO locais (nome,comarca,nome_imovel,tipo,ocupacao,endereco,area,longitude,latitude,google_maps_link,street_view_link,cameras) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)')
-    .run(nome, comarca || '', nome_imovel || '', tipo || '', ocupacao || '', endereco || '', area || '', longitude || '', latitude || '', google_maps_link || '', street_view_link || '', cameras || 0);
+  const r = await db.prepare('INSERT INTO locais (nome,comarca,nome_imovel,tipo,ocupacao,endereco,area,longitude,latitude,google_maps_link,street_view_link,cameras,obra_id,equipe_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+    .run(nome, comarca || '', nome_imovel || '', tipo || '', ocupacao || '', endereco || '', area || '', longitude || '', latitude || '', google_maps_link || '', street_view_link || '', cameras || 0, obra_id||null, equipe_id||null);
+  // Mantém regiao string para compatibilidade com app antigo
+  if (equipe_id) {
+    const eq = await db.prepare('SELECT nome FROM equipes WHERE id=?').get(Number(equipe_id));
+    if (eq) await db.prepare('UPDATE locais SET regiao=? WHERE id=?').run(eq.nome, r.lastInsertRowid);
+  }
   res.json({ ok: true, id: r.lastInsertRowid });
 });
 
@@ -879,10 +886,11 @@ app.get('/api/rdos', async (req, res) => {
     l.comarca as cidade, l.latitude as local_lat, l.longitude as local_lng, l.endereco as local_endereco
     FROM rdos r 
     LEFT JOIN obras o ON r.obra_id=o.id 
-    LEFT JOIN locais l ON (r.local = l.nome OR UPPER(l.nome) LIKE '%' || UPPER(r.local) || '%' OR UPPER(l.comarca) LIKE '%' || UPPER(r.local) || '%') AND l.ativo=1
+    LEFT JOIN locais l ON (r.local_id=l.id OR (r.local_id IS NULL AND (r.local = l.nome OR UPPER(l.nome) LIKE '%' || UPPER(r.local) || '%' OR UPPER(l.comarca) LIKE '%' || UPPER(r.local) || '%'))) AND l.ativo=1
     WHERE 1=1`;
   const p = [];
   if (req.query.obra_id) { sql += ' AND r.obra_id=?'; p.push(req.query.obra_id); }
+  if (req.query.local_id) { sql += ' AND r.local_id=?'; p.push(req.query.local_id); }
   if (req.query.usuario_id) { sql += ' AND r.usuario_id=?'; p.push(req.query.usuario_id); }
   if (req.query.data_de) { sql += ' AND r.data>=?'; p.push(req.query.data_de); }
   if (req.query.data_ate) { sql += ' AND r.data<=?'; p.push(req.query.data_ate); }
@@ -894,7 +902,7 @@ app.get('/api/rdos/:id', async (req, res) => {
   const rdo = await db.prepare(`SELECT r.*, o.nome as obra_nome, l.comarca as cidade
     FROM rdos r 
     LEFT JOIN obras o ON r.obra_id=o.id 
-    LEFT JOIN locais l ON (r.local = l.nome OR UPPER(l.nome) LIKE '%' || UPPER(r.local) || '%' OR UPPER(l.comarca) LIKE '%' || UPPER(r.local) || '%') AND l.ativo=1
+    LEFT JOIN locais l ON (r.local_id=l.id OR (r.local_id IS NULL AND (r.local = l.nome OR UPPER(l.nome) LIKE '%' || UPPER(r.local) || '%' OR UPPER(l.comarca) LIKE '%' || UPPER(r.local) || '%'))) AND l.ativo=1
     WHERE r.id=?`).get(req.params.id);
   if (!rdo) return res.status(404).json({ error: 'RDO nao encontrado' });
   res.json(rdo);
@@ -902,19 +910,31 @@ app.get('/api/rdos/:id', async (req, res) => {
 
 app.post('/api/rdos', async (req, res) => {
   const d = req.body;
-  if (!d.data || !d.local) return res.status(400).json({ error: 'Data e local obrigatorios' });
-  // Modo TJ-CE global: se não informou obra, vincula automaticamente à TJ-CE (economiza seleção)
-  let obraId = d.obra_id || null;
+  if (!d.data || (!d.local && !d.local_id)) return res.status(400).json({ error: 'Data e local obrigatorios' });
+  // F1: resolve obra_id/local_id de forma inteligente para multi-obra
+  let obraId = d.obra_id ? Number(d.obra_id) : null;
+  let localId = d.local_id ? Number(d.local_id) : null;
+  // Se veio só nome do local, tenta resolver local_id e obra_id
+  if (!localId && d.local) {
+    const loc = await db.prepare('SELECT id, obra_id FROM locais WHERE nome=? AND ativo=1').get(d.local);
+    if (loc) { localId = loc.id; if (!obraId) obraId = loc.obra_id; }
+  }
+  if (!obraId && localId) {
+    const loc = await db.prepare('SELECT obra_id FROM locais WHERE id=?').get(localId);
+    if (loc) obraId = loc.obra_id;
+  }
+  // Fallback TJ-CE global para dados legados sem obra_id
   if (!obraId) {
     const tjce = await db.prepare("SELECT id FROM obras WHERE UPPER(REPLACE(REPLACE(nome,'-',''),' ',''))=UPPER(?) AND ativo=1").get('TJCE');
     if (tjce) obraId = tjce.id;
   }
-  const r = await db.prepare(`INSERT INTO rdos (obra_id,data,local,atividade,equipe_json,materiais_json,
+  const localNome = d.local || (localId ? (await db.prepare('SELECT nome FROM locais WHERE id=?').get(localId))?.nome || '' : '');
+  const r = await db.prepare(`INSERT INTO rdos (obra_id,local_id,data,local,atividade,equipe_json,materiais_json,
     entrada_manha,saida_manha,entrada_tarde,saida_tarde,
     parou,motivo_parada,switch_instalado,nom_switch,local_switch,
     camera_instalada,nom_camera,local_camera,fotos_json,usuario_id,usuario_nome)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
-    obraId, d.data, d.local, d.atividade || '',
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+    obraId, localId, d.data, localNome, d.atividade || '',
     JSON.stringify(d.equipe || []), JSON.stringify(d.materiais || []),
     d.entrada_manha, d.saida_manha, d.entrada_tarde, d.saida_tarde,
     d.parou || 'nao', d.motivo_parada || '',
@@ -923,18 +943,26 @@ app.post('/api/rdos', async (req, res) => {
     JSON.stringify(d.fotos || []),
     req.user ? req.user.id : null, req.user ? req.user.nome : 'Anonimo'
   );
-  // Inteligente: auto-etapa per-local — cada RDO com atividade marca a etapa correspondente como concluída
+  // Inteligente: auto-etapa per-local — usa obra_id real (não só TJ-CE) para multi-obra
   try {
-    const localRow = await db.prepare('SELECT id FROM locais WHERE nome=? AND ativo=1').get(d.local);
     const ativ = (d.atividade||'').toString().trim();
-    if (localRow && ativ) {
-      const tjce2 = await db.prepare("SELECT id FROM obras WHERE UPPER(REPLACE(REPLACE(nome,'-',''),' ',''))=UPPER(?) AND ativo=1").get('TJCE');
-      if (tjce2) {
-        const tmpl = await db.prepare("SELECT ordem FROM etapas WHERE obra_id=? AND (local_id IS NULL OR local_id=0) AND UPPER(nome)=UPPER(?)").get(tjce2.id, ativ);
+    let targetObraId = obraId;
+    let targetLocalId = localId;
+    if (!targetLocalId && d.local) {
+      const lr = await db.prepare('SELECT id FROM locais WHERE nome=? AND ativo=1').get(d.local);
+      if (lr) targetLocalId = lr.id;
+    }
+    if (targetLocalId && ativ) {
+      if (!targetObraId) {
+        const lr2 = await db.prepare('SELECT obra_id FROM locais WHERE id=?').get(targetLocalId);
+        if (lr2) targetObraId = lr2.obra_id;
+      }
+      if (targetObraId) {
+        const tmpl = await db.prepare("SELECT ordem FROM etapas WHERE obra_id=? AND (local_id IS NULL OR local_id=0) AND UPPER(nome)=UPPER(?)").get(targetObraId, ativ);
         const ordem = tmpl ? tmpl.ordem : 999;
-        const existe = await db.prepare("SELECT id FROM etapas WHERE obra_id=? AND local_id=? AND UPPER(nome)=UPPER(?)").get(tjce2.id, localRow.id, ativ);
+        const existe = await db.prepare("SELECT id FROM etapas WHERE obra_id=? AND local_id=? AND UPPER(nome)=UPPER(?)").get(targetObraId, targetLocalId, ativ);
         if (!existe) {
-          await db.prepare("INSERT INTO etapas (obra_id, local_id, nome, ordem, status) VALUES (?,?,?,?,?)").run(tjce2.id, localRow.id, ativ, ordem, 'concluida');
+          await db.prepare("INSERT INTO etapas (obra_id, local_id, nome, ordem, status) VALUES (?,?,?,?,?)").run(targetObraId, targetLocalId, ativ, ordem, 'concluida');
         } else {
           await db.prepare("UPDATE etapas SET status='concluida' WHERE id=?").run(existe.id);
         }
@@ -946,11 +974,25 @@ app.post('/api/rdos', async (req, res) => {
 
 app.put('/api/rdos/:id', async (req, res) => {
   const d = req.body;
-  await db.prepare(`UPDATE rdos SET data=?,local=?,atividade=?,equipe_json=?,materiais_json=?,
+  let localId = d.local_id ? Number(d.local_id) : null;
+  if (!localId && d.local) {
+    const loc = await db.prepare('SELECT id FROM locais WHERE nome=? AND ativo=1').get(d.local);
+    if (loc) localId = loc.id;
+  }
+  let obraId = d.obra_id ? Number(d.obra_id) : null;
+  if (!obraId && localId) {
+    const loc = await db.prepare('SELECT obra_id FROM locais WHERE id=?').get(localId);
+    if (loc) obraId = loc.obra_id;
+  }
+  // se veio obra_id/local_id, atualiza, senão mantém os antigos
+  const atual = await db.prepare('SELECT obra_id, local_id FROM rdos WHERE id=?').get(req.params.id);
+  if (!obraId) obraId = atual ? atual.obra_id : null;
+  if (!localId) localId = atual ? atual.local_id : null;
+  await db.prepare(`UPDATE rdos SET obra_id=?,local_id=?,data=?,local=?,atividade=?,equipe_json=?,materiais_json=?,
     entrada_manha=?,saida_manha=?,entrada_tarde=?,saida_tarde=?,
     parou=?,motivo_parada=?,switch_instalado=?,nom_switch=?,local_switch=?,
     camera_instalada=?,nom_camera=?,local_camera=?,fotos_json=? WHERE id=?`).run(
-    d.data, d.local, d.atividade || '',
+    obraId, localId, d.data, d.local, d.atividade || '',
     JSON.stringify(d.equipe || []), JSON.stringify(d.materiais || []),
     d.entrada_manha, d.saida_manha, d.entrada_tarde, d.saida_tarde,
     d.parou || 'nao', d.motivo_parada || '',
