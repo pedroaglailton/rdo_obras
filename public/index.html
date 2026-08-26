@@ -455,17 +455,22 @@ async function carregarDashboard() {
 let porEquipeCache = [];
 let locaisPorEquipeCache = [];
 async function carregarPorEquipe(){
-  const [cards, locais] = await Promise.all([api('/api/dashboard/por-equipe').then(r=>r.json()), api('/api/locais').then(r=>r.json())]);
+  const [cards, locais, equipesDet] = await Promise.all([api('/api/dashboard/por-equipe').then(r=>r.json()), api('/api/locais').then(r=>r.json()), api('/api/equipes').then(r=>r.json()).catch(()=>[])]);
   porEquipeCache = cards;
   locaisPorEquipeCache = locais;
+  const mapEquipeMembros = Object.fromEntries(equipesDet.map(e=>[e.nome, e.membros||[]]));
   // cards
-  document.getElementById('porEquipeStats').innerHTML = cards.map(c=>`
+  document.getElementById('porEquipeStats').innerHTML = cards.map(c=>{
+    const membros = mapEquipeMembros[c.regiao] || [];
+    const chips = membros.length ? membros.map(m=>`<span style="font-size:10px;background:#e3f2fd;color:#1565c0;padding:3px 7px;border-radius:20px;border:1px solid #90caf9">${m.nome}</span>`).join('') : `<span style="font-size:10px;color:var(--muted)">Sem membros — cadastre em Equipes</span>`;
+    return `
     <div style="padding:14px;background:#fff;border-radius:12px;border:1px solid var(--line);border-left:5px solid ${c.cor};box-shadow:0 1px 3px rgba(0,0,0,.06)">
       <div style="display:flex;justify-content:space-between;align-items:center">
         <strong style="font-size:14px">${c.regiao}</strong>
         <span style="width:12px;height:12px;border-radius:50%;background:${c.cor};display:inline-block"></span>
       </div>
       <div style="font-size:11px;color:var(--muted);margin-top:4px">${c.membros} membro(s) • ${c.tecnicos_ativos} ativo(s) em campo • ${c.rdos_total} RDOs (${c.rdos_hoje} hoje)</div>
+      <div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:8px">${chips}</div>
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:10px;text-align:center">
         <div style="background:#f7f9fa;border-radius:8px;padding:8px"><div style="font-size:18px;font-weight:700;color:var(--primary)">${c.total_locais}</div><div style="font-size:10px;color:var(--muted)">LOCAIS</div></div>
         <div style="background:#e8f5e9;border-radius:8px;padding:8px"><div style="font-size:18px;font-weight:700;color:#2e7d32">${c.total_cameras}</div><div style="font-size:10px;color:var(--muted)">CÂMERAS</div></div>
@@ -473,7 +478,7 @@ async function carregarPorEquipe(){
       </div>
       <div style="font-size:11px;color:var(--muted);margin-top:8px">📍 ${c.com_coord}/${c.total_locais} com GPS • ${c.total_locais? Math.round(c.com_coord/c.total_locais*100):0}% geolocalizado</div>
     </div>
-  `).join('') || '<p class="empty-state">Sem dados — importe o Mesclado</p>';
+  `}).join('') || '<p class="empty-state">Sem dados — importe o Mesclado</p>';
   // filtro select
   const sel = document.getElementById('filtroPorEquipe');
   const cur = sel.value;
