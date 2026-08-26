@@ -137,10 +137,13 @@
 
     <div class="card" style="border-left:4px solid #0f3d4c">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
-        <h2 style="margin:0">📊 Desempenho por Etapa — TJ-CE</h2>
-        <button class="btn-small" onclick="carregarDesempenho()" style="background:#0f3d4c">↻ Atualizar</button>
+        <h2 style="margin:0">📊 Desempenho por Etapa</h2>
+        <div style="display:flex;gap:6px;align-items:center">
+          <select id="filtroDesempenhoObra" onchange="carregarDesempenho()" style="padding:6px 8px;font-size:12px;border:1.5px solid var(--line);border-radius:8px;min-width:140px"><option value="">Todas obras</option></select>
+          <button class="btn-small" onclick="carregarDesempenho()" style="background:#0f3d4c">↻ Atualizar</button>
+        </div>
       </div>
-      <p style="font-size:11px;color:var(--muted);margin:6px 0 0">Cada RDO com <code>atividade</code> marca a etapa correspondente como <strong>concluída</strong> naquele local. Progresso = etapas concluídas / 4.</p>
+      <p style="font-size:11px;color:var(--muted);margin:6px 0 0">Selecione a obra acima. Cada RDO com <code>atividade</code> marca a etapa como <strong>concluída</strong> naquele local.</p>
       <div id="desempenhoEtapas" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-top:12px"></div>
     </div>
 
@@ -524,8 +527,23 @@ function filtrarPorEquipe(){
 }
 let desempenhoCache=null;
 async function carregarDesempenho(){
+  // popula filtro de obra na primeira carga
+  const selObra=document.getElementById('filtroDesempenhoObra');
+  if(selObra && selObra.options.length===1){
+    try{
+      const obras=await api('/api/obras').then(r=>r.json());
+      const cur=selObra.value;
+      selObra.innerHTML='<option value="">Todas obras</option>'+obras.filter(o=>o.ativo!==0).map(o=>`<option value="${o.id}">${o.nome}</option>`).join('');
+      selObra.value=cur;
+    }catch(e){}
+  }
+  const obraId=document.getElementById('filtroDesempenhoObra')?.value || '';
   const reg = document.getElementById('filtroDesempenhoRegiao')?.value || '';
-  const url = '/api/dashboard/etapas-desempenho' + (reg ? '?regiao='+encodeURIComponent(reg) : '');
+  const params=new URLSearchParams();
+  if(obraId) params.set('obra_id', obraId);
+  if(reg) params.set('regiao', reg);
+  params.set('limit','1000');
+  const url = '/api/dashboard/etapas-desempenho' + (params.toString() ? '?'+params.toString() : '');
   const data = await api(url).then(r=>r.json());
   desempenhoCache=data;
   document.getElementById('desempenhoEtapas').innerHTML = data.etapas.map(e=>`

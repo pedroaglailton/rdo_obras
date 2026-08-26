@@ -766,7 +766,7 @@
   }
   window.centralizarMapa = centralizarMapa;
 
-  // Carregar dados — modo TJ-CE global inteligente: obra implícita, locais vêm da equipe já atribuída
+  // Carregar dados — F3 multi-obra: permite escolher obra, mantém compat TJ-CE global
   async function carregarDados() {
     const [obras, atividades] = await Promise.all([api('/api/obras').then(r => r.json()), api('/api/atividades').then(r => r.json())]);
     const selObra = $('f_obra');
@@ -776,8 +776,10 @@
     const selAtv = $('f_atividade');
     selAtv.innerHTML = '<option value="">Selecione</option>' + atividades.map(a => '<option>' + a.nome + '</option>').join('') + '<option value="__outro">Outra...</option>';
     const tjce = obras.find(o => o.nome && o.nome.replace(/[-\s]/g,'').toUpperCase()==='TJCE');
-    if (tjce) {
-      // Obra única TJ-CE → trava seleção (inteligente: não precisa escolher obra, só local da equipe)
+    const outrasObras = obras.filter(o => !(o.nome && o.nome.replace(/[-\s]/g,'').toUpperCase()==='TJCE'));
+    
+    if (tjce && outrasObras.length === 0) {
+      // Apenas TJ-CE existe → modo global (compatibilidade)
       selObra.value = tjce.id;
       selObra.disabled = true;
       selObra.style.background = '#e8f5e9';
@@ -787,14 +789,24 @@
         const equipeNome = _minhaEquipeCache && _minhaEquipeCache.nome ? _minhaEquipeCache.nome : '';
         labelObra.innerHTML = 'Obra <span style="color:var(--ok);font-weight:700">— TJ-CE (única) 🔒</span>' + (equipeNome ? ' <span style="font-weight:400;color:var(--muted)">· sua equipe: '+equipeNome+'</span>' : '');
       }
-      // Garante que _minhaEquipeCache esteja carregado antes de buscar locais; se ainda não, carregaHome primeiro
       if (!_minhaEquipeCache) {
         try { _minhaEquipeCache = await api('/api/minha-equipe').then(r=>r.json()); } catch(e){}
       }
       selObra.dispatchEvent(new Event('change'));
-    } else if (obras.length===1) {
+    } else if (obras.length === 1) {
+      // Apenas uma obra (não TJ-CE) → seleciona automaticamente
       selObra.value = obras[0].id;
       selObra.dispatchEvent(new Event('change'));
+    } else {
+      // Múltiplas obras (inclui TJ-CE + outras) → habilita seleção
+      selObra.disabled = false;
+      selObra.style.background = '';
+      selObra.style.borderColor = '';
+      const labelObra = selObra.previousElementSibling;
+      if (labelObra && labelObra.tagName==='LABEL') {
+        labelObra.innerHTML = 'Obra <span class="opt">(TJ-CE + outras)</span>';
+      }
+      // Não dispara change - aguarda usuário selecionar
     }
   }
 
@@ -806,8 +818,7 @@
     const isTJCE = selText.replace(/[-\s]/g,'').toUpperCase().includes('TJCE');
     selLocal.innerHTML = '<option value="">Carregando...</option>';
     let locais = [];
-    // Inteligente: se TJ-CE e técnico tem equipe, busca SÓ os locais atribuídos a ela (via /api/equipe/:regiao/locais)
-    // Isso reaproveita o que o gestor já fez em Locais → Atribuir selecionados, sem recadastrar
+    // F3 multi-obra: se TJ-CE selecionado, usa lógica inteligente por equipe; outras obras usam filtro simples obra_id
     let equipeNome = _minhaEquipeCache && _minhaEquipeCache.nome ? _minhaEquipeCache.nome : null;
     if (isTJCE) {
       if (!equipeNome) {
@@ -827,17 +838,19 @@
       // Fallback: se equipe não tem locais atribuídos, mostra todos com aviso
       if (!locais.length) locais = await api('/api/locais?obra_id='+obraId).then(r=>r.json());
     } else {
+      // Outras obras: filtro direto por obra_id (locais já vinculados à obra)
       locais = await api('/api/locais?obra_id=' + obraId).then(r => r.json());
     }
     // Guarda cache para auto-detecção GPS e seleção rápida
     if (isTJCE && equipeNome) window._equipeLocaisCache = locais;
-    selLocal.innerHTML = '<option value="">Selecione o local ('+locais.length+' da sua equipe)</option>';
+    const label = isTJCE ? ' da sua equipe' : '';
+    selLocal.innerHTML = '<option value="">Selecione o local ('+locais.length+label+')</option>';
     locais.forEach(l => {
       const prog = l.obra_progresso!=null ? ' · '+l.obra_progresso+'%' : '';
       const cam = l.cameras ? ' · 📷'+l.cameras : '';
       selLocal.innerHTML += '<option value="' + l.nome + '">' + l.nome + (l.comarca ? ' - ' + l.comarca : '') + prog + cam + (isTJCE ? '' : (l.regiao ? ' ['+l.regiao+']':'')) + '</option>';
     });
-    // Link para expandir para todos os 233 quando filtrado por equipe
+    // Link para expandir para todos os 233 quando filtrado por equipe (só TJ-CE)
     if (isTJCE && equipeNome && locais.length < 233) {
       selLocal.innerHTML += '<option disabled>──</option>';
       selLocal.innerHTML += '<option value="__ver_todos">🔍 Ver todos os 233 locais TJ-CE...</option>';
