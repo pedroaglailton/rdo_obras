@@ -627,17 +627,18 @@ async function carregarMapa3D(){
       marcadores3d.push(m);
     });
     document.getElementById('mapa3dInfo').textContent=`${presencas.length} equipe(s) ativa(s) • ${locaisFiltr.length} locais`+(filtroEquipe?` • ${filtroEquipe}`:'');
-    // fitBounds desativado para overview - mantém centro/zoom inicial para visual limpo e 100% largura
-    // Se quiser focar nas equipes ativas, descomente o bloco abaixo
-    // setTimeout(()=>{
-    //   try{ mapa3d.resize(); }catch(e){}
-    //   const pts=[...presencas.filter(p=>p.latitude&&p.longitude).map(p=>[p.longitude,p.latitude])];
-    //   if(pts.length){
-    //     const bounds=new maplibregl.LngLatBounds(); pts.forEach(c=> bounds.extend(c));
-    //     try{ mapa3d.fitBounds(bounds, {padding:80, maxZoom:13, duration:800}); }catch(e){}
-    //     setTimeout(()=>{ try{ mapa3d.resize(); }catch(e){} }, 500);
-    //   }
-    // }, 500);
+    // quando filtra por equipe, voa direto para a área dela (inteligente)
+    if(filtroEquipe){
+      setTimeout(()=>{
+        try{ mapa3d.resize(); }catch(e){}
+        const pts=[...presencas.filter(p=>p.latitude&&p.longitude).map(p=>[p.longitude,p.latitude]), ...locaisFiltr.filter(l=>l.latitude&&l.longitude).map(l=>[parseFloat(l.longitude), parseFloat(l.latitude)])];
+        if(pts.length){
+          const bounds=new maplibregl.LngLatBounds(); pts.forEach(c=> bounds.extend(c));
+          try{ mapa3d.fitBounds(bounds, {padding:70, maxZoom:13, duration:1000}); }catch(e){}
+          setTimeout(()=>{ try{ mapa3d.resize(); }catch(e){} }, 600);
+        }
+      }, 350);
+    }
   }
 }
 
