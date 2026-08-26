@@ -548,7 +548,7 @@ async function carregarMapa3D(){
     if(typeof maplibregl==='undefined'){ document.getElementById('mapa3dInfo').textContent='MapLibre não carregou'; return; }
     mapa3d=new maplibregl.Map({
       container:'map3d',
-      style:'https://demotiles.maplibre.org/style.json',
+      style:'https://tiles.openfreemap.org/styles/bright',
       center: [-39.2,-5.0],
       zoom: 6.6,
       pitch: 0,
