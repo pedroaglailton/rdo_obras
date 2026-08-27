@@ -999,10 +999,22 @@ async function carregarMapa3D(){
     let equipes=await api('/api/equipes').then(r=>r.json()).catch(()=>[]);
     let equipeFiltro=equipes.find(e=>e.nome===filtroEquipe);
     if(equipeFiltro) urlPres='/api/presenca?equipe_id='+equipeFiltro.id;
-    const [presencas, locais] = await Promise.all([
+    let [presencas, locais] = await Promise.all([
       api(urlPres).then(r=>r.json()).catch(()=>[]),
       api('/api/locais').then(r=>r.json()).catch(()=>[])
     ]);
+    // só mostra quem está ativo no momento (último GPS < 15 min)
+    const LIMITE_ATIVO_MS=15*60*1000;
+    const agora=Date.now();
+    const isAtivo=(ts)=>{
+      if(!ts) return false;
+      let d=new Date(ts);
+      if(isNaN(d)) d=new Date(String(ts).replace(' ','T')+'Z');
+      if(isNaN(d)) return false;
+      return (agora - d.getTime())<=LIMITE_ATIVO_MS;
+    };
+    const totalPresencas=presencas.length;
+    presencas=presencas.filter(p=> isAtivo(p.atualizado_em));
     let locaisFiltr=locais;
     if(filtroEquipe) locaisFiltr=locais.filter(l=> (l.regiao||'SEM EQUIPE')===filtroEquipe);
     // locais - visual mais visível: cor da própria equipe (quando Todas) ou da equipe filtrada
@@ -1029,7 +1041,7 @@ async function carregarMapa3D(){
       const m=new maplibregl.Marker({element:el, anchor:'bottom'}).setLngLat([p.longitude, p.latitude]).setPopup(new maplibregl.Popup({offset:18}).setHTML(`<strong>${p.usuario_nome}</strong><br><small>${eq?eq.nome:'Sem equipe'} • ${p.local_nome||'sem local'}</small><br><small>🕒 ${fmtDataHora(p.atualizado_em)} • último GPS</small>`)).addTo(mapa3d);
       marcadores3d.push(m);
     });
-    document.getElementById('mapa3dInfo').textContent=`${presencas.length} equipe(s) ativa(s) • ${locaisFiltr.length} locais`+(filtroEquipe?` • ${filtroEquipe}`:'');
+    document.getElementById('mapa3dInfo').textContent=`${presencas.length} ativo(s) no momento (15min) • ${locaisFiltr.length} locais`+(totalPresencas!==presencas.length?` • ${totalPresencas-presencas.length} inativo(s) oculto(s)`:'')+(filtroEquipe?` • ${filtroEquipe}`:'');
     // quando filtra por equipe, aplica zoom no local da equipe (onde ela está / vai trabalhar) - com ruas detalhadas
     if(filtroEquipe){
       setTimeout(()=>{
