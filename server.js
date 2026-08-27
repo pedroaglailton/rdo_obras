@@ -1141,11 +1141,11 @@ app.get('/api/minha-equipe', async (req, res) => {
 
 // Dashboard
 app.get('/api/dashboard', gestor, async (req, res) => {
-  const totalObras = (await db.prepare('SELECT COUNT(*) as c FROM obras WHERE ativo=1').get()).c;
-  const totalRdos = (await db.prepare('SELECT COUNT(*) as c FROM rdos').get()).c;
-  const rdosHoje = (await db.prepare("SELECT COUNT(*) as c FROM rdos WHERE data=date('now')").get()).c;
-  const totalUsuarios = (await db.prepare('SELECT COUNT(*) as c FROM usuarios WHERE ativo=1').get()).c;
-  const totalEquipes = (await db.prepare('SELECT COUNT(*) as c FROM equipes WHERE ativo=1').get()).c;
+  const totalObras = Number((await db.prepare('SELECT COUNT(*) as c FROM obras WHERE ativo=1').get()).c)||0;
+  const totalRdos = Number((await db.prepare('SELECT COUNT(*) as c FROM rdos').get()).c)||0;
+  const rdosHoje = Number((await db.prepare("SELECT COUNT(*) as c FROM rdos WHERE data=date('now')").get()).c)||0;
+  const totalUsuarios = Number((await db.prepare('SELECT COUNT(*) as c FROM usuarios WHERE ativo=1').get()).c)||0;
+  const totalEquipes = Number((await db.prepare('SELECT COUNT(*) as c FROM equipes WHERE ativo=1').get()).c)||0;
   const recentes = await db.prepare('SELECT id,data,local,atividade,usuario_nome FROM rdos ORDER BY criado_em DESC LIMIT 10').all();
   res.json({ totalObras, totalRdos, rdosHoje, totalUsuarios, totalEquipes, recentes });
 });
@@ -1157,18 +1157,18 @@ app.get('/api/dashboard/por-equipe', gestor, async (req, res) => {
   if (req.query.obra_id) { sqlPorRegiao += ' AND obra_id=?'; pReg.push(req.query.obra_id); }
   sqlPorRegiao += ' GROUP BY regiao';
   const porRegiaoRaw = await db.prepare(sqlPorRegiao).all(...pReg);
-  porRegiaoRaw.forEach(r=>{ if(!r.regiao || !r.regiao.trim()) r.regiao='SEM EQUIPE'; r.total_cameras=r.total_cameras||0; r.fixa=r.fixa||0; r.analitica=r.analitica||0; r.lpr=r.lpr||0; r.com_coord=r.com_coord||0; });
-  // merge por chave normalizada (EQUIPE5 == EQUIPE 5)
+  porRegiaoRaw.forEach(r=>{ if(!r.regiao || !r.regiao.trim()) r.regiao='SEM EQUIPE'; r.total_locais=Number(r.total_locais)||0; r.total_cameras=Number(r.total_cameras)||0; r.fixa=Number(r.fixa)||0; r.analitica=Number(r.analitica)||0; r.lpr=Number(r.lpr)||0; r.com_coord=Number(r.com_coord)||0; });
+  // merge por chave normalizada (EQUIPE5 == EQUIPE 5) - cast para Number pois Postgres retorna strings
   const porRegiaoNorm = {};
   for(const r of porRegiaoRaw){
     const n = normEquipe(r.regiao);
     if(!porRegiaoNorm[n]) porRegiaoNorm[n]={regiao:r.regiao, total_locais:0, total_cameras:0, fixa:0, analitica:0, lpr:0, com_coord:0};
-    porRegiaoNorm[n].total_locais+=r.total_locais||0;
-    porRegiaoNorm[n].total_cameras+=r.total_cameras||0;
-    porRegiaoNorm[n].fixa+=r.fixa||0;
-    porRegiaoNorm[n].analitica+=r.analitica||0;
-    porRegiaoNorm[n].lpr+=r.lpr||0;
-    porRegiaoNorm[n].com_coord+=r.com_coord||0;
+    porRegiaoNorm[n].total_locais+=Number(r.total_locais)||0;
+    porRegiaoNorm[n].total_cameras+=Number(r.total_cameras)||0;
+    porRegiaoNorm[n].fixa+=Number(r.fixa)||0;
+    porRegiaoNorm[n].analitica+=Number(r.analitica)||0;
+    porRegiaoNorm[n].lpr+=Number(r.lpr)||0;
+    porRegiaoNorm[n].com_coord+=Number(r.com_coord)||0;
     // mantém nome da equipe quando existir
   }
   const equipes = await db.prepare('SELECT id,nome,cor FROM equipes WHERE ativo=1').all();
@@ -1178,19 +1178,19 @@ app.get('/api/dashboard/por-equipe', gestor, async (req, res) => {
     if(equipesByNorm[n]) porRegiaoNorm[n].regiao=equipesByNorm[n].nome;
   }
   const membros = await db.prepare('SELECT equipe_id, COUNT(*) as c FROM usuarios WHERE ativo=1 AND equipe_id IS NOT NULL GROUP BY equipe_id').all();
-  const membrosMap = Object.fromEntries(membros.map(m=>[String(m.equipe_id), m.c]));
+  const membrosMap = Object.fromEntries(membros.map(m=>[String(m.equipe_id), Number(m.c)||0]));
   let sqlRdos = `SELECT u.equipe_id as equipe_id, COUNT(r.id) as total, SUM(CASE WHEN r.data=date('now') THEN 1 ELSE 0 END) as hoje FROM rdos r JOIN usuarios u ON r.usuario_id=u.id WHERE u.equipe_id IS NOT NULL`;
   const pRdos=[];
   if (req.query.obra_id) { sqlRdos+=' AND r.obra_id=?'; pRdos.push(req.query.obra_id); }
   sqlRdos+=' GROUP BY u.equipe_id';
   const rdosPorEquipe = await db.prepare(sqlRdos).all(...pRdos);
-  const rdoMap = Object.fromEntries(rdosPorEquipe.map(r=>[String(r.equipe_id), r]));
+  const rdoMap = Object.fromEntries(rdosPorEquipe.map(r=>[String(r.equipe_id), {total:Number(r.total)||0, hoje:Number(r.hoje)||0}]));
   let sqlPres=`SELECT equipe_id, COUNT(*) as c FROM presenca WHERE equipe_id IS NOT NULL`;
   const pPres=[];
   if (req.query.obra_id) { sqlPres+=' AND obra_id=?'; pPres.push(req.query.obra_id); }
   sqlPres+=' GROUP BY equipe_id';
   const presPorEquipe = await db.prepare(sqlPres).all(...pPres);
-  const presMap = Object.fromEntries(presPorEquipe.map(p=>[String(p.equipe_id), p.c]));
+  const presMap = Object.fromEntries(presPorEquipe.map(p=>[String(p.equipe_id), Number(p.c)||0]));
 
   const normSem = normEquipe('SEM EQUIPE');
   const chavesNorm = new Set([...Object.keys(porRegiaoNorm), ...Object.keys(equipesByNorm), normSem]);
