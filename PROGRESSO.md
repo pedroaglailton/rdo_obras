@@ -246,5 +246,12 @@ node -e "const db = require('better-sqlite3')('data/crm.db'); console.log(db.pre
 
 ---
 
-**Ultima atualizacao:** 17/08/2026
-**Status:** Sistema funcional com todas as features implementadas
+**Ultima atualizacao:** 27/08/2026 — ver `HISTORICO_2026-08-27.md` para detalhes multi-obra + visual
+**Status:** Sistema funcional com multi-obra (F0-F3), Dashboard/RDOs redesenhados igual Atividades, fix Postgres 02161
+
+## Atualização 27/08/2026 — Multi-obra + Visual (commits ea37e49, e0e2105)
+- **Problema SEM EQUIPE:** `02161 LOCAIS / 00161/02161 7%` era `Postgres COUNT(*) string + JS +=` concatenando (`0+"161"="0161"`, `02"+"161"="02161"`). Corrigido com `Number()` em `server.js:1143-1193` (`GET /api/dashboard` e `por-equipe`). Agora `163 LOCAIS | 1645 CÂMERAS | 163/163 100%`.
+- **EQUIPE5 vs EQUIPE 5:** `normEquipe()` (`server.js:288`) normaliza acento/espaço/caixa; `por-equipe` merge por chave normalizada e `equipe/:regiao/locais` filtra por `equipe_id` + normalizado. Backfill normaliza `locais.regiao` para nome oficial.
+- **Por Equipe multi-obra:** `select filtroPorEquipeObra` com `?obra_id=` para isolar TJ-CE (234) vs HGF-GPON (1) (`public/index.html:150`).
+- **Dashboard** (`public/index.html:94-160`) e **RDOs** (`279-306`) redesenhados com `border-left #0f3d4c`, cards coloridos e lista em cards `border-left` por atividade, igual `Atividades` (`public/index.html:292`).
+- **Verificação prod:** `GET /api/locais` 237 (163 SEM), `GET /api/dashboard/por-equipe` 163/1645 pós-fix (antes 2161). Push `e0e2105 main->origin`, Render redeploy.
