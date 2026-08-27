@@ -120,6 +120,8 @@ const wrapper = {
         `CREATE TABLE IF NOT EXISTS materiais (id SERIAL PRIMARY KEY, nome TEXT NOT NULL UNIQUE, categoria TEXT DEFAULT 'Geral', ativo INTEGER DEFAULT 1)`,
         `CREATE TABLE IF NOT EXISTS rdos (id SERIAL PRIMARY KEY, obra_id INTEGER, data TEXT, local TEXT, local_id INTEGER REFERENCES locais(id) ON DELETE SET NULL, atividade TEXT, equipe_json TEXT DEFAULT '[]', materiais_json TEXT DEFAULT '[]', entrada_manha TEXT, saida_manha TEXT, entrada_tarde TEXT, saida_tarde TEXT, parou TEXT DEFAULT 'nao', motivo_parada TEXT, switch_instalado TEXT DEFAULT 'nao', nom_switch TEXT, local_switch TEXT, camera_instalada TEXT DEFAULT 'nao', nom_camera TEXT, local_camera TEXT, fotos_json TEXT DEFAULT '[]', usuario_id INTEGER, usuario_nome TEXT, criado_em TIMESTAMPTZ DEFAULT NOW())`,
         `CREATE TABLE IF NOT EXISTS presenca (id SERIAL PRIMARY KEY, usuario_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE, usuario_nome TEXT, equipe_id INTEGER, latitude DOUBLE PRECISION, longitude DOUBLE PRECISION, obra_id INTEGER, local_id INTEGER REFERENCES locais(id) ON DELETE SET NULL, local_nome TEXT, atualizado_em TIMESTAMPTZ DEFAULT NOW())`,
+        `CREATE TABLE IF NOT EXISTS obra_materiais (id SERIAL PRIMARY KEY, obra_id INTEGER NOT NULL REFERENCES obras(id) ON DELETE CASCADE, material_nome TEXT NOT NULL, unidade TEXT DEFAULT 'UND', quantidade_estimada DOUBLE PRECISION DEFAULT 0, valor_unitario DOUBLE PRECISION DEFAULT 0, fornecedor TEXT, etapa TEXT DEFAULT 'ETAPA 1', observacao TEXT, criado_em TIMESTAMPTZ DEFAULT NOW(), UNIQUE(obra_id, material_nome))`,
+        `CREATE INDEX IF NOT EXISTS idx_obra_materiais_obra ON obra_materiais(obra_id)`,
         `CREATE INDEX IF NOT EXISTS idx_rdos_data ON rdos(data)`,
         `CREATE INDEX IF NOT EXISTS idx_rdos_usuario ON rdos(usuario_id)`,
       ];
@@ -127,7 +129,7 @@ const wrapper = {
       console.log('[db] tabelas Postgres verificadas');
       // Habilita RLS para silenciar linter Supabase (postgres role bypassa RLS, então não afeta pool direto)
       // Usa apenas POLICY FOR SELECT USING (true) — o linter ignora SELECT permissivo (lint 0024 só acusa ALL/INSERT/UPDATE/DELETE)
-      const rlsTables = ['usuarios','equipes','locais','obras','etapas','atividades','materiais','rdos','presenca'];
+      const rlsTables = ['usuarios','equipes','locais','obras','etapas','atividades','materiais','rdos','presenca','obra_materiais'];
       for (const t of rlsTables) {
         try { await pool.query(`ALTER TABLE public.${t} ENABLE ROW LEVEL SECURITY`); } catch (e) { /* já habilitado */ }
         // Remove policy antiga ALL permissiva que gera WARN 0024

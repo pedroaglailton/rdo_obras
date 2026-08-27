@@ -138,7 +138,21 @@ const SQL_CREATE = [
     local_nome TEXT,
     atualizado_em TEXT DEFAULT (datetime('now')),
     FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
-  )`
+  )`,
+  `CREATE TABLE IF NOT EXISTS obra_materiais (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    obra_id INTEGER NOT NULL REFERENCES obras(id) ON DELETE CASCADE,
+    material_nome TEXT NOT NULL,
+    unidade TEXT DEFAULT 'UND',
+    quantidade_estimada REAL DEFAULT 0,
+    valor_unitario REAL DEFAULT 0,
+    fornecedor TEXT,
+    etapa TEXT DEFAULT 'ETAPA 1',
+    observacao TEXT,
+    criado_em TEXT DEFAULT (datetime('now')),
+    UNIQUE(obra_id, material_nome)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_obra_materiais_obra ON obra_materiais(obra_id)`
 ];
 // DB init - hibrido SQLite / Postgres (Supabase)
 async function initDb(){
@@ -949,6 +963,176 @@ app.post('/api/materiais', gestor, async (req, res) => {
 app.delete('/api/materiais/:id', gestor, async (req, res) => {
   await db.prepare('UPDATE materiais SET ativo=0 WHERE id=?').run(req.params.id);
   res.json({ ok: true });
+});
+
+// ============================================================
+// ESTOQUE POR OBRA - Estimativa vs Consumo (Materiais.xlsx)
+// ============================================================
+// Lista estimativas de uma obra
+app.get('/api/obras/:obra_id/materiais/estimativas', async (req, res) => {
+  const obraId = Number(req.params.obra_id);
+  const rows = await db.prepare('SELECT * FROM obra_materiais WHERE obra_id=? ORDER BY material_nome').all(obraId);
+  res.json(rows);
+});
+// Cria/atualiza uma estimativa (upsert por material_nome)
+app.post('/api/obras/:obra_id/materiais/estimativas', gestor, async (req, res) => {
+  const obraId = Number(req.params.obra_id);
+  const { material_nome, unidade, quantidade_estimada, valor_unitario, fornecedor, etapa, observacao } = req.body;
+  if (!material_nome || !material_nome.trim()) return res.status(400).json({error:'material_nome obrigatório'});
+  const nome = material_nome.trim();
+  const qtd = Number(quantidade_estimada)||0;
+  if (qtd <0) return res.status(400).json({error:'Quantidade inválida'});
+  // upsert: tenta insert, se conflito atualiza
+  const existe = await db.prepare('SELECT id FROM obra_materiais WHERE obra_id=? AND UPPER(material_nome)=UPPER(?)').get(obraId, nome);
+  if (existe) {
+    await db.prepare('UPDATE obra_materiais SET unidade=?, quantidade_estimada=?, valor_unitario=?, fornecedor=?, etapa=?, observacao=? WHERE id=?')
+      .run(unidade||'UND', qtd, Number(valor_unitario)||0, fornecedor||'', etapa||'ETAPA 1', observacao||'', existe.id);
+    return res.json({ok:true, id: existe.id, atualizado:true});
+  } else {
+    const r = await db.prepare('INSERT INTO obra_materiais (obra_id, material_nome, unidade, quantidade_estimada, valor_unitario, fornecedor, etapa, observacao) VALUES (?,?,?,?,?,?,?,?)')
+      .run(obraId, nome, unidade||'UND', qtd, Number(valor_unitario)||0, fornecedor||'', etapa||'ETAPA 1', observacao||'');
+    // garante que material existe no catálogo
+    try { await db.prepare('INSERT OR IGNORE INTO materiais (nome,categoria) VALUES (?,?)').run(nome, 'Geral'); } catch(e){}
+    return res.json({ok:true, id: r.lastInsertRowid});
+  }
+});
+app.put('/api/obra-materiais/:id', gestor, async (req, res) => {
+  const id = Number(req.params.id);
+  const { material_nome, unidade, quantidade_estimada, valor_unitario, fornecedor, etapa, observacao } = req.body;
+  const atual = await db.prepare('SELECT * FROM obra_materiais WHERE id=?').get(id);
+  if(!atual) return res.status(404).json({error:'Estimativa não encontrada'});
+  await db.prepare('UPDATE obra_materiais SET material_nome=?, unidade=?, quantidade_estimada=?, valor_unitario=?, fornecedor=?, etapa=?, observacao=? WHERE id=?')
+    .run(material_nome||atual.material_nome, unidade||atual.unidade, quantidade_estimada!=null? Number(quantidade_estimada):atual.quantidade_estimada, valor_unitario!=null? Number(valor_unitario):atual.valor_unitario, fornecedor!=null? fornecedor:atual.fornecedor, etapa||atual.etapa, observacao!=null? observacao:atual.observacao, id);
+  res.json({ok:true});
+});
+app.delete('/api/obra-materiais/:id', gestor, async (req, res) => {
+  await db.prepare('DELETE FROM obra_materiais WHERE id=?').run(Number(req.params.id));
+  res.json({ok:true});
+});
+// Importar Materiais.xlsx por obra (espera {linhas:[{Descrição do material, Unidade, Quantidade solicitada, Menor valor Total, Fornecedor...}]})
+app.post('/api/obras/:obra_id/materiais/importar', gestor, async (req, res) => {
+  const obraId = Number(req.params.obra_id);
+  const { linhas } = req.body;
+  if(!linhas || !Array.isArray(linhas) || !linhas.length) return res.status(400).json({error:'Envie {linhas:[...]}'});
+  const norm = s=> (s||'').toString().trim();
+  let importados=0, atualizados=0;
+  for(const l of linhas){
+    // tenta mapear colunas variadas da planilha
+    const nome = norm(l['Descrição do material'] || l['Descricao do material'] || l['Descrição'] || l['Descricao'] || l['material_nome'] || l['MATERIAL'] || l['nome']);
+    if(!nome || nome.toLowerCase().includes('descrição')) continue;
+    const unidade = norm(l['Unidade'] || l['unidade'] || 'UND');
+    const qtd = Number(String(l['Quantidade solicitada']||l['quantidade_estimada']||l['Quantidade']||0).toString().replace(',','.'))||0;
+    if(!qtd) continue;
+    const valorTotal = Number(String(l['Menor valor Total']||l['valor_total']||0).toString().replace(',','.'))||0;
+    const fornecedor = norm(l['Fornecedor com menor preço']||l['fornecedor']||'');
+    const etapa = norm(l['etapa']||'ETAPA 1');
+    // valor unitário deriva do total/qtd se não vier separado
+    const valorUnit = valorTotal && qtd ? valorTotal/qtd : Number(String(l['Valor Unitário']||l['valor_unitario']||0).toString().replace(',','.'))||0;
+    const existe = await db.prepare('SELECT id FROM obra_materiais WHERE obra_id=? AND UPPER(material_nome)=UPPER(?)').get(obraId, nome);
+    if(existe){
+      await db.prepare('UPDATE obra_materiais SET unidade=?, quantidade_estimada=?, valor_unitario=?, fornecedor=?, etapa=? WHERE id=?').run(unidade, qtd, valorUnit, fornecedor, etapa, existe.id);
+      atualizados++;
+    } else {
+      await db.prepare('INSERT INTO obra_materiais (obra_id, material_nome, unidade, quantidade_estimada, valor_unitario, fornecedor, etapa) VALUES (?,?,?,?,?,?,?)').run(obraId, nome, unidade, qtd, valorUnit, fornecedor, etapa);
+      importados++;
+    }
+    try { await db.prepare('INSERT OR IGNORE INTO materiais (nome,categoria) VALUES (?,?)').run(nome, 'Geral'); } catch(e){}
+  }
+  res.json({ok:true, importados, atualizados, total:linhas.length});
+});
+// Consumo agregado por obra (estimativa vs real por RDOs) — dinâmica com alertas e forecast
+app.get('/api/obras/:obra_id/materiais/consumo', async (req, res) => {
+  const obraId = Number(req.params.obra_id);
+  const estimativas = await db.prepare('SELECT * FROM obra_materiais WHERE obra_id=? ORDER BY material_nome').all(obraId);
+  const rdos = await db.prepare('SELECT id, local, local_id, materiais_json, equipe_json, usuario_id, data FROM rdos WHERE obra_id=?').all(obraId);
+  const locais = await db.prepare('SELECT id FROM locais WHERE obra_id=? AND ativo=1').all(obraId);
+  const totalLocais = locais.length;
+  // locais com pelo menos 1 RDO (considera concluído se tem RDO)
+  const locaisComRdo = new Set(rdos.map(r=> r.local_id || r.local).filter(Boolean));
+  const locaisConcluidos = locaisComRdo.size;
+  const locaisPendentes = Math.max(0, totalLocais - locaisConcluidos);
+  // agrega consumo por material (case-insensitive)
+  const mapNorm = s=> (s||'').toString().normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().trim();
+  const consumoPorMat = {}; // norm -> {nome, total, rdos, porEquipe, porLocal}
+  const consumoPorEquipe = {}; // equipeNome -> total geral (soma de qtds)
+  const consumoPorLocal = {}; // localNome -> total
+  for(const r of rdos){
+    let mats=[]; try{ mats=JSON.parse(r.materiais_json||'[]'); }catch(e){ mats=[]; }
+    let equipes=[]; try{ equipes=JSON.parse(r.equipe_json||'[]'); }catch(e){ equipes=[]; }
+    if(!Array.isArray(mats)) mats=[];
+    for(const m of mats){
+      const nome = (m.nome || m.material_nome || m.descricao || '').toString().trim();
+      if(!nome) continue;
+      const qtd = Number(m.qtd ?? m.quantidade ?? m.qty ?? 1)||0;
+      const norm = mapNorm(nome);
+      if(!consumoPorMat[norm]) consumoPorMat[norm]={nome, total:0, rdos:0, porEquipe:{}, porLocal:{}};
+      consumoPorMat[norm].total+=qtd;
+      consumoPorMat[norm].rdos+=1;
+      // por equipe: distribui qtd igualmente entre equipes do RDO ou conta para cada
+      const eqs = equipes.length? equipes : ['SEM EQUIPE'];
+      for(const eq of eqs){
+        consumoPorMat[norm].porEquipe[eq]=(consumoPorMat[norm].porEquipe[eq]||0)+qtd;
+        consumoPorEquipe[eq]=(consumoPorEquipe[eq]||0)+qtd;
+      }
+      const locKey = r.local || (r.local_id? String(r.local_id):'SEM LOCAL');
+      consumoPorMat[norm].porLocal[locKey]=(consumoPorMat[norm].porLocal[locKey]||0)+qtd;
+      consumoPorLocal[locKey]=(consumoPorLocal[locKey]||0)+qtd;
+    }
+  }
+  // monta resposta por material estimado
+  const itens = estimativas.map(e=>{
+    const norm = mapNorm(e.material_nome);
+    const cons = consumoPorMat[norm];
+    const consumido = cons? cons.total : 0;
+    const estimado = Number(e.quantidade_estimada)||0;
+    const saldo = estimado - consumido;
+    const pct = estimado>0? Math.round(consumido/estimado*100) : (consumido>0?100:0);
+    const valorEstimado = estimado * (Number(e.valor_unitario)||0);
+    const valorConsumido = consumido * (Number(e.valor_unitario)||0);
+    const valorSaldo = saldo * (Number(e.valor_unitario)||0);
+    // forecast: média por local concluído
+    const mediaPorLocal = locaisConcluidos>0? consumido/locaisConcluidos : (totalLocais>0? estimado/totalLocais : 0);
+    const projecaoRestante = mediaPorLocal * locaisPendentes;
+    const necessidade = Math.max(0, projecaoRestante - Math.max(0,saldo));
+    let status='ok';
+    if(consumido>estimado) status='estourado';
+    else if(saldo<=0) status='critico';
+    else if(pct>=90) status='critico';
+    else if(pct>=70) status='atencao';
+    else if(necessidade>0) status='comprar';
+    const precisaComprar = status==='critico' || status==='estourado' || necessidade>0;
+    const sugestaoCompra = precisaComprar ? Math.ceil(Math.max(necessidade, estimado*0.2 - saldo, 0) + (estimado*0.05)) : 0; // 20% buffer + 5% margem
+    return {
+      id:e.id, material_nome:e.material_nome, unidade:e.unidade, etapa:e.etapa, fornecedor:e.fornecedor, valor_unitario:Number(e.valor_unitario)||0,
+      estimado, consumido, saldo, pct, valorEstimado, valorConsumido, valorSaldo,
+      rdos: cons? cons.rdos:0, porEquipe: cons? cons.porEquipe:{}, porLocal: cons? cons.porLocal:{},
+      mediaPorLocal: Math.round(mediaPorLocal*100)/100, projecaoRestante: Math.round(projecaoRestante*100)/100,
+      necessidade: Math.round(necessidade*100)/100, status, precisaComprar, sugestaoCompra
+    };
+  });
+  // materiais consumidos sem estimativa (extra)
+  const estimNorms = new Set(estimativas.map(e=> mapNorm(e.material_nome)));
+  const extras = Object.entries(consumoPorMat).filter(([k])=> !estimNorms.has(k)).map(([norm, v])=>{
+    return { material_nome: v.nome, unidade:'UND', estimado:0, consumido: v.total, saldo: -v.total, pct:100, valorEstimado:0, valorConsumido:0, valorSaldo:0, rdos:v.rdos, porEquipe:v.porEquipe, porLocal:v.porLocal, status:'extra', precisaComprar:true, sugestaoCompra:0 };
+  });
+  const todosItens = [...itens, ...extras].sort((a,b)=> (b.pct - a.pct) || (b.consumido - a.consumido));
+  const alertas = todosItens.filter(i=> i.precisaComprar);
+  const resumo={
+    obra_id:obraId, totalLocais, locaisConcluidos, locaisPendentes,
+    totalMateriais: estimativas.length,
+    totalEstimadoQtd: estimativas.reduce((s,e)=>s+Number(e.quantidade_estimada||0),0),
+    totalConsumidoQtd: Object.values(consumoPorMat).reduce((s,v)=>s+v.total,0),
+    totalValorEstimado: itens.reduce((s,i)=>s+i.valorEstimado,0),
+    totalValorConsumido: itens.reduce((s,i)=>s+i.valorConsumido,0),
+    totalValorSaldo: itens.reduce((s,i)=>s+i.valorSaldo,0),
+    pctMedio: itens.length? Math.round(itens.reduce((s,i)=>s+i.pct,0)/itens.length):0,
+    alertas: alertas.length,
+    rdosTotal: rdos.length
+  };
+  // ranking equipes e locais
+  const rankingEquipes = Object.entries(consumoPorEquipe).map(([nome,total])=>({nome, total})).sort((a,b)=>b.total-a.total).slice(0,10);
+  const rankingLocais = Object.entries(consumoPorLocal).map(([nome,total])=>({nome, total})).sort((a,b)=>b.total-a.total).slice(0,10);
+  res.json({resumo, itens: todosItens, alertas, rankingEquipes, rankingLocais});
 });
 
 // ============================================================

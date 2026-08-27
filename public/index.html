@@ -86,6 +86,7 @@
     <button data-view="locais">Locais</button>
     <button data-view="atividades">Atividades</button>
     <button data-view="materiais">Materiais</button>
+    <button data-view="estoque">Estoque</button>
     <button data-view="equipes">Equipes</button>
     <button data-view="usuarios">Usuarios</button>
   </nav>
@@ -407,6 +408,98 @@
     <div class="card"><h2>Catálogo Organizado</h2><div id="listaMateriais"></div></div>
   </section>
 
+  <!-- ESTOQUE POR OBRA - Estimativa vs Consumo (dinâmico Materiais.xlsx) -->
+  <section class="view" id="view-estoque">
+    <div class="card" style="border-left:4px solid #0f3d4c">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+        <h2 style="margin:0">📦 Estoque por Obra — Estimativa vs Consumo</h2>
+        <span style="font-size:11px;background:#f7f9fa;border:1px solid var(--line);padding:4px 10px;border-radius:20px" id="estoqueBadge">0 materiais • 0 alertas</span>
+      </div>
+      <p style="font-size:11px;color:var(--muted);margin:6px 0 0">Cada obra tem sua <strong>estimativa (Materiais.xlsx)</strong>. O consumo vem dos <strong>RDOs</strong> (por equipe/local). O sistema calcula <strong>saldo, % usado e projeção</strong> e avisa <strong>quando comprar</strong>.</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;align-items:center">
+        <select id="estoqueObra" onchange="carregarEstoque()" style="padding:7px;font-size:12px;border:1.5px solid var(--line);border-radius:8px;min-width:180px"><option value="">Selecione a obra...</option></select>
+        <button class="btn-small" onclick="carregarEstoque()" style="background:#0f3d4c">↻ Atualizar</button>
+        <span style="font-size:11px;color:var(--muted)" id="estoqueInfo"></span>
+      </div>
+    </div>
+
+    <div class="card" style="border-left:4px solid #1565c0">
+      <h2>📥 Importar Estimativa (Materiais.xlsx — ETAPA 1)</h2>
+      <p style="font-size:11px;color:var(--muted);margin:4px 0 8px">Use o <code>Materiais.xlsx › Planilha1</code> (52 itens, quantidade solicitada, menor valor/fornecedor). O sistema importa para a <strong>obra selecionada</strong> e já vincula ao catálogo. Reimportar atualiza quantidades.</p>
+      <input type="file" id="fileEstoque" accept=".xlsx,.xls" style="width:100%;padding:10px;border:1.5px dashed var(--line);border-radius:9px;background:#f7f9fa;margin-bottom:8px">
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn-primary" onclick="importarEstoque()" id="btnImportEstoque" style="flex:1">Importar para obra selecionada</button>
+        <button class="btn-small" onclick="document.getElementById('fileEstoque').value=''" style="background:#e0e0e0;color:#333">Limpar</button>
+      </div>
+      <div id="msgEstoque" style="font-size:12px;margin-top:8px;min-height:16px"></div>
+    </div>
+
+    <div class="card" id="estoqueKpis" style="display:none">
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px">
+        <div style="padding:12px;background:#e3f2fd;border-radius:10px;border:1px solid var(--line);text-align:center;border-left:4px solid #1565c0">
+          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;font-weight:700">💰 Estimado</div>
+          <div style="font-size:18px;font-weight:800;color:#1565c0;margin-top:4px" id="estoqueValorEst">R$ 0</div>
+          <div style="font-size:10px;color:var(--muted)" id="estoqueQtdEst">0 unid</div>
+        </div>
+        <div style="padding:12px;background:#fff3e0;border-radius:10px;border:1px solid var(--line);text-align:center;border-left:4px solid #ef6c00">
+          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;font-weight:700">📉 Consumido</div>
+          <div style="font-size:18px;font-weight:800;color:#ef6c00;margin-top:4px" id="estoqueValorCons">R$ 0</div>
+          <div style="font-size:10px;color:var(--muted)" id="estoquePctMedio">0% médio</div>
+        </div>
+        <div style="padding:12px;background:#e8f5e9;border-radius:10px;border:1px solid var(--line);text-align:center;border-left:4px solid #2e7d32">
+          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;font-weight:700">📦 Saldo</div>
+          <div style="font-size:18px;font-weight:800;color:#2e7d32;margin-top:4px" id="estoqueValorSaldo">R$ 0</div>
+          <div style="font-size:10px;color:var(--muted)" id="estoqueSaldoQtd">0 unid</div>
+        </div>
+        <div style="padding:12px;background:#fce4ec;border-radius:10px;border:1px solid var(--line);text-align:center;border-left:4px solid #c62828">
+          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;font-weight:700">⚠️ Alertas</div>
+          <div style="font-size:18px;font-weight:800;color:#c62828;margin-top:4px" id="estoqueAlertas">0</div>
+          <div style="font-size:10px;color:var(--muted)" id="estoqueLocaisInfo">0 locais</div>
+        </div>
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-top:8px" id="estoqueResumo"></div>
+    </div>
+
+    <div class="card" id="estoqueAlertasCard" style="display:none;border-left:4px solid #c62828">
+      <h2 style="color:#c62828">🚨 Precisa comprar</h2>
+      <p style="font-size:11px;color:var(--muted);margin:4px 0 8px">Materiais com saldo crítico, estourado ou projeção de falta para locais pendentes. Sugestão já com 5% margem.</p>
+      <div id="listaAlertas" style="display:grid;gap:8px"></div>
+    </div>
+
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+        <h2 style="margin:0">Adicionar / Editar estimativa</h2>
+        <span style="font-size:11px;color:var(--muted)">Vincula ao catálogo automaticamente</span>
+      </div>
+      <input type="hidden" id="estEditId">
+      <div class="form-row"><input type="text" id="estMaterial" placeholder="Material * (ex: ABRAÇADEIRA DE NYLON...)" list="listaMateriaisDatalist"><datalist id="listaMateriaisDatalist"></datalist><input type="text" id="estUnidade" placeholder="Unidade" value="UND"></div>
+      <div class="form-row"><input type="number" id="estQtd" placeholder="Qtd estimada *"><input type="number" step="0.01" id="estValor" placeholder="Valor unitário (R$)"></div>
+      <div class="form-row"><input type="text" id="estFornecedor" placeholder="Fornecedor"><input type="text" id="estEtapa" placeholder="Etapa" value="ETAPA 1"></div>
+      <div style="display:flex;gap:8px;margin-top:8px"><button class="btn-primary" onclick="salvarEstimativa()" style="flex:1" id="btnEst">Salvar estimativa</button><button class="btn-primary" onclick="cancelarEstimativa()" style="flex:1;display:none;background:var(--muted)" id="btnCancelEst">Cancelar</button></div>
+      <div id="msgEst" style="font-size:12px;margin-top:6px;min-height:16px"></div>
+    </div>
+
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+        <h2 style="margin:0">Materiais — estimado vs consumido</h2>
+        <div style="display:flex;gap:6px;align-items:center">
+          <input type="text" id="buscaEstoque" placeholder="Buscar material..." oninput="filtrarEstoque()" style="width:160px;padding:7px;font-size:12px;border:1.5px solid var(--line);border-radius:8px">
+          <select id="filtroStatusEstoque" onchange="filtrarEstoque()" style="padding:7px;font-size:12px;border:1.5px solid var(--line);border-radius:8px"><option value="">Todos status</option><option value="ok">OK</option><option value="atencao">Atenção</option><option value="critico">Crítico</option><option value="estourado">Estourado</option><option value="extra">Extra</option><option value="comprar">Precisa comprar</option></select>
+        </div>
+      </div>
+      <p style="font-size:11px;color:var(--muted);margin:6px 0 0">Progresso = consumido/estimado. <strong>Projeção</strong> usa média por local concluído × locais pendentes. <strong>Sugestão</strong> = necessidade + 20% buffer.</p>
+      <div id="listaEstoque" style="margin-top:12px;display:grid;gap:8px"></div>
+    </div>
+
+    <div class="card">
+      <h2>🏆 Ranking — quem mais consome</h2>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div><div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:6px">Por equipe</div><div id="rankingEquipes"></div></div>
+        <div><div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:6px">Por local</div><div id="rankingLocais"></div></div>
+      </div>
+    </div>
+  </section>
+
   <!-- EQUIPES - Gestao robusta (logica de obras) -->
   <section class="view" id="view-equipes">
     <div class="card">
@@ -519,7 +612,7 @@ document.querySelectorAll('nav.tabs button').forEach(btn => {
     btn.classList.add('active');
     document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
     document.getElementById('view-' + btn.dataset.view).classList.add('active');
-    const loaders = { dashboard: carregarDashboard, 'por-equipe': carregarPorEquipe, desempenho: carregarDesempenho, mapa3d: carregarMapa3D, obras: carregarObras, rdos: carregarRdos, locais: carregarLocais, atividades: carregarAtividades, materiais: carregarMateriais, equipes: carregarEquipes, usuarios: carregarUsuarios };
+    const loaders = { dashboard: carregarDashboard, 'por-equipe': carregarPorEquipe, desempenho: carregarDesempenho, mapa3d: carregarMapa3D, obras: carregarObras, rdos: carregarRdos, locais: carregarLocais, atividades: carregarAtividades, materiais: carregarMateriais, estoque: carregarEstoque, equipes: carregarEquipes, usuarios: carregarUsuarios };
     if (loaders[btn.dataset.view]) loaders[btn.dataset.view]();
   });
 });
@@ -1463,6 +1556,231 @@ async function importarListaTxt(){
     msg.style.color='var(--ok)';
     await carregarMateriais();
   }catch(e){ msg.textContent='Erro: '+(e.message||e); msg.style.color='var(--danger)'; }
+}
+
+// ============================================================
+// ESTOQUE POR OBRA - Estimativa vs Consumo (Materiais.xlsx)
+// ============================================================
+let estoqueCache=null;
+let estoqueFiltraBusca='';
+async function carregarEstoque(){
+  const sel=document.getElementById('estoqueObra');
+  if(sel && sel.options.length===1){
+    try{
+      const obras=await api('/api/obras').then(r=>r.json());
+      const cur=sel.value;
+      sel.innerHTML='<option value="">Selecione a obra...</option>'+obras.filter(o=>o.ativo!==0).map(o=>`<option value="${o.id}">${o.nome}</option>`).join('');
+      sel.value=cur;
+      // popula datalist de materiais
+      try{
+        const mats=await api('/api/materiais').then(r=>r.json());
+        document.getElementById('listaMateriaisDatalist').innerHTML=mats.map(m=>`<option value="${m.nome.replace(/"/g,'&quot;')}">`).join('');
+      }catch(e){}
+    }catch(e){}
+  }
+  const obraId=sel.value;
+  if(!obraId){
+    document.getElementById('estoqueKpis').style.display='none';
+    document.getElementById('estoqueAlertasCard').style.display='none';
+    document.getElementById('estoqueBadge').textContent='Selecione a obra';
+    document.getElementById('estoqueInfo').textContent='Escolha a obra acima para ver estimativa vs consumo';
+    document.getElementById('listaEstoque').innerHTML='<p class="empty-state">Selecione a obra para carregar o estoque.</p>';
+    document.getElementById('rankingEquipes').innerHTML='<p class="empty-state">—</p>';
+    document.getElementById('rankingLocais').innerHTML='<p class="empty-state">—</p>';
+    return;
+  }
+  document.getElementById('estoqueInfo').textContent='Carregando...';
+  try{
+    const data=await api('/api/obras/'+obraId+'/materiais/consumo').then(r=>r.json());
+    estoqueCache=data;
+    const r=data.resumo;
+    document.getElementById('estoqueKpis').style.display='block';
+    document.getElementById('estoqueBadge').textContent=`${r.totalMateriais} materiais • ${r.alertas} alertas • ${r.rdosTotal} RDOs`;
+    document.getElementById('estoqueQtdEst').textContent=`${r.totalEstimadoQtd.toLocaleString('pt-BR')} unid • ${r.totalLocais} locais`;
+    document.getElementById('estoqueValorEst').textContent=`R$ ${r.totalValorEstimado.toLocaleString('pt-BR',{minimumFractionDigits:2})}`;
+    document.getElementById('estoqueValorCons').textContent=`R$ ${r.totalValorConsumido.toLocaleString('pt-BR',{minimumFractionDigits:2})}`;
+    document.getElementById('estoquePctMedio').textContent=`${r.pctMedio}% médio • ${r.totalConsumidoQtd.toLocaleString('pt-BR')} unid`;
+    document.getElementById('estoqueValorSaldo').textContent=`R$ ${r.totalValorSaldo.toLocaleString('pt-BR',{minimumFractionDigits:2})}`;
+    document.getElementById('estoqueSaldoQtd').textContent=`${(r.totalEstimadoQtd - r.totalConsumidoQtd).toLocaleString('pt-BR')} saldo`;
+    document.getElementById('estoqueAlertas').textContent=r.alertas;
+    document.getElementById('estoqueLocaisInfo').textContent=`${r.locaisConcluidos}/${r.totalLocais} locais com RDO • ${r.locaisPendentes} pendentes`;
+    document.getElementById('estoqueResumo').textContent=`Obra #${r.obra_id} • ${r.totalMateriais} materiais estimados • ${r.rdosTotal} RDOs analisados • Projeção por média por local concluído`;
+    // alertas
+    const alertCard=document.getElementById('estoqueAlertasCard');
+    const alertBox=document.getElementById('listaAlertas');
+    if(data.alertas.length){
+      alertCard.style.display='block';
+      alertBox.innerHTML=data.alertas.slice(0,20).map(a=>{
+        const cor=a.status==='estourado'?'#c62828':a.status==='critico'?'#ef6c00':a.status==='extra'?'#6a1b9a':'#f57f17';
+        return `<div style="display:flex;align-items:center;gap:10px;padding:10px;background:#fff;border:1px solid var(--line);border-left:4px solid ${cor};border-radius:10px">
+          <div style="width:32px;height:32px;border-radius:8px;background:${cor};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px">!</div>
+          <div style="flex:1;min-width:0">
+            <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><strong style="font-size:13px">${a.material_nome}</strong><span style="font-size:10px;background:${cor};color:#fff;padding:2px 7px;border-radius:8px">${a.status.toUpperCase()}</span><span style="font-size:10px;background:#f7f9fa;border:1px solid var(--line);padding:2px 7px;border-radius:8px">${a.pct}% usado</span></div>
+            <div style="font-size:11px;color:var(--muted)">Est: ${a.estimado} • Cons: ${a.consumido} • Saldo: ${a.saldo} • Proj. restante: ${a.projecaoRestante} • Necessidade: ${a.necessidade}</div>
+            <div style="font-size:11px;color:${cor};font-weight:700">Sugestão comprar: ${a.sugestaoCompra} ${a.unidade} ${a.fornecedor?'• '+a.fornecedor:''} • R$ ${(a.sugestaoCompra*(a.valor_unitario||0)).toLocaleString('pt-BR',{minimumFractionDigits:2})}</div>
+          </div>
+        </div>`;
+      }).join('')+(data.alertas.length>20?`<p style="font-size:11px;color:var(--muted);text-align:center">+${data.alertas.length-20} alertas ocultos — filtre a lista</p>`:'');
+    } else {
+      alertCard.style.display='none';
+    }
+    // rankings
+    document.getElementById('rankingEquipes').innerHTML=data.rankingEquipes.length? data.rankingEquipes.map((e,i)=>`<div style="display:flex;align-items:center;gap:8px;padding:8px;background:#f7f9fa;border:1px solid var(--line);border-radius:8px;margin-bottom:6px"><span style="width:24px;height:24px;border-radius:50%;background:#0f3d4c;color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800">${i+1}</span><span style="flex:1;font-size:12px;font-weight:600">${e.nome}</span><span style="font-size:12px;background:#0f3d4c;color:#fff;padding:2px 8px;border-radius:20px">${e.total}</span></div>`).join(''):'<p class="empty-state">Sem consumo por equipe ainda</p>';
+    document.getElementById('rankingLocais').innerHTML=data.rankingLocais.length? data.rankingLocais.map((l,i)=>`<div style="display:flex;align-items:center;gap:8px;padding:8px;background:#f7f9fa;border:1px solid var(--line);border-radius:8px;margin-bottom:6px"><span style="width:24px;height:24px;border-radius:50%;background:#6a1b9a;color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800">${i+1}</span><span style="flex:1;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${l.nome}</span><span style="font-size:12px;background:#6a1b9a;color:#fff;padding:2px 8px;border-radius:20px">${l.total}</span></div>`).join(''):'<p class="empty-state">Sem consumo por local ainda</p>';
+    filtrarEstoque();
+    document.getElementById('estoqueInfo').textContent='Atualizado';
+  }catch(e){
+    console.error(e);
+    document.getElementById('estoqueInfo').textContent='Erro: '+(e.message||e);
+    toast('Erro ao carregar estoque');
+  }
+}
+function filtrarEstoque(){
+  if(!estoqueCache) return;
+  const busca=(document.getElementById('buscaEstoque').value||'').toLowerCase();
+  const status=document.getElementById('filtroStatusEstoque').value;
+  let lista=estoqueCache.itens.slice();
+  if(busca) lista=lista.filter(i=> i.material_nome.toLowerCase().includes(busca) || (i.fornecedor||'').toLowerCase().includes(busca));
+  if(status){
+    if(status==='comprar') lista=lista.filter(i=> i.precisaComprar);
+    else lista=lista.filter(i=> i.status===status);
+  }
+  const cores={ok:'#2e7d32',atencao:'#ef6c00',critico:'#c62828',estourado:'#7f0000',extra:'#6a1b9a',comprar:'#c62828'};
+  document.getElementById('listaEstoque').innerHTML=lista.slice(0,200).map(i=>{
+    const cor=cores[i.status]||'#90a4ae';
+    const pct=Math.min(100, Math.max(0,i.pct));
+    const barColor=i.status==='estourado'?'#c62828':i.status==='critico'?'#ef6c00':i.status==='atencao'?'#f9a825':'#2e7d32';
+    return `<div style="padding:12px;background:#fff;border:1px solid var(--line);border-left:4px solid ${cor};border-radius:10px">
+      <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start">
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+            <strong style="font-size:13px">${i.material_nome}</strong>
+            <span style="font-size:10px;background:${cor};color:#fff;padding:2px 7px;border-radius:8px">${i.status.toUpperCase()} ${i.pct}%</span>
+            ${i.precisaComprar?`<span style="font-size:10px;background:#ffcdd2;color:#c62828;padding:2px 7px;border-radius:8px;border:1px solid #ef9a9a">COMPRAR ${i.sugestaoCompra}</span>`:''}
+            <span style="font-size:10px;background:#f7f9fa;border:1px solid var(--line);padding:2px 7px;border-radius:8px">${i.unidade}</span>
+          </div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px">Est: <strong style="color:var(--text)">${i.estimado}</strong> • Cons: <strong style="color:${cor}">${i.consumido}</strong> • Saldo: <strong style="color:${i.saldo<0?'#c62828':'#2e7d32'}">${i.saldo}</strong> • RDOs: ${i.rdos} • ${i.fornecedor? 'Forn: '+i.fornecedor+' • ':''} R$ ${(i.valor_unitario||0).toLocaleString('pt-BR',{minimumFractionDigits:2})}/un</div>
+          <div style="font-size:11px;color:var(--muted)">Média/local: ${i.mediaPorLocal} • Projeção restante: ${i.projecaoRestante} • Necessidade: ${i.necessidade} • Valor saldo: R$ ${(i.valorSaldo||0).toLocaleString('pt-BR',{minimumFractionDigits:2})}</div>
+          <div style="height:6px;background:var(--line);border-radius:99px;overflow:hidden;margin-top:6px"><div style="height:100%;background:${barColor};width:${pct}%"></div></div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <button class="btn-small" onclick="editarEstimativa(${i.id})" style="background:#1565c0">Editar</button>
+          <button class="btn-delete" onclick="excluirEstimativa(${i.id})" title="Excluir">&times;</button>
+        </div>
+      </div>
+      ${Object.keys(i.porEquipe||{}).length? `<div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px">${Object.entries(i.porEquipe).map(([eq,q])=>`<span style="font-size:10px;background:#e3f2fd;color:#1565c0;padding:2px 7px;border-radius:20px;border:1px solid #90caf9">${eq}: ${q}</span>`).join('')}</div>`:''}
+    </div>`;
+  }).join('')||'<p class="empty-state">Nenhum material com esse filtro. Importe o XLSX ou adicione manualmente.</p>';
+  if(lista.length>200) document.getElementById('listaEstoque').innerHTML+=`<p style="text-align:center;font-size:11px;color:var(--muted)">Mostrando 200 de ${lista.length} — refine a busca</p>`;
+}
+async function importarEstoque(){
+  const obraId=document.getElementById('estoqueObra').value;
+  const file=document.getElementById('fileEstoque').files[0];
+  const msg=document.getElementById('msgEstoque');
+  if(!obraId){ msg.textContent='Selecione a obra primeiro'; msg.style.color='var(--danger)'; return; }
+  if(!file){ msg.textContent='Selecione o XLSX (Materiais.xlsx)'; msg.style.color='var(--danger)'; return; }
+  msg.textContent='Lendo planilha...'; msg.style.color='var(--muted)';
+  const btn=document.getElementById('btnImportEstoque'); btn.disabled=true; btn.textContent='Processando...';
+  try{
+    const buf=await file.arrayBuffer();
+    const wb=XLSX.read(buf,{type:'array'});
+    // tenta Planilha1 primeiro, senão primeira com dados
+    let ws=null, sheetName=null;
+    for(const n of wb.SheetNames){
+      const cand=wb.Sheets[n];
+      const rows=XLSX.utils.sheet_to_json(cand,{header:1,defval:''});
+      const hasMat=rows.some(r=> r.some(c=> String(c).toLowerCase().includes('descrição do material')));
+      if(hasMat){ ws=cand; sheetName=n; break; }
+    }
+    if(!ws){ ws=wb.Sheets[wb.SheetNames[0]]; sheetName=wb.SheetNames[0]; }
+    const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+    // encontra linha header onde tem "Descrição do material"
+    let headerIdx=-1, headers=[];
+    for(let i=0;i<rows.length;i++){
+      const r=rows[i];
+      if(r.some(c=> String(c).toLowerCase().includes('descrição do material'))){
+        headerIdx=i; headers=r.map(c=> String(c).trim()); break;
+      }
+    }
+    if(headerIdx===-1){ throw new Error('Cabeçalho "Descrição do material" não encontrado na planilha. Verifique se é o Materiais.xlsx correto.'); }
+    const linhas=[];
+    for(let i=headerIdx+1;i<rows.length;i++){
+      const r=rows[i];
+      if(!r || r.every(c=> !String(c).trim())) continue;
+      const obj={};
+      headers.forEach((h,idx)=>{ if(h) obj[h]=r[idx]; });
+      // só adiciona se tem descrição
+      const desc=String(obj['Descrição do material']||'').trim();
+      if(!desc || desc.toLowerCase().includes('descrição')) continue;
+      linhas.push(obj);
+    }
+    if(!linhas.length) throw new Error('Nenhuma linha de material encontrada após o cabeçalho');
+    msg.textContent=`Encontradas ${linhas.length} linhas em "${sheetName}" — enviando...`;
+    const r=await api('/api/obras/'+obraId+'/materiais/importar',{method:'POST', body: JSON.stringify({linhas})});
+    const d=await r.json();
+    if(d.error) throw new Error(d.error);
+    msg.innerHTML=`✅ <strong>${d.importados} novos</strong>, ${d.atualizados} atualizados de ${d.total} linhas. <a href="#" onclick="carregarEstoque();return false" style="color:var(--primary)">Ver em Estoque</a>`;
+    msg.style.color='var(--ok)';
+    toast(`Estoque importado: ${d.importados+d.atualizados} materiais`);
+    carregarEstoque();
+  }catch(e){
+    msg.textContent='Erro: '+(e.message||e);
+    msg.style.color='var(--danger)';
+    console.error(e);
+  }
+  btn.disabled=false; btn.textContent='Importar para obra selecionada';
+}
+async function salvarEstimativa(){
+  const obraId=document.getElementById('estoqueObra').value;
+  if(!obraId){ toast('Selecione a obra'); return; }
+  const payload={
+    material_nome: document.getElementById('estMaterial').value.trim(),
+    unidade: document.getElementById('estUnidade').value.trim()||'UND',
+    quantidade_estimada: document.getElementById('estQtd').value,
+    valor_unitario: document.getElementById('estValor').value,
+    fornecedor: document.getElementById('estFornecedor').value.trim(),
+    etapa: document.getElementById('estEtapa').value.trim()||'ETAPA 1'
+  };
+  if(!payload.material_nome || !payload.quantidade_estimada){ toast('Material e quantidade obrigatórios'); return; }
+  const editId=document.getElementById('estEditId').value;
+  const url=editId? '/api/obra-materiais/'+editId : '/api/obras/'+obraId+'/materiais/estimativas';
+  const method=editId? 'PUT':'POST';
+  const r=await api(url,{method, body: JSON.stringify(payload)});
+  const d=await r.json();
+  if(d.error){ document.getElementById('msgEst').textContent=d.error; document.getElementById('msgEst').style.color='var(--danger)'; return; }
+  document.getElementById('msgEst').textContent='Salvo!'; document.getElementById('msgEst').style.color='var(--ok)';
+  cancelarEstimativa(); carregarEstoque(); toast('Estimativa salva');
+}
+function cancelarEstimativa(){
+  document.getElementById('estEditId').value='';
+  document.getElementById('estMaterial').value='';
+  document.getElementById('estQtd').value='';
+  document.getElementById('estValor').value='';
+  document.getElementById('estFornecedor').value='';
+  document.getElementById('estEtapa').value='ETAPA 1';
+  document.getElementById('btnEst').textContent='Salvar estimativa';
+  document.getElementById('btnCancelEst').style.display='none';
+  document.getElementById('msgEst').textContent='';
+}
+async function editarEstimativa(id){
+  if(!estoqueCache) return;
+  const item=estoqueCache.itens.find(i=> String(i.id)===String(id));
+  if(!item){ toast('Item não encontrado'); return; }
+  document.getElementById('estEditId').value=item.id;
+  document.getElementById('estMaterial').value=item.material_nome;
+  document.getElementById('estUnidade').value=item.unidade;
+  document.getElementById('estQtd').value=item.estimado;
+  document.getElementById('estValor').value=item.valor_unitario;
+  document.getElementById('estFornecedor').value=item.fornecedor||'';
+  document.getElementById('estEtapa').value=item.etapa||'ETAPA 1';
+  document.getElementById('btnEst').textContent='Atualizar';
+  document.getElementById('btnCancelEst').style.display='block';
+  window.scrollTo({top: document.getElementById('estMaterial').offsetTop - 80, behavior:'smooth'});
+}
+async function excluirEstimativa(id){
+  if(!confirm('Excluir estimativa? Consumo histórico será mantido, mas o material sai da previsão.')) return;
+  await api('/api/obra-materiais/'+id,{method:'DELETE'});
+  carregarEstoque(); toast('Excluído');
 }
 
 // ============================================================
