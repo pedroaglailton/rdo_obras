@@ -233,6 +233,22 @@ async function initDb(){
       }
       console.log('[migracao] locais.equipe_id backfill');
     } catch(e){ console.log('[migracao] equipe_id', e.message); }
+    // Corrige regiao legado com variação de espaço/caixa (EQUIPE5 -> EQUIPE 5) usando normalização
+    try {
+      const equipesNorm = await db.prepare('SELECT id,nome FROM equipes WHERE ativo=1').all();
+      const mapNorm = {};
+      for(const e of equipesNorm){ const n=e.nome.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().replace(/\s+/g,''); if(!mapNorm[n]) mapNorm[n]=e; }
+      const regs2 = await db.prepare("SELECT DISTINCT regiao FROM locais WHERE regiao IS NOT NULL AND regiao<>''").all();
+      for(const r of regs2){
+        const n=(r.regiao||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().replace(/\s+/g,'');
+        const eq=mapNorm[n];
+        if(eq && r.regiao!==eq.nome){
+          await db.prepare('UPDATE locais SET regiao=? WHERE regiao=?').run(eq.nome, r.regiao);
+          console.log(`[migracao] regiao normalizada ${r.regiao} -> ${eq.nome}`);
+        }
+        if(eq) await db.prepare('UPDATE locais SET equipe_id=? WHERE regiao=? AND (equipe_id IS NULL OR equipe_id=0)').run(eq.id, eq.nome);
+      }
+    } catch(e){ console.log('[migracao] regiao norm', e.message); }
     try {
       const c3 = (await db.prepare('SELECT COUNT(*) as c FROM rdos WHERE local_id IS NULL AND local IS NOT NULL').get()).c;
       if (c3>0) {
@@ -284,6 +300,8 @@ function gestor(req, res, next) {
   if (!req.user || req.user.perfil !== 'gestor') return res.status(403).json({ error: 'Acesso restrito' });
   next();
 }
+// Normaliza nome de equipe/regiao para multi-obra (remove acento, espaço e caixa) - EQUIPE5 == EQUIPE 5
+function normEquipe(s){ return (s||'').toString().normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().trim().replace(/\s+/g,''); }
 
 const upload = multer({
   storage: multer.diskStorage({
@@ -602,43 +620,64 @@ app.get('/api/locais/comarcas', async (req, res) => {
   res.json((await db.prepare(sql+' ORDER BY comarca').all(...p)).map(r=>r.comarca));
 });
 
-// Locais da equipe com progresso dinâmico per-local via RDO/etapas — modo TJ-CE global
+// Locais da equipe com progresso dinâmico per-local via RDO/etapas — multi-obra com normalização EQUIPE5==EQUIPE 5
 app.get('/api/equipe/:regiao/locais', async (req, res) => {
   const reg = req.params.regiao;
+  const norm = normEquipe(reg);
+  const isSem = norm === normEquipe('SEM EQUIPE');
   const tjce = await db.prepare("SELECT id, nome, progresso, status, prazo_dias, data_inicio FROM obras WHERE UPPER(REPLACE(REPLACE(nome,'-',''),' ',''))=UPPER(?) AND ativo=1").get('TJCE');
-  // progresso dinâmico: template vs etapas per-local concluídas
   const totalTpl = tjce ? (await db.prepare('SELECT COUNT(*) as c FROM etapas WHERE obra_id=? AND (local_id IS NULL OR local_id=0)').get(tjce.id)).c : 0;
   async function enrich(rows){
     for (const r of rows){
-      // fallback global para obra
       if (!r.obra_id && tjce) { r.obra_id = tjce.id; r.obra_nome = tjce.nome; r.obra_status = tjce.status; r.prazo_dias = tjce.prazo_dias; r.data_inicio = tjce.data_inicio; }
       if (tjce && totalTpl>0) {
         const concl = (await db.prepare("SELECT COUNT(*) as c FROM etapas WHERE obra_id=? AND local_id=? AND status='concluida'").get(tjce.id, r.id)).c;
         r.obra_progresso = Math.round(concl/totalTpl*100);
         r.etapas_concluidas = concl; r.etapas_total = totalTpl;
       } else if (tjce) {
-        // sem template, usa 1 etapa por RDO como progresso (0/100)
         const hasRdo = (await db.prepare('SELECT COUNT(*) as c FROM rdos WHERE local=?').get(r.nome)).c;
         r.obra_progresso = hasRdo>0 ? 100 : 0;
       }
     }
-    // ordena por progresso (menos concluído primeiro) para priorizar frentes atrasadas
     rows.sort((a,b)=>(a.obra_progresso||0)-(b.obra_progresso||0));
     return rows;
   }
-  const rows = await db.prepare(`
-    SELECT l.*, o.id as obra_id, o.nome as obra_nome, o.progresso as obra_progresso, o.status as obra_status, o.prazo_dias, o.data_inicio
-    FROM locais l LEFT JOIN obras o ON o.local_id = l.id AND o.ativo=1
-    WHERE l.ativo=1 AND l.regiao = ?
-    ORDER BY l.comarca
-  `).all(reg);
-  if (reg==='SEM EQUIPE') {
+  // SEM EQUIPE: regiao nula/vazia
+  if (isSem) {
     const sem = await db.prepare(`
       SELECT l.*, o.id as obra_id, o.nome as obra_nome, o.progresso as obra_progresso, o.status as obra_status FROM locais l LEFT JOIN obras o ON o.local_id=l.id AND o.ativo=1
-      WHERE l.ativo=1 AND (l.regiao IS NULL OR l.regiao='')
+      WHERE l.ativo=1 AND (l.regiao IS NULL OR TRIM(l.regiao)='')
       ORDER BY l.comarca LIMIT 100
     `).all();
     return res.json(await enrich(sem));
+  }
+  // Tenta localizar equipe pelo nome normalizado -> filtra por equipe_id OU regiao normalizada (compat legado)
+  const equipes = await db.prepare('SELECT id,nome FROM equipes WHERE ativo=1').all();
+  const eq = equipes.find(e=> normEquipe(e.nome)===norm);
+  let rows=[];
+  if(eq){
+    rows = await db.prepare(`
+      SELECT l.*, o.id as obra_id, o.nome as obra_nome, o.progresso as obra_progresso, o.status as obra_status, o.prazo_dias, o.data_inicio
+      FROM locais l LEFT JOIN obras o ON o.local_id = l.id AND o.ativo=1
+      WHERE l.ativo=1 AND (l.equipe_id=? OR UPPER(REPLACE(REPLACE(l.regiao,' ',''),'-',''))=UPPER(REPLACE(REPLACE(?,' ',''),'-','')))
+      ORDER BY l.comarca
+    `).all(eq.id, reg);
+    // fallback normalizado JS se ainda vazio (acentos)
+    if(!rows.length){
+      const all = await db.prepare(`SELECT l.*, o.id as obra_id, o.nome as obra_nome, o.progresso as obra_progresso, o.status as obra_status, o.prazo_dias, o.data_inicio FROM locais l LEFT JOIN obras o ON o.local_id=l.id AND o.ativo=1 WHERE l.ativo=1 ORDER BY l.comarca`).all();
+      rows = all.filter(l=> normEquipe(l.regiao)===norm || String(l.equipe_id)===String(eq.id));
+    }
+  } else {
+    rows = await db.prepare(`
+      SELECT l.*, o.id as obra_id, o.nome as obra_nome, o.progresso as obra_progresso, o.status as obra_status, o.prazo_dias, o.data_inicio
+      FROM locais l LEFT JOIN obras o ON o.local_id = l.id AND o.ativo=1
+      WHERE l.ativo=1 AND l.regiao = ?
+      ORDER BY l.comarca
+    `).all(reg);
+    if(!rows.length){
+      const all = await db.prepare(`SELECT l.*, o.id as obra_id, o.nome as obra_nome, o.progresso as obra_progresso, o.status as obra_status, o.prazo_dias, o.data_inicio FROM locais l LEFT JOIN obras o ON o.local_id=l.id AND o.ativo=1 WHERE l.ativo=1 ORDER BY l.comarca`).all();
+      rows = all.filter(l=> normEquipe(l.regiao)===norm);
+    }
   }
   res.json(await enrich(rows));
 });
@@ -1111,29 +1150,41 @@ app.get('/api/dashboard', gestor, async (req, res) => {
   res.json({ totalObras, totalRdos, rdosHoje, totalUsuarios, totalEquipes, recentes });
 });
 
-// Dashboard por equipe (REGIAO do mesclado + presenca/RDO) - F2 com filtro obra_id
+// Dashboard por equipe (REGIAO do mesclado + presenca/RDO) - F2 com filtro obra_id + normalização multi-obra
 app.get('/api/dashboard/por-equipe', gestor, async (req, res) => {
-  // agregados por regiao vindo dos locais - filtrado por obra_id se fornecido (F2 multi-obra)
   let sqlPorRegiao = `SELECT regiao, COUNT(*) as total_locais, SUM(cameras) as total_cameras, SUM(cam_fixa) as fixa, SUM(cam_analitica) as analitica, SUM(cam_lpr) as lpr, SUM(CASE WHEN latitude IS NOT NULL AND latitude!='' THEN 1 ELSE 0 END) as com_coord FROM locais WHERE ativo=1`;
   const pReg = [];
   if (req.query.obra_id) { sqlPorRegiao += ' AND obra_id=?'; pReg.push(req.query.obra_id); }
   sqlPorRegiao += ' GROUP BY regiao';
-  const porRegiao = await db.prepare(sqlPorRegiao).all(...pReg);
-  // normalizar nulos
-  porRegiao.forEach(r=>{ if(!r.regiao) r.regiao='SEM EQUIPE'; r.total_cameras=r.total_cameras||0; r.fixa=r.fixa||0; r.analitica=r.analitica||0; r.lpr=r.lpr||0; });
-  // equipes cadastradas
+  const porRegiaoRaw = await db.prepare(sqlPorRegiao).all(...pReg);
+  porRegiaoRaw.forEach(r=>{ if(!r.regiao || !r.regiao.trim()) r.regiao='SEM EQUIPE'; r.total_cameras=r.total_cameras||0; r.fixa=r.fixa||0; r.analitica=r.analitica||0; r.lpr=r.lpr||0; r.com_coord=r.com_coord||0; });
+  // merge por chave normalizada (EQUIPE5 == EQUIPE 5)
+  const porRegiaoNorm = {};
+  for(const r of porRegiaoRaw){
+    const n = normEquipe(r.regiao);
+    if(!porRegiaoNorm[n]) porRegiaoNorm[n]={regiao:r.regiao, total_locais:0, total_cameras:0, fixa:0, analitica:0, lpr:0, com_coord:0};
+    porRegiaoNorm[n].total_locais+=r.total_locais||0;
+    porRegiaoNorm[n].total_cameras+=r.total_cameras||0;
+    porRegiaoNorm[n].fixa+=r.fixa||0;
+    porRegiaoNorm[n].analitica+=r.analitica||0;
+    porRegiaoNorm[n].lpr+=r.lpr||0;
+    porRegiaoNorm[n].com_coord+=r.com_coord||0;
+    // mantém nome da equipe quando existir
+  }
   const equipes = await db.prepare('SELECT id,nome,cor FROM equipes WHERE ativo=1').all();
-  // membros por equipe
+  const equipesByNorm={}; equipes.forEach(e=>{ const n=normEquipe(e.nome); if(!equipesByNorm[n]) equipesByNorm[n]=e; else if(e.nome.length<equipesByNorm[n].nome.length) equipesByNorm[n]=e; });
+  // corrige display: se equipe existe, usa nome da equipe
+  for(const n of Object.keys(porRegiaoNorm)){
+    if(equipesByNorm[n]) porRegiaoNorm[n].regiao=equipesByNorm[n].nome;
+  }
   const membros = await db.prepare('SELECT equipe_id, COUNT(*) as c FROM usuarios WHERE ativo=1 AND equipe_id IS NOT NULL GROUP BY equipe_id').all();
   const membrosMap = Object.fromEntries(membros.map(m=>[String(m.equipe_id), m.c]));
-  // RDOs por equipe (via usuario.equipe_id -> rdos.usuario_id) - filtrado por obra_id se F2
   let sqlRdos = `SELECT u.equipe_id as equipe_id, COUNT(r.id) as total, SUM(CASE WHEN r.data=date('now') THEN 1 ELSE 0 END) as hoje FROM rdos r JOIN usuarios u ON r.usuario_id=u.id WHERE u.equipe_id IS NOT NULL`;
   const pRdos=[];
   if (req.query.obra_id) { sqlRdos+=' AND r.obra_id=?'; pRdos.push(req.query.obra_id); }
   sqlRdos+=' GROUP BY u.equipe_id';
   const rdosPorEquipe = await db.prepare(sqlRdos).all(...pRdos);
   const rdoMap = Object.fromEntries(rdosPorEquipe.map(r=>[String(r.equipe_id), r]));
-  // presenca ativa por equipe
   let sqlPres=`SELECT equipe_id, COUNT(*) as c FROM presenca WHERE equipe_id IS NOT NULL`;
   const pPres=[];
   if (req.query.obra_id) { sqlPres+=' AND obra_id=?'; pPres.push(req.query.obra_id); }
@@ -1141,18 +1192,19 @@ app.get('/api/dashboard/por-equipe', gestor, async (req, res) => {
   const presPorEquipe = await db.prepare(sqlPres).all(...pPres);
   const presMap = Object.fromEntries(presPorEquipe.map(p=>[String(p.equipe_id), p.c]));
 
-  // montar resposta unificada por regiao/equipe
-  const chaves = new Set([...porRegiao.map(r=>r.regiao), ...equipes.map(e=>e.nome), 'SEM EQUIPE']);
+  const normSem = normEquipe('SEM EQUIPE');
+  const chavesNorm = new Set([...Object.keys(porRegiaoNorm), ...Object.keys(equipesByNorm), normSem]);
   const resultado = [];
-  for (const chave of chaves) {
-    const reg = porRegiao.find(r=>r.regiao===chave);
-    const eq = equipes.find(e=>e.nome===chave);
+  for (const n of chavesNorm) {
+    const reg = porRegiaoNorm[n]||null;
+    const eq = equipesByNorm[n]||null;
     const equipe_id = eq ? eq.id : null;
+    const label = eq? eq.nome : (reg? reg.regiao : 'SEM EQUIPE');
     const m = equipe_id ? (membrosMap[String(equipe_id)]||0) : 0;
     const rdo = equipe_id ? (rdoMap[String(equipe_id)]||{total:0,hoje:0}) : {total:0,hoje:0};
     const pres = equipe_id ? (presMap[String(equipe_id)]||0) : 0;
     resultado.push({
-      regiao: chave,
+      regiao: label,
       equipe_id, cor: eq?eq.cor:'#90a4ae',
       total_locais: reg?reg.total_locais:0,
       total_cameras: reg?reg.total_cameras:0,

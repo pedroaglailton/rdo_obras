@@ -91,25 +91,66 @@
   </nav>
 </header>
 <main>
-  <!-- DASHBOARD -->
+  <!-- DASHBOARD - Visual profissional igual Atividades -->
   <section class="view active" id="view-dashboard">
-    <div class="stats">
-      <div class="stat"><span class="stat-num" id="sObras">0</span><span class="stat-label">Obras</span></div>
-      <div class="stat"><span class="stat-num" id="sRdos">0</span><span class="stat-label">RDOs</span></div>
-      <div class="stat"><span class="stat-num" id="sHoje">0</span><span class="stat-label">Hoje</span></div>
-      <div class="stat"><span class="stat-num" id="sUsers">0</span><span class="stat-label">Usuarios</span></div>
+    <div class="card" style="border-left:4px solid #0f3d4c">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+        <h2 style="margin:0">📊 Dashboard Geral</h2>
+        <span style="font-size:11px;background:#f7f9fa;border:1px solid var(--line);padding:4px 10px;border-radius:20px"><span id="sObrasTop">0</span> obras • <span id="sEquipesTop">0</span> equipes • <span id="sUsersTop">0</span> usuários</span>
+      </div>
+      <p style="font-size:11px;color:var(--muted);margin:6px 0 0">Visão consolidada de <strong>obras multi-obra</strong>, RDOs por período e atividade. Use os filtros de obra nas abas seguintes para detalhar.</p>
     </div>
-    <div class="card" style="margin-top:12px"><h2>RDOs Recentes</h2><div id="rdosRecentes"></div></div>
-  </section>
-
-  <!-- POR EQUIPE - Visão do mesclado (REGIAO) -->
-  <section class="view" id="view-por-equipe">
+    <div class="card">
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px">
+        <div style="padding:14px;background:#e3f2fd;border-radius:10px;border:1px solid var(--line);text-align:center;border-left:4px solid #1565c0">
+          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;font-weight:700;letter-spacing:.05em">🏗️ Obras</div>
+          <div style="font-size:26px;font-weight:800;color:#1565c0;margin-top:4px" id="sObras">0</div>
+          <div style="font-size:10px;color:var(--muted)">ativas</div>
+        </div>
+        <div style="padding:14px;background:#e8f5e9;border-radius:10px;border:1px solid var(--line);text-align:center;border-left:4px solid #2e7d32">
+          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;font-weight:700;letter-spacing:.05em">📋 RDOs</div>
+          <div style="font-size:26px;font-weight:800;color:#2e7d32;margin-top:4px" id="sRdos">0</div>
+          <div style="font-size:10px;color:var(--muted)"><span id="sHoje">0</span> hoje</div>
+        </div>
+        <div style="padding:14px;background:#fff3e0;border-radius:10px;border:1px solid var(--line);text-align:center;border-left:4px solid #ef6c00">
+          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;font-weight:700;letter-spacing:.05em">👥 Equipes</div>
+          <div style="font-size:26px;font-weight:800;color:#ef6c00;margin-top:4px" id="sEquipes">0</div>
+          <div style="font-size:10px;color:var(--muted)"><span id="sUsers">0</span> usuários</div>
+        </div>
+        <div style="padding:14px;background:#f3e5f5;border-radius:10px;border:1px solid var(--line);text-align:center;border-left:4px solid #6a1b9a">
+          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;font-weight:700;letter-spacing:.05em">📍 Locais</div>
+          <div style="font-size:26px;font-weight:800;color:#6a1b9a;margin-top:4px" id="sLocais">0</div>
+          <div style="font-size:10px;color:var(--muted)">TJCE + outras</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+        <button class="btn-small" onclick="carregarDashboard()" style="background:#0f3d4c">↻ Atualizar</button>
+        <span style="font-size:11px;color:var(--muted);align-self:center" id="dashInfo"></span>
+      </div>
+    </div>
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
-        <h2 style="margin:0">Acompanhamento por Equipe (REGIÃO)</h2>
-        <button class="btn-small" onclick="carregarPorEquipe()" style="background:#0f3d4c">↻ Atualizar</button>
+        <h2 style="margin:0">🕒 RDOs Recentes</h2>
+        <span style="font-size:11px;background:#fff3e0;color:#ef6c00;padding:4px 10px;border-radius:20px;font-weight:700" id="countRdosRecentes">0 recentes</span>
       </div>
-      <p style="font-size:12px;color:var(--muted);margin:8px 0 0">Dados do <strong>TJCE_Mesclado</strong> agrupados por <code>REGIAO</code> (Equipe 1-4, TERCEIRIZADA) + cruzamento com <strong>RDO/Presença</strong>. Importe a planilha em <em>Locais → Importar Mesclado</em>.</p>
+      <p style="font-size:11px;color:var(--muted);margin:6px 0 0">Últimos registros de campo — toque para ver detalhes completos.</p>
+      <div id="rdosRecentes" style="margin-top:12px;display:grid;gap:8px"></div>
+    </div>
+  </section>
+
+  <!-- POR EQUIPE - Visão do mesclado (REGIAO) multi-obra -->
+  <section class="view" id="view-por-equipe">
+    <div class="card" style="border-left:4px solid #0f3d4c">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+        <h2 style="margin:0">👷 Acompanhamento por Equipe</h2>
+        <span style="font-size:11px;background:#f7f9fa;border:1px solid var(--line);padding:4px 10px;border-radius:20px" id="porEquipeBadge">0 equipes</span>
+      </div>
+      <p style="font-size:11px;color:var(--muted);margin:6px 0 0">Agrupado por <code>REGIÃO</code> (Equipe 1-4, TERCEIRIZADA, SEM EQUIPE) + cruzamento <strong>RDO/Presença</strong>. Suporte <strong>multi-obra</strong> — filtre por obra abaixo.</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;align-items:center">
+        <select id="filtroPorEquipeObra" onchange="carregarPorEquipe()" style="padding:7px;font-size:12px;border:1.5px solid var(--line);border-radius:8px;min-width:160px"><option value="">Todas obras</option></select>
+        <button class="btn-small" onclick="carregarPorEquipe()" style="background:#0f3d4c">↻ Atualizar</button>
+        <span style="font-size:11px;color:var(--muted)" id="porEquipeInfo"></span>
+      </div>
       <div id="porEquipeStats" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;margin-top:12px"></div>
     </div>
     <div class="card">
@@ -229,15 +270,39 @@
     </div>
   </div>
 
-  <!-- RDOs -->
+  <!-- RDOs - Visual profissional igual Atividades -->
   <section class="view" id="view-rdos">
-    <div class="card">
-      <h2>Todos os RDOs</h2>
-      <div class="form-row">
-        <select id="filtroRdoLocal" onchange="carregarRdos()"><option value="">Todos os locais</option></select>
-        <input type="date" id="filtroRdoData" onchange="carregarRdos()">
+    <div class="card" style="border-left:4px solid #0f3d4c">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+        <h2 style="margin:0">📋 RDOs Registrados</h2>
+        <span style="font-size:11px;background:#f7f9fa;border:1px solid var(--line);padding:4px 10px;border-radius:20px"><span id="countRdos">0</span> RDOs • <span id="countRdosHoje">0</span> hoje</span>
       </div>
-      <div id="listaRdos"></div>
+      <p style="font-size:11px;color:var(--muted);margin:6px 0 0">Relatórios diários de obra com <strong>obra, local, atividade, equipe e fotos</strong>. Filtre por obra/local/data para auditoria.</p>
+    </div>
+    <div class="card">
+      <h2>Buscar & Filtrar</h2>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <select id="filtroRdoObra" onchange="carregarRdos()"><option value="">Todas as obras</option></select>
+        <select id="filtroRdoLocal" onchange="carregarRdos()"><option value="">Todos os locais</option></select>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px">
+        <input type="date" id="filtroRdoData" onchange="carregarRdos()">
+        <input type="text" id="buscaRdo" placeholder="Buscar local/atividade/usuário..." oninput="carregarRdos()">
+      </div>
+      <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+        <button class="btn-small" onclick="carregarRdos()" style="background:#0f3d4c">↻ Atualizar</button>
+        <button class="btn-small" onclick="document.getElementById('filtroRdoData').value='';document.getElementById('buscaRdo').value='';carregarRdos()" style="background:#e1e5ea;color:#1c2b33">✕ Limpar</button>
+        <span style="font-size:11px;color:var(--muted);align-self:center" id="rdosInfo"></span>
+      </div>
+    </div>
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+        <h2 style="margin:0">Lista de RDOs</h2>
+        <div style="display:flex;gap:6px">
+          <button class="btn-small" onclick="exportarRdosExcel()" style="background:#1b5e20">📗 Excel</button>
+        </div>
+      </div>
+      <div id="listaRdos" style="margin-top:12px;display:grid;gap:8px"></div>
     </div>
   </section>
 
@@ -462,25 +527,72 @@ document.querySelectorAll('nav.tabs button').forEach(btn => {
 let toastTimer;
 function toast(msg) { const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 3000); }
 
-// DASHBOARD
+// DASHBOARD - Visual profissional igual Atividades
 async function carregarDashboard() {
-  const d = await api('/api/dashboard').then(r => r.json());
+  const [d, locais] = await Promise.all([
+    api('/api/dashboard').then(r => r.json()),
+    api('/api/locais').then(r=>r.json()).catch(()=>[])
+  ]);
   document.getElementById('sObras').textContent = d.totalObras;
   document.getElementById('sRdos').textContent = d.totalRdos;
   document.getElementById('sHoje').textContent = d.rdosHoje;
   document.getElementById('sUsers').textContent = d.totalUsuarios;
-  document.getElementById('rdosRecentes').innerHTML = d.recentes.map(r => '<li style="cursor:pointer" onclick="verRdo(' + r.id + ')"><strong>' + r.local + '</strong><span class="meta">' + r.data + ' | ' + (r.atividade || '-') + ' | ' + (r.usuario_nome || '-') + '</span></li>').join('') || '<p class="empty-state">Nenhum RDO</p>';
+  const elObrasTop=document.getElementById('sObrasTop'); if(elObrasTop) elObrasTop.textContent=d.totalObras;
+  const elEquipesTop=document.getElementById('sEquipesTop'); if(elEquipesTop) elEquipesTop.textContent=d.totalEquipes||0;
+  const elUsersTop=document.getElementById('sUsersTop'); if(elUsersTop) elUsersTop.textContent=d.totalUsuarios;
+  const elEquipes=document.getElementById('sEquipes'); if(elEquipes) elEquipes.textContent=d.totalEquipes||0;
+  const elLocais=document.getElementById('sLocais'); if(elLocais) elLocais.textContent=locais.length||0;
+  const elDashInfo=document.getElementById('dashInfo'); if(elDashInfo) elDashInfo.textContent=`${d.rdosHoje} RDO(s) hoje • ${locais.filter(l=>l.latitude).length}/${locais.length} locais com GPS`;
+  const elCountRec=document.getElementById('countRdosRecentes'); if(elCountRec) elCountRec.textContent=d.recentes.length+' recentes';
+  const elCountRdos=document.getElementById('countRdos'); if(elCountRdos) elCountRdos.textContent=d.totalRdos;
+  const elCountHoje=document.getElementById('countRdosHoje'); if(elCountHoje) elCountHoje.textContent=d.rdosHoje;
+  if(!d.recentes.length){
+    document.getElementById('rdosRecentes').innerHTML='<p class="empty-state">Nenhum RDO registrado ainda. O primeiro RDO aparece aqui com atalho visual.</p>';
+    return;
+  }
+  const coresAtv={'Levantamento':'#0f3d4c','Infraestrutura':'#ef6c00','Cabeamento':'#6a1b9a','Instalação e Testes':'#2e7d32'};
+  document.getElementById('rdosRecentes').innerHTML = d.recentes.map(r=>{
+    const letra=(r.local||'?').charAt(0).toUpperCase();
+    const cor=coresAtv[r.atividade]||'#0f3d4c';
+    const dataFmt=(r.data||'').slice(0,10);
+    return `<div onclick="verRdo(${r.id})" style="display:flex;align-items:center;gap:12px;padding:12px;background:#fff;border:1px solid var(--line);border-left:4px solid ${cor};border-radius:10px;cursor:pointer;transition:all .15s">
+      <div style="width:36px;height:36px;border-radius:8px;background:${cor};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;flex:none">${letra}</div>
+      <div style="flex:1;min-width:0">
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><strong style="font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${r.local||'—'}</strong><span style="font-size:10px;background:${cor};color:#fff;padding:2px 7px;border-radius:8px">${r.atividade||'—'}</span><span style="font-size:10px;background:#f7f9fa;border:1px solid var(--line);padding:2px 7px;border-radius:8px">${dataFmt}</span></div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">👤 ${r.usuario_nome||'—'} • 📍 ${r.obra_nome||''}</div>
+      </div>
+      <span style="font-size:11px;color:var(--primary);font-weight:700;flex:none">Ver →</span>
+    </div>`;
+  }).join('');
 }
 
-// POR EQUIPE (TJCE_Mesclado)
+// POR EQUIPE (multi-obra + normalização)
 let porEquipeCache = [];
 let locaisPorEquipeCache = [];
 async function carregarPorEquipe(){
-  const [cards, locais, equipesDet] = await Promise.all([api('/api/dashboard/por-equipe').then(r=>r.json()), api('/api/locais').then(r=>r.json()), api('/api/equipes').then(r=>r.json()).catch(()=>[])]);
+  const selObraPE=document.getElementById('filtroPorEquipeObra');
+  if(selObraPE && selObraPE.options.length===1){
+    try{
+      const obras=await api('/api/obras').then(r=>r.json());
+      const cur=selObraPE.value;
+      selObraPE.innerHTML='<option value="">Todas obras</option>'+obras.filter(o=>o.ativo!==0).map(o=>`<option value="${o.id}">${o.nome}</option>`).join('');
+      selObraPE.value=cur;
+    }catch(e){}
+  }
+  const obraIdPE=document.getElementById('filtroPorEquipeObra')?.value||'';
+  const urlPE='/api/dashboard/por-equipe'+(obraIdPE?'?obra_id='+obraIdPE:'');
+  const [cards, locaisRaw, equipesDet, allLocais] = await Promise.all([
+    api(urlPE).then(r=>r.json()),
+    obraIdPE? api('/api/locais?obra_id='+obraIdPE).then(r=>r.json()) : api('/api/locais').then(r=>r.json()),
+    api('/api/equipes').then(r=>r.json()).catch(()=>[]),
+    api('/api/locais').then(r=>r.json()).catch(()=>[])
+  ]);
+  // normaliza filtro: se obra filtrada, limita locaisPorEquipeCache
   porEquipeCache = cards;
-  locaisPorEquipeCache = locais;
+  locaisPorEquipeCache = locaisRaw;
+  document.getElementById('porEquipeBadge').textContent=cards.length+' equipes';
+  document.getElementById('porEquipeInfo').textContent=obraIdPE? `${locaisRaw.length} locais na obra filtrada` : `${allLocais.length} locais totais (todas obras)`;
   const mapEquipeMembros = Object.fromEntries(equipesDet.map(e=>[e.nome, e.membros||[]]));
-  // cards
   document.getElementById('porEquipeStats').innerHTML = cards.map(c=>{
     const membros = mapEquipeMembros[c.regiao] || [];
     const chips = membros.length ? membros.map(m=>`<span style="font-size:10px;background:#e3f2fd;color:#1565c0;padding:3px 7px;border-radius:20px;border:1px solid #90caf9">${m.nome}</span>`).join('') : `<span style="font-size:10px;color:var(--muted)">Sem membros — cadastre em Equipes</span>`;
@@ -499,8 +611,7 @@ async function carregarPorEquipe(){
       </div>
       <div style="font-size:11px;color:var(--muted);margin-top:8px">📍 ${c.com_coord}/${c.total_locais} com GPS • ${c.total_locais? Math.round(c.com_coord/c.total_locais*100):0}% geolocalizado</div>
     </div>
-  `}).join('') || '<p class="empty-state">Sem dados — importe o Mesclado</p>';
-  // filtro select
+  `}).join('') || '<p class="empty-state">Sem dados — importe o Mesclado ou selecione outra obra</p>';
   const sel = document.getElementById('filtroPorEquipe');
   const cur = sel.value;
   sel.innerHTML = '<option value="">Todas as equipes</option>' + porEquipeCache.map(c=>`<option value="${c.regiao}">${c.regiao} (${c.total_locais})</option>`).join('');
@@ -992,15 +1103,81 @@ async function excluirEtapa(etapaId) {
   toast('Etapa excluida');
 }
 
-// RDOs
+// RDOs - Visual profissional igual Atividades
+let rdosCache=[];
 async function carregarRdos() {
+  // popula selects de obra/local na primeira carga
+  const selObra=document.getElementById('filtroRdoObra');
+  if(selObra && selObra.options.length===1){
+    try{
+      const obras=await api('/api/obras').then(r=>r.json());
+      const cur=selObra.value;
+      selObra.innerHTML='<option value="">Todas as obras</option>'+obras.filter(o=>o.ativo!==0).map(o=>`<option value="${o.id}">${o.nome}</option>`).join('');
+      selObra.value=cur;
+    }catch(e){}
+  }
+  const selLocal=document.getElementById('filtroRdoLocal');
+  if(selLocal && selLocal.options.length===1){
+    try{
+      const locais=await api('/api/locais').then(r=>r.json());
+      const cur=selLocal.value;
+      selLocal.innerHTML='<option value="">Todos os locais</option>'+locais.slice(0,300).map(l=>`<option>${l.nome}</option>`).join('');
+      selLocal.value=cur;
+    }catch(e){}
+  }
   let url = '/api/rdos?';
+  const obraId=document.getElementById('filtroRdoObra')?.value||'';
+  if(obraId) url+='obra_id='+obraId+'&';
   const data = document.getElementById('filtroRdoData').value;
-  if (data) url += 'data_de=' + data + '&data_ate=' + data;
-  const rdos = await api(url).then(r => r.json());
-  document.getElementById('listaRdos').innerHTML = rdos.map(r => 
-    '<li style="cursor:pointer" onclick="verRdo(' + r.id + ')"><strong>' + (r.obra_nome || r.local || 'RDO #' + r.id) + '</strong><span class="meta">' + r.data + ' | ' + r.local + ' | ' + (r.atividade || '-') + ' | ' + (r.usuario_nome || '-') + '</span></li>'
-  ).join('') || '<p class="empty-state">Nenhum RDO</p>';
+  if (data) url += 'data_de=' + data + '&data_ate=' + data+'&';
+  const busca=(document.getElementById('buscaRdo')?.value||'').trim().toLowerCase();
+  let rdos = await api(url).then(r => r.json());
+  rdosCache=rdos;
+  // filtro busca local (client-side)
+  if(busca) rdos=rdos.filter(r=> (r.local+r.atividade+r.usuario_nome+r.obra_nome).toLowerCase().includes(busca));
+  document.getElementById('countRdos').textContent=rdos.length;
+  document.getElementById('countRdosHoje').textContent=rdos.filter(r=>r.data===new Date().toISOString().slice(0,10)).length;
+  document.getElementById('rdosInfo').textContent=rdos.length+' RDO(s) • '+ (obraId? 'obra filtrada' : 'todas obras');
+  if(!rdos.length){
+    document.getElementById('listaRdos').innerHTML='<p class="empty-state">Nenhum RDO com esse filtro. Ajuste obra, local ou data.</p>';
+    return;
+  }
+  const coresAtv={'Levantamento':'#0f3d4c','Infraestrutura':'#ef6c00','Cabeamento':'#6a1b9a','Instalação e Testes':'#2e7d32'};
+  document.getElementById('listaRdos').innerHTML = rdos.slice(0,200).map(r=>{
+    const letra=(r.local||'?').charAt(0).toUpperCase();
+    const cor=coresAtv[r.atividade]|| (r.parou==='sim'?'#c62828':'#0f3d4c');
+    const dataFmt=(r.data||'').slice(0,10);
+    const hasFoto=(r.fotos_json && r.fotos_json!=='[]');
+    return `<div onclick="verRdo(${r.id})" style="display:flex;align-items:center;gap:12px;padding:12px;background:#fff;border:1px solid var(--line);border-left:4px solid ${cor};border-radius:10px;cursor:pointer">
+      <div style="width:38px;height:38px;border-radius:8px;background:${cor};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;flex:none">${letra}</div>
+      <div style="flex:1;min-width:0">
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><strong style="font-size:13px">${r.local||'—'}</strong><span style="font-size:10px;background:${cor};color:#fff;padding:2px 7px;border-radius:8px">${r.atividade||'—'}</span><span style="font-size:10px;background:#f7f9fa;border:1px solid var(--line);padding:2px 7px;border-radius:8px">${dataFmt}</span>${hasFoto?'<span style="font-size:10px;background:#e8f5e9;color:#2e7d32;padding:2px 6px;border-radius:8px">📷</span>':''}${r.parou==='sim'?'<span style="font-size:10px;background:#ffcdd2;color:#c62828;padding:2px 6px;border-radius:8px">⚠️ parada</span>':''}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">🏗️ ${r.obra_nome||'—'} • 👤 ${r.usuario_nome||'—'} • ${r.cidade||''}</div>
+        <div style="font-size:11px;color:var(--muted)">🕒 ${(r.entrada_manha||'—')+'-'+(r.saida_manha||'—')} • ${(r.entrada_tarde||'—')+'-'+(r.saida_tarde||'—')}</div>
+      </div>
+      <span style="font-size:11px;color:var(--primary);font-weight:700;flex:none">Ver →</span>
+    </div>`;
+  }).join('') + (rdos.length>200? `<p style="text-align:center;font-size:11px;color:var(--muted);margin-top:8px">Mostrando 200 de ${rdos.length} — refine o filtro</p>`:'');
+}
+async function exportarRdosExcel(){
+  if(!rdosCache.length){ toast('Nenhum RDO para exportar'); return; }
+  const wb=XLSX.utils.book_new();
+  const hdr=['Data','Obra','Local','Cidade','Atividade','Usuário','Equipe','Manhã','Tarde','Parada','Motivo','Switch','Câmera','Materiais','Fotos'];
+  const hdrStyle={font:{bold:true,color:{rgb:'FFFFFF'}}, fill:{fgColor:{rgb:'0F3D4C'}}, alignment:{horizontal:'center',vertical:'center'}};
+  const rows=[hdr];
+  rdosCache.forEach(r=>{
+    const eq=JSON.parse(r.equipe_json||'[]').join(', ');
+    const mats=JSON.parse(r.materiais_json||'[]').map(m=>`${m.nome} x${m.qtd}`).join('; ');
+    const fotos=JSON.parse(r.fotos_json||'[]').length;
+    rows.push([r.data||'', r.obra_nome||'', r.local||'', r.cidade||'', r.atividade||'', r.usuario_nome||'', eq, (r.entrada_manha||'')+'-'+(r.saida_manha||''), (r.entrada_tarde||'')+'-'+(r.saida_tarde||''), r.parou||'', r.motivo_parada||'', r.switch_instalado==='sim'? (r.nom_switch+' / '+r.local_switch):'Não', r.camera_instalada==='sim'? (r.nom_camera+' / '+r.local_camera):'Não', mats, fotos]);
+  });
+  const ws=XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols']=hdr.map(()=>({wch:14})); ws['!freeze']={xSplit:0,ySplit:1}; ws['!autofilter']={ref:XLSX.utils.encode_range({s:{r:0,c:0},e:{r:0,c:hdr.length-1}})};
+  for(let c=0;c<hdr.length;c++){ const ref=XLSX.utils.encode_cell({r:0,c}); if(ws[ref]) ws[ref].s=hdrStyle; }
+  XLSX.utils.book_append_sheet(wb, ws, 'RDOs');
+  const nome=`rdos_${new Date().toISOString().slice(0,10)}.xlsx`;
+  XLSX.writeFile(wb, nome);
+  toast('Excel exportado: '+nome);
 }
 
 async function verRdo(id) {
