@@ -499,19 +499,49 @@
       if(bestDist>300) $('autoLocalBanner').style.display='none';
     }
   }
-  function selecionarLocalEquipe(nome){
+  async function selecionarLocalEquipe(nome){
     document.querySelector('nav.tabs button[data-view=novo]').click();
-    setTimeout(async ()=>{
-      // tenta selecionar obra que contém o local
-      const obraSel=$('f_obra');
-      // se ainda não carregou obras, carrega
-      if(!obraSel.options.length) await carregarDados();
-      // procura local e sua obra
-      const loc = (window._equipeLocaisCache||[]).find(l=>l.nome===nome);
-      if(loc && loc.obra_id) obraSel.value=loc.obra_id;
+    await new Promise(r=> setTimeout(r, 80));
+    const obraSel=$('f_obra');
+    if(!obraSel.options.length || obraSel.options.length===1) await carregarDados();
+    const loc = (window._equipeLocaisCache||[]).find(l=>l.nome===nome) || (window._obraLocaisCache||[]).find(l=>l.nome===nome);
+    if(loc && loc.obra_id){
+      obraSel.value=String(loc.obra_id);
       obraSel.dispatchEvent(new Event('change'));
-      setTimeout(()=>{ $('f_local').value=nome; $('f_local').dispatchEvent(new Event('change')); toast('Local '+nome+' selecionado'); }, 300);
-    }, 100);
+    } else if(nome){
+      // fallback: tenta achar obra via API se não está no cache
+      try{
+        const all=await api('/api/locais?busca='+encodeURIComponent(nome)).then(r=>r.json());
+        const found=all.find(l=>l.nome===nome);
+        if(found && found.obra_id){ obraSel.value=String(found.obra_id); obraSel.dispatchEvent(new Event('change')); }
+      }catch(e){}
+    }
+    // espera o <select> de locais ser populado (poll, não depende de timeout fixo)
+    let tent=0;
+    while(tent<30){
+      await new Promise(r=> setTimeout(r, 120));
+      const selLocal=$('f_local');
+      const hasOpt=Array.from(selLocal.options).some(o=>o.value===nome);
+      if(hasOpt){
+        selLocal.value=nome;
+        // cidade direto do cache (evita API extra e garante preenchimento)
+        const cachedLoc=(window._equipeLocaisCache||[]).find(l=>l.nome===nome) || (window._obraLocaisCache||[]).find(l=>l.nome===nome) || loc;
+        if(cachedLoc) $('f_cidade').value=cachedLoc.comarca||'';
+        selLocal.dispatchEvent(new Event('change'));
+        // garante cidade após o handler de change (que também seta)
+        if(cachedLoc) setTimeout(()=>{ $('f_cidade').value=cachedLoc.comarca||''; }, 80);
+        toast('Local '+nome+' selecionado');
+        return;
+      }
+      tent++;
+    }
+    // fallback final
+    const selLocal=$('f_local');
+    selLocal.value=nome;
+    const cachedLoc=(window._equipeLocaisCache||[]).find(l=>l.nome===nome) || loc;
+    if(cachedLoc) $('f_cidade').value=cachedLoc.comarca||'';
+    selLocal.dispatchEvent(new Event('change'));
+    toast('Local '+nome+' selecionado');
   }
   window.selecionarLocalEquipe=selecionarLocalEquipe;
   function usarLocalDetectado(){
@@ -625,15 +655,19 @@
     });
   }
 
-  // Quando selecionar local, mostrar no mapa
+  // Quando selecionar local, mostrar no mapa — usa cache para garantir cidade
   $('f_local').addEventListener('change', async function() {
     const localNome = this.value;
     $('f_cidade').value = '';
-    if (!localNome || localNome === '__outro') return;
-    
-    const locais = await api('/api/locais?busca=' + encodeURIComponent(localNome)).then(r => r.json());
-    const local = locais.find(l => l.nome === localNome);
-    
+    if (!localNome || localNome === '__outro' || localNome === '__ver_todos') return;
+    // tenta cache primeiro (obra atual + equipe), depois API
+    let local = (window._obraLocaisCache||[]).find(l=>l.nome===localNome) || (window._equipeLocaisCache||[]).find(l=>l.nome===localNome);
+    if(!local){
+      try{
+        const locais = await api('/api/locais?busca=' + encodeURIComponent(localNome)).then(r => r.json());
+        local = locais.find(l => l.nome === localNome);
+      }catch(e){}
+    }
     if (local) $('f_cidade').value = local.comarca || '';
 
     if (local && local.latitude && local.longitude) {
@@ -841,8 +875,9 @@
       // Outras obras: filtro direto por obra_id (locais já vinculados à obra)
       locais = await api('/api/locais?obra_id=' + obraId).then(r => r.json());
     }
-    // Guarda cache para auto-detecção GPS e seleção rápida
-    if (isTJCE && equipeNome) window._equipeLocaisCache = locais;
+    // Guarda cache para auto-detecção GPS e seleção rápida (sempre _obraLocaisCache; _equipeLocaisCache para TJ-CE)
+    window._obraLocaisCache = locais;
+    if (isTJCE) window._equipeLocaisCache = locais;
     const label = isTJCE ? ' da sua equipe' : '';
     selLocal.innerHTML = '<option value="">Selecione o local ('+locais.length+label+')</option>';
     locais.forEach(l => {
