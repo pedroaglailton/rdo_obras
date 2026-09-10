@@ -18,6 +18,16 @@ process.on('uncaughtException', (e) => console.error('[uncaughtException]', e));
 
 const PORT = process.env.PORT || 8080;
 const SECRET = process.env.TOKEN_SECRET || 'ipq-obras-2024';
+// Estoque GERAL (central): pseudo-equipe que guarda o saldo geral antes de distribuir
+const NOME_GERAL = '📦 ESTOQUE GERAL';
+async function getGeralId() {
+  let g = await db.prepare('SELECT id FROM equipes WHERE nome=?').get(NOME_GERAL);
+  if (!g) {
+    try { g = { id: (await db.prepare('INSERT INTO equipes (nome,cor,eh_geral) VALUES (?,?,1)').run(NOME_GERAL, '#455a64')).lastInsertRowid }; }
+    catch (e) { g = await db.prepare('SELECT id FROM equipes WHERE nome=?').get(NOME_GERAL); }
+  }
+  return g ? g.id : null;
+}
 const uploadsDir = path.join(__dirname, 'uploads');
 
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
@@ -40,6 +50,7 @@ const SQL_CREATE = [
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     nome TEXT NOT NULL,
     cor TEXT DEFAULT '#1565c0',
+    eh_geral INTEGER DEFAULT 0,
     ativo INTEGER DEFAULT 1
   )`,
   `CREATE TABLE IF NOT EXISTS obras (
@@ -96,6 +107,8 @@ const SQL_CREATE = [
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     nome TEXT NOT NULL UNIQUE,
     categoria TEXT DEFAULT 'Geral',
+    unidade TEXT DEFAULT 'UND',
+    quantidade_minima REAL DEFAULT 0,
     ativo INTEGER DEFAULT 1
   )`,
   `CREATE TABLE IF NOT EXISTS rdos (
@@ -122,8 +135,27 @@ const SQL_CREATE = [
     fotos_json TEXT DEFAULT '[]',
     usuario_id INTEGER,
     usuario_nome TEXT,
+    criado_em TEXT DEFAULT (datetime('now')),
+    ativo INTEGER DEFAULT 1,
+    atualizado_em TEXT,
+    atualizado_por TEXT,
+    excluido_em TEXT,
+    excluido_por TEXT,
+    motivo_exclusao TEXT
+  )`,
+  `CREATE TABLE IF NOT EXISTS rdo_auditoria (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    rdo_id INTEGER NOT NULL,
+    acao TEXT NOT NULL,
+    usuario_id INTEGER,
+    usuario_nome TEXT,
+    motivo TEXT DEFAULT '',
+    dados_antes TEXT DEFAULT '',
+    dados_depois TEXT DEFAULT '',
     criado_em TEXT DEFAULT (datetime('now'))
   )`,
+  `CREATE INDEX IF NOT EXISTS idx_rdo_aud_rdo ON rdo_auditoria(rdo_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_rdos_ativo ON rdos(ativo)`,
   `CREATE INDEX IF NOT EXISTS idx_rdos_data ON rdos(data)`,
   `CREATE INDEX IF NOT EXISTS idx_rdos_usuario ON rdos(usuario_id)`,
   `CREATE TABLE IF NOT EXISTS presenca (
@@ -150,9 +182,32 @@ const SQL_CREATE = [
     etapa TEXT DEFAULT 'ETAPA 1',
     observacao TEXT,
     criado_em TEXT DEFAULT (datetime('now')),
-    UNIQUE(obra_id, material_nome)
+    local_id INTEGER REFERENCES locais(id) ON DELETE SET NULL,
+    equipe_id INTEGER REFERENCES equipes(id) ON DELETE SET NULL
   )`,
-  `CREATE INDEX IF NOT EXISTS idx_obra_materiais_obra ON obra_materiais(obra_id)`
+  `CREATE INDEX IF NOT EXISTS idx_obra_materiais_obra ON obra_materiais(obra_id)`,
+  `CREATE TABLE IF NOT EXISTS estoque_equipes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    equipe_id INTEGER NOT NULL REFERENCES equipes(id) ON DELETE CASCADE,
+    material_id INTEGER NOT NULL REFERENCES materiais(id) ON DELETE CASCADE,
+    quantidade_atual REAL DEFAULT 0,
+    atualizado_em TEXT DEFAULT (datetime('now')),
+    UNIQUE(equipe_id, material_id)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_estoque_equipes_eq ON estoque_equipes(equipe_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_estoque_equipes_mat ON estoque_equipes(material_id)`,
+  `CREATE TABLE IF NOT EXISTS estoque_movimentacoes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    equipe_id INTEGER NOT NULL REFERENCES equipes(id) ON DELETE CASCADE,
+    material_id INTEGER NOT NULL REFERENCES materiais(id) ON DELETE CASCADE,
+    tipo TEXT NOT NULL,
+    quantidade REAL NOT NULL,
+    saldo_apos REAL,
+    origem TEXT DEFAULT '',
+    usuario_id INTEGER,
+    criado_em TEXT DEFAULT (datetime('now'))
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_est_mov_eqmat ON estoque_movimentacoes(equipe_id, material_id)`
 ];
 // DB init - hibrido SQLite / Postgres (Supabase)
 async function initDb(){
@@ -163,7 +218,31 @@ async function initDb(){
     try { await db.exec('ALTER TABLE locais ADD COLUMN IF NOT EXISTS obra_id INTEGER REFERENCES obras(id) ON DELETE SET NULL'); console.log('[migracao] locais.obra_id Postgres'); } catch(e){}
     try { await db.exec('ALTER TABLE locais ADD COLUMN IF NOT EXISTS equipe_id INTEGER REFERENCES equipes(id) ON DELETE SET NULL'); console.log('[migracao] locais.equipe_id Postgres'); } catch(e){}
     try { await db.exec('ALTER TABLE rdos ADD COLUMN IF NOT EXISTS local_id INTEGER REFERENCES locais(id) ON DELETE SET NULL'); console.log('[migracao] rdos.local_id Postgres'); } catch(e){}
+    // Auditoria RDO (obra gigante: soft-delete + trilha quem editou/apagou + motivo)
+    try { await db.exec(`CREATE TABLE IF NOT EXISTS rdo_auditoria (id SERIAL PRIMARY KEY, rdo_id INTEGER NOT NULL, acao TEXT NOT NULL, usuario_id INTEGER, usuario_nome TEXT, motivo TEXT DEFAULT '', dados_antes TEXT DEFAULT '', dados_depois TEXT DEFAULT '', criado_em TIMESTAMPTZ DEFAULT NOW())`); } catch(e){}
+    try { await db.exec('CREATE INDEX IF NOT EXISTS idx_rdo_aud_rdo ON rdo_auditoria(rdo_id)'); } catch(e){}
+    try { await db.exec('CREATE INDEX IF NOT EXISTS idx_rdos_ativo ON rdos(ativo)'); } catch(e){}
+    for (const c of ['ativo INTEGER DEFAULT 1','atualizado_em TEXT','atualizado_por TEXT','excluido_em TEXT','excluido_por TEXT','motivo_exclusao TEXT']) {
+      const col = c.split(' ')[0];
+      try { await db.exec(`ALTER TABLE rdos ADD COLUMN IF NOT EXISTS ${col} ${c.slice(col.length).trim()}`); } catch(e){}
+    }
+    try { await db.exec('UPDATE rdos SET ativo=1 WHERE ativo IS NULL'); } catch(e){}
     try { await db.exec('ALTER TABLE presenca ADD COLUMN IF NOT EXISTS local_id INTEGER REFERENCES locais(id) ON DELETE SET NULL'); console.log('[migracao] presenca.local_id Postgres'); } catch(e){}
+    // Estoque por local/equipe: escopo opcional na estimativa (NULL = obra toda)
+    try { await db.exec('ALTER TABLE obra_materiais ADD COLUMN IF NOT EXISTS local_id INTEGER REFERENCES locais(id) ON DELETE SET NULL'); } catch(e){}
+    try { await db.exec('ALTER TABLE obra_materiais ADD COLUMN IF NOT EXISTS equipe_id INTEGER REFERENCES equipes(id) ON DELETE SET NULL'); } catch(e){}
+    try { await db.exec('ALTER TABLE equipes ADD COLUMN IF NOT EXISTS eh_geral INTEGER DEFAULT 0'); } catch(e){}
+    try {
+      const g = await db.prepare('SELECT id FROM equipes WHERE nome=?').get('📦 ESTOQUE GERAL');
+      if (!g) await db.prepare('INSERT INTO equipes (nome,cor,eh_geral) VALUES (?,?,1)').run('📦 ESTOQUE GERAL', '#455a64');
+      else await db.prepare('UPDATE equipes SET eh_geral=1 WHERE id=?').run(g.id);
+    } catch(e){}
+    try { await db.exec('ALTER TABLE materiais ADD COLUMN IF NOT EXISTS unidade TEXT DEFAULT \'UND\''); } catch(e){}
+    try { await db.exec('ALTER TABLE materiais ADD COLUMN IF NOT EXISTS quantidade_minima DOUBLE PRECISION DEFAULT 0'); } catch(e){}
+    try { await db.exec(`CREATE TABLE IF NOT EXISTS estoque_equipes (id SERIAL PRIMARY KEY, equipe_id INTEGER NOT NULL REFERENCES equipes(id) ON DELETE CASCADE, material_id INTEGER NOT NULL REFERENCES materiais(id) ON DELETE CASCADE, quantidade_atual DOUBLE PRECISION DEFAULT 0, atualizado_em TIMESTAMPTZ DEFAULT NOW(), UNIQUE(equipe_id, material_id))`); } catch(e){}
+    try { await db.exec(`CREATE TABLE IF NOT EXISTS estoque_movimentacoes (id SERIAL PRIMARY KEY, equipe_id INTEGER NOT NULL REFERENCES equipes(id) ON DELETE CASCADE, material_id INTEGER NOT NULL REFERENCES materiais(id) ON DELETE CASCADE, tipo TEXT NOT NULL, quantidade DOUBLE PRECISION NOT NULL, saldo_apos DOUBLE PRECISION, origem TEXT DEFAULT '', usuario_id INTEGER, criado_em TIMESTAMPTZ DEFAULT NOW())`); } catch(e){}
+    try { await db.exec('ALTER TABLE obra_materiais DROP CONSTRAINT IF EXISTS obra_materiais_obra_id_material_nome_key'); } catch(e){}
+    try { await db.exec('CREATE INDEX IF NOT EXISTS idx_obra_mat_escopo ON obra_materiais(obra_id, local_id, equipe_id)'); } catch(e){}
     try { await db.exec('CREATE INDEX IF NOT EXISTS idx_locais_obra ON locais(obra_id)'); } catch(e){}
     try { await db.exec('CREATE INDEX IF NOT EXISTS idx_locais_equipe ON locais(equipe_id)'); } catch(e){}
     try { await db.exec('CREATE INDEX IF NOT EXISTS idx_rdos_local_id ON rdos(local_id)'); } catch(e){}
@@ -189,10 +268,46 @@ async function initDb(){
     await ensureColumn('locais', 'obra_id', 'INTEGER REFERENCES obras(id) ON DELETE SET NULL');
     await ensureColumn('locais', 'equipe_id', 'INTEGER REFERENCES equipes(id) ON DELETE SET NULL');
     await ensureColumn('rdos', 'local_id', 'INTEGER REFERENCES locais(id) ON DELETE SET NULL');
+    await ensureColumn('rdos', 'ativo', 'INTEGER DEFAULT 1');
+    await ensureColumn('rdos', 'atualizado_em', 'TEXT');
+    await ensureColumn('rdos', 'atualizado_por', 'TEXT');
+    await ensureColumn('rdos', 'excluido_em', 'TEXT');
+    await ensureColumn('rdos', 'excluido_por', 'TEXT');
+    await ensureColumn('rdos', 'motivo_exclusao', 'TEXT');
     await ensureColumn('presenca', 'local_id', 'INTEGER REFERENCES locais(id) ON DELETE SET NULL');
+    await ensureColumn('materiais', 'unidade', "TEXT DEFAULT 'UND'");
+    await ensureColumn('materiais', 'quantidade_minima', 'REAL DEFAULT 0');
+    await ensureColumn('equipes', 'eh_geral', 'INTEGER DEFAULT 0');
+    // Estoque geral (central): pseudo-equipe que guarda o saldo geral
+    try {
+      const g = await db.prepare('SELECT id FROM equipes WHERE nome=?').get(NOME_GERAL);
+      if (!g) await db.prepare('INSERT INTO equipes (nome,cor,eh_geral) VALUES (?,?,1)').run(NOME_GERAL, '#455a64');
+      else await db.prepare('UPDATE equipes SET eh_geral=1, ativo=1 WHERE id=?').run(g.id);
+    } catch (e) { console.log('[migracao] geral', e.message); }
+    // Estoque por local/equipe: rebuild remove UNIQUE(obra,nome) que impedia repetir o material em escopos
+    try {
+      const omCols = (await db.prepare('PRAGMA table_info(obra_materiais)').all()).map(c => c.name);
+      if (!omCols.includes('local_id') || !omCols.includes('equipe_id')) {
+        await db.exec(`CREATE TABLE IF NOT EXISTS obra_materiais_new (id INTEGER PRIMARY KEY AUTOINCREMENT, obra_id INTEGER NOT NULL REFERENCES obras(id) ON DELETE CASCADE, material_nome TEXT NOT NULL, unidade TEXT DEFAULT 'UND', quantidade_estimada REAL DEFAULT 0, valor_unitario REAL DEFAULT 0, fornecedor TEXT, etapa TEXT DEFAULT 'ETAPA 1', observacao TEXT, criado_em TEXT DEFAULT (datetime('now')), local_id INTEGER REFERENCES locais(id) ON DELETE SET NULL, equipe_id INTEGER REFERENCES equipes(id) ON DELETE SET NULL)`);
+        await db.exec(`INSERT OR IGNORE INTO obra_materiais_new (id, obra_id, material_nome, unidade, quantidade_estimada, valor_unitario, fornecedor, etapa, observacao, criado_em) SELECT id, obra_id, material_nome, unidade, quantidade_estimada, valor_unitario, fornecedor, etapa, observacao, criado_em FROM obra_materiais`);
+        await db.exec('DROP TABLE obra_materiais');
+        await db.exec('ALTER TABLE obra_materiais_new RENAME TO obra_materiais');
+        console.log('[migracao] obra_materiais escopo local/equipe');
+      }
+    } catch (e) { console.log('[migracao] obra_materiais escopo', e.message); }
+    try { await db.exec('CREATE INDEX IF NOT EXISTS idx_obra_mat_escopo ON obra_materiais(obra_id, local_id, equipe_id)'); } catch(e){}
+    try { await db.exec('CREATE INDEX IF NOT EXISTS idx_rdo_aud_rdo ON rdo_auditoria(rdo_id)'); } catch(e){}
+    try { await db.exec('CREATE INDEX IF NOT EXISTS idx_rdos_ativo ON rdos(ativo)'); } catch(e){}
+    try { await db.exec('UPDATE rdos SET ativo=1 WHERE ativo IS NULL'); } catch(e){}
     try { await db.exec('CREATE INDEX IF NOT EXISTS idx_locais_obra ON locais(obra_id)'); } catch(e){}
     try { await db.exec('CREATE INDEX IF NOT EXISTS idx_locais_equipe ON locais(equipe_id)'); } catch(e){}
     try { await db.exec('CREATE INDEX IF NOT EXISTS idx_rdos_local_id ON rdos(local_id)'); } catch(e){}
+    // Estoque por equipe (minimo global em materiais.quantidade_minima)
+    try { await db.exec(`CREATE TABLE IF NOT EXISTS estoque_equipes (id INTEGER PRIMARY KEY AUTOINCREMENT, equipe_id INTEGER NOT NULL REFERENCES equipes(id) ON DELETE CASCADE, material_id INTEGER NOT NULL REFERENCES materiais(id) ON DELETE CASCADE, quantidade_atual REAL DEFAULT 0, atualizado_em TEXT DEFAULT (datetime('now')), UNIQUE(equipe_id, material_id))`); } catch(e){}
+    try { await db.exec('CREATE INDEX IF NOT EXISTS idx_estoque_equipes_eq ON estoque_equipes(equipe_id)'); } catch(e){}
+    try { await db.exec('CREATE INDEX IF NOT EXISTS idx_estoque_equipes_mat ON estoque_equipes(material_id)'); } catch(e){}
+    try { await db.exec(`CREATE TABLE IF NOT EXISTS estoque_movimentacoes (id INTEGER PRIMARY KEY AUTOINCREMENT, equipe_id INTEGER NOT NULL REFERENCES equipes(id) ON DELETE CASCADE, material_id INTEGER NOT NULL REFERENCES materiais(id) ON DELETE CASCADE, tipo TEXT NOT NULL, quantidade REAL NOT NULL, saldo_apos REAL, origem TEXT DEFAULT '', usuario_id INTEGER, criado_em TEXT DEFAULT (datetime('now')))`); } catch(e){}
+    try { await db.exec('CREATE INDEX IF NOT EXISTS idx_est_mov_eqmat ON estoque_movimentacoes(equipe_id, material_id)'); } catch(e){}
   }
   // Admin padrao (async para ambos)
   const admin = await db.prepare('SELECT id FROM usuarios WHERE email=?').get('admin@ipq.com');
@@ -445,7 +560,7 @@ app.put('/api/me', async (req,res)=>{
 // EQUIPES
 // ============================================================
 app.get('/api/equipes', async (req, res) => {
-  const equipes = await db.prepare('SELECT * FROM equipes WHERE ativo=1 ORDER BY nome').all();
+  const equipes = await db.prepare('SELECT * FROM equipes WHERE ativo=1 AND COALESCE(eh_geral,0)=0 ORDER BY nome').all();
   // Robust: inclui todos os perfis ativos, nao so tecnico — reflete logica real de obra
   const users = await db.prepare('SELECT id,nome,email,perfil,equipe_id FROM usuarios WHERE ativo=1').all();
   // conta RDOs e obras vinculadas por equipe (via usuarios)
@@ -461,13 +576,14 @@ app.get('/api/equipes', async (req, res) => {
 
 // Mantido por compatibilidade (login antigo) — agora retorna vazio e loga aviso
 app.get('/api/equipes/public', async (req, res) => {
-  res.json(await db.prepare('SELECT id,nome,cor FROM equipes WHERE ativo=1 ORDER BY nome').all());
+  res.json(await db.prepare('SELECT id,nome,cor FROM equipes WHERE ativo=1 AND COALESCE(eh_geral,0)=0 ORDER BY nome').all());
 });
 
 app.post('/api/equipes', gestor, async (req, res) => {
   const { nome, cor, membros } = req.body;
   if (!nome || !nome.trim()) return res.status(400).json({ error: 'Nome obrigatorio' });
   const nomeTrim = nome.trim();
+  if (nomeTrim === NOME_GERAL) return res.status(400).json({ error: 'Nome reservado ao estoque geral' });
   if (await db.prepare('SELECT id FROM equipes WHERE nome=? AND ativo=1').get(nomeTrim)) return res.status(400).json({ error: 'Ja existe equipe com esse nome' });
   // valida membros existem e ativos
   if (membros && Array.isArray(membros) && membros.length) {
@@ -489,7 +605,7 @@ app.post('/api/equipes', gestor, async (req, res) => {
 
 app.put('/api/equipes/:id', gestor, async (req, res) => {
   const id = Number(req.params.id);
-  const existe = await db.prepare('SELECT id FROM equipes WHERE id=? AND ativo=1').get(id);
+  const existe = await db.prepare('SELECT id, nome FROM equipes WHERE id=? AND ativo=1').get(id);
   if (!existe) return res.status(404).json({ error: 'Equipe nao encontrada' });
   const { nome, cor, membros } = req.body;
   if (!nome || !nome.trim()) return res.status(400).json({ error: 'Nome obrigatorio' });
@@ -503,6 +619,15 @@ app.put('/api/equipes/:id', gestor, async (req, res) => {
     }
   }
   await db.prepare('UPDATE equipes SET nome=?,cor=? WHERE id=?').run(nomeTrim, cor || '#1565c0', id);
+  // Renomeou: acompanha nome nos locais (regiao guarda o nome) para não virar "equipe fantasma"
+  if (normEquipe(existe.nome) !== normEquipe(nomeTrim)) {
+    try {
+      const regs = await db.prepare("SELECT id, regiao FROM locais WHERE regiao IS NOT NULL AND regiao<>''").all();
+      for (const l of (regs || [])) {
+        if (normEquipe(l.regiao) === normEquipe(existe.nome)) { try { await db.prepare('UPDATE locais SET regiao=? WHERE id=?').run(nomeTrim, l.id); } catch (e) {} }
+      }
+    } catch (e) {}
+  }
   if (membros && Array.isArray(membros)) {
     await db.prepare('UPDATE usuarios SET equipe_id=NULL WHERE equipe_id=?').run(id);
     for (const uid of membros) {
@@ -514,8 +639,17 @@ app.put('/api/equipes/:id', gestor, async (req, res) => {
 
 app.delete('/api/equipes/:id', gestor, async (req, res) => {
   const id = Number(req.params.id);
-  const eq = await db.prepare('SELECT id FROM equipes WHERE id=? AND ativo=1').get(id);
+  const eq = await db.prepare('SELECT id, nome, COALESCE(eh_geral,0) as eh_geral FROM equipes WHERE id=? AND ativo=1').get(id);
   if (!eq) return res.status(404).json({ error: 'Equipe nao encontrada' });
+  if (Number(eq.eh_geral) === 1) return res.status(400).json({ error: 'Estoque geral não pode ser excluído' });
+  // Limpa vínculo nos locais (regiao guarda o nome): volta para SEM EQUIPE
+  try {
+    const regs = await db.prepare("SELECT id, regiao FROM locais WHERE regiao IS NOT NULL AND regiao<>''").all();
+    const alvo = normEquipe(eq.nome);
+    for (const l of (regs || [])) {
+      if (normEquipe(l.regiao) === alvo) { try { await db.prepare('UPDATE locais SET regiao=? WHERE id=?').run('', l.id); } catch (e) {} }
+    }
+  } catch (e) {}
   await db.prepare('UPDATE usuarios SET equipe_id=NULL WHERE equipe_id=?').run(id);
   await db.prepare('UPDATE equipes SET ativo=0 WHERE id=?').run(id);
   res.json({ ok: true });
@@ -525,7 +659,10 @@ app.delete('/api/equipes/:id', gestor, async (req, res) => {
 // OBRAS
 // ============================================================
 app.get('/api/obras', async (req, res) => {
-  let sql = `SELECT o.*, l.nome as local_nome, l.comarca as local_comarca, l.endereco as local_endereco, l.cameras as local_cameras
+  let sql = `SELECT o.*, l.nome as local_nome, l.comarca as local_comarca, l.endereco as local_endereco, l.cameras as local_cameras,
+    (SELECT COUNT(*) FROM etapas WHERE obra_id=o.id AND (local_id IS NULL OR local_id=0)) as tpl,
+    (SELECT COUNT(*) FROM locais WHERE obra_id=o.id AND ativo=1) as nlocais,
+    (SELECT COUNT(*) FROM etapas WHERE obra_id=o.id AND local_id IS NOT NULL AND status='concluida') as nconcl
     FROM obras o LEFT JOIN locais l ON o.local_id=l.id WHERE o.ativo=1`;
   const p = [];
   if (req.query.status) { sql += ' AND o.status=?'; p.push(req.query.status); }
@@ -547,11 +684,33 @@ app.post('/api/obras', gestor, async (req, res) => {
   if (!nome) return res.status(400).json({ error: 'Nome obrigatorio' });
   const r = await db.prepare('INSERT INTO obras (nome,local_id,comarca,prazo_dias,data_inicio,responsavel,descricao) VALUES (?,?,?,?,?,?,?)')
     .run(nome, local_id || null, comarca || '', prazo_dias || 30, data_inicio || null, responsavel || '', descricao || '');
+  // Sequência lógica Obra→Modelo: planta o checklist a partir do vocabulário (atividades ativas).
+  // Sem isso a obra nascia sem modelo, o modal vinha vazio e o auto-etapa caía em ordem 999.
+  try {
+    const atvs = await db.prepare('SELECT nome FROM atividades WHERE ativo=1 ORDER BY id').all();
+    let ord = 1;
+    for (const a of atvs) {
+      const ex = await db.prepare('SELECT id FROM etapas WHERE obra_id=? AND local_id IS NULL AND UPPER(nome)=UPPER(?)').get(r.lastInsertRowid, a.nome);
+      if (!ex) await db.prepare("INSERT INTO etapas (obra_id,local_id,nome,ordem,status) VALUES (?,?,?,?,'pendente')").run(r.lastInsertRowid, null, a.nome, ord++);
+    }
+  } catch (e) { console.error('[obra-template]', e.message); }
   res.json({ ok: true, id: r.lastInsertRowid });
 });
 
 app.put('/api/obras/:id', gestor, async (req, res) => {
-  const { nome, local_id, comarca, prazo_dias, data_inicio, status, responsavel, descricao } = req.body;
+  const atual = await db.prepare('SELECT * FROM obras WHERE id=?').get(req.params.id);
+  if (!atual) return res.status(404).json({ error: 'Obra nao encontrada' });
+  const b = req.body || {};
+  const nome = (b.nome !== undefined ? b.nome : atual.nome || '').toString().trim();
+  if (!nome) return res.status(400).json({ error: 'Nome obrigatorio' });
+  const local_id = b.local_id === undefined || b.local_id === '' || b.local_id === null ? (b.local_id === null ? null : atual.local_id) : Number(b.local_id);
+  const comarca = b.comarca !== undefined ? b.comarca : atual.comarca;
+  const prazo_dias = b.prazo_dias !== undefined && b.prazo_dias !== '' ? Number(b.prazo_dias) || 30 : atual.prazo_dias;
+  const data_inicio = b.data_inicio !== undefined ? (b.data_inicio || null) : atual.data_inicio;
+  const status = b.status !== undefined ? b.status : atual.status;
+  if (status && !['planejamento', 'em_andamento', 'concluida'].includes(status)) return res.status(400).json({ error: 'Status invalido' });
+  const responsavel = b.responsavel !== undefined ? b.responsavel : atual.responsavel;
+  const descricao = b.descricao !== undefined ? b.descricao : atual.descricao;
   await db.prepare('UPDATE obras SET nome=?,local_id=?,comarca=?,prazo_dias=?,data_inicio=?,status=?,responsavel=?,descricao=? WHERE id=?')
     .run(nome, local_id, comarca, prazo_dias, data_inicio, status, responsavel, descricao, req.params.id);
   res.json({ ok: true });
@@ -574,7 +733,9 @@ app.put('/api/obras/:id/toggle', gestor, async (req, res) => {
 // ETAPAS
 // ============================================================
 app.get('/api/obras/:obra_id/etapas', async (req, res) => {
-  res.json(await db.prepare('SELECT * FROM etapas WHERE obra_id=? ORDER BY ordem').all(req.params.obra_id));
+  // Modelo primeiro, depois per-local com nome do local (o modal separa os 2 grupos)
+  res.json(await db.prepare(`SELECT e.*, l.nome as local_nome FROM etapas e LEFT JOIN locais l ON l.id=e.local_id
+    WHERE e.obra_id=? ORDER BY CASE WHEN e.local_id IS NULL OR e.local_id=0 THEN 0 ELSE 1 END, e.ordem`).all(req.params.obra_id));
 });
 
 app.post('/api/obras/:obra_id/etapas', gestor, async (req, res) => {
@@ -603,16 +764,32 @@ app.delete('/api/etapas/:id', gestor, async (req, res) => {
 });
 
 async function atualizarProgresso(obraId) {
-  const r = await db.prepare('SELECT COUNT(*) as total, SUM(CASE WHEN status=\'concluida\' THEN 1 ELSE 0 END) as ok FROM etapas WHERE obra_id=?').get(obraId);
-  const pct = r.total > 0 ? Math.round((r.ok / r.total) * 100) : 0;
-  await db.prepare('UPDATE obras SET progresso=? WHERE id=?').run(pct, obraId);
+  // Fonte única: concluidas per-local / (locais × modelo) — igual ao Relatórios (etapas-desempenho).
+  // Antes misturava modelo + per-local no mesmo COUNT e só recalculava no toque manual → barra stale.
+  const tpl = Number((await db.prepare('SELECT COUNT(*) as c FROM etapas WHERE obra_id=? AND (local_id IS NULL OR local_id=0)').get(obraId)).c) || 0;
+  const locs = await db.prepare('SELECT id FROM locais WHERE ativo=1 AND obra_id=?').all(obraId);
+  if (tpl > 0 && locs.length) {
+    const ids = locs.map(l => l.id);
+    const row = await db.prepare(`SELECT COUNT(*) as c FROM etapas WHERE obra_id=? AND local_id IN (${ids.map(() => '?').join(',')}) AND status='concluida'`).get(obraId, ...ids);
+    const pct = Math.round(((Number(row.c) || 0) / (locs.length * tpl)) * 100);
+    await db.prepare('UPDATE obras SET progresso=? WHERE id=?').run(Math.min(100, pct), obraId);
+  } else if (locs.length) {
+    // Sem modelo: locais com ≥1 RDO / total (mesma regra do Estoque)
+    const com = await db.prepare('SELECT COUNT(DISTINCT local) as c FROM rdos WHERE obra_id=?').get(obraId);
+    const pct = Math.round((Math.min(Number(com.c) || 0, locs.length) / locs.length) * 100);
+    await db.prepare('UPDATE obras SET progresso=? WHERE id=?').run(pct, obraId);
+  } else {
+    await db.prepare('UPDATE obras SET progresso=0 WHERE id=?').run(obraId);
+  }
 }
 
 // ============================================================
 // LOCAIS
 // ============================================================
 app.get('/api/locais', async (req, res) => {
-  let sql = 'SELECT * FROM locais WHERE ativo=1';
+  // ?ativo=0 → só inativos | ?ativo=todos → todos (p/ reativar) | padrão: só ativos
+  const fAtivo = req.query.ativo === 'todos' ? '' : (req.query.ativo === '0' ? ' AND ativo=0' : ' AND ativo=1');
+  let sql = 'SELECT * FROM locais WHERE 1=1' + fAtivo;
   const p = [];
   if (req.query.obra_id) {
     // F1: filtra direto por obra_id (novo). Mantém fallback TJ-CE global para dados legados sem obra_id
@@ -747,7 +924,7 @@ app.post('/api/locais', gestor, async (req, res) => {
 app.put('/api/locais/:id', gestor, async (req, res) => {
   const atual = await db.prepare('SELECT * FROM locais WHERE id=?').get(req.params.id);
   if (!atual) return res.status(404).json({ error: 'Local nao encontrado' });
-  const { nome, comarca, nome_imovel, tipo, ocupacao, endereco, area, longitude, latitude, google_maps_link, street_view_link, cameras, obra_id, equipe_id, regiao } = req.body;
+  const { nome, comarca, nome_imovel, tipo, ocupacao, endereco, area, longitude, latitude, google_maps_link, street_view_link, cameras, obra_id, equipe_id, regiao, ativo } = req.body;
   // Merge com atual para permitir PATCH parcial (usado por vincular/desvincular)
   const novoNome = nome !== undefined ? nome : atual.nome;
   const novoComarca = comarca !== undefined ? comarca : atual.comarca;
@@ -780,8 +957,8 @@ app.put('/api/locais/:id', gestor, async (req, res) => {
       novoEquipeId = null;
     }
   }
-  await db.prepare('UPDATE locais SET nome=?,comarca=?,nome_imovel=?,tipo=?,ocupacao=?,endereco=?,area=?,longitude=?,latitude=?,google_maps_link=?,street_view_link=?,cameras=?,obra_id=?,equipe_id=?,regiao=? WHERE id=?')
-    .run(novoNome, novoComarca, novoNomeImovel, novoTipo, novoOcupacao, novoEndereco, novoArea, novoLon, novoLat, novoGmaps, novoStreet, novoCams, novoObraId, novoEquipeId, novoRegiao, req.params.id);
+  await db.prepare('UPDATE locais SET nome=?,comarca=?,nome_imovel=?,tipo=?,ocupacao=?,endereco=?,area=?,longitude=?,latitude=?,google_maps_link=?,street_view_link=?,cameras=?,obra_id=?,equipe_id=?,regiao=?,ativo=? WHERE id=?')
+    .run(novoNome, novoComarca, novoNomeImovel, novoTipo, novoOcupacao, novoEndereco, novoArea, novoLon, novoLat, novoGmaps, novoStreet, novoCams, novoObraId, novoEquipeId, novoRegiao, ativo !== undefined ? (Number(ativo) ? 1 : 0) : atual.ativo, req.params.id);
   res.json({ ok: true });
 });
 
@@ -929,6 +1106,18 @@ app.post('/api/atividades', gestor, async (req, res) => {
   const { nome } = req.body;
   if (!nome) return res.status(400).json({ error: 'Nome obrigatorio' });
   const r = await db.prepare('INSERT INTO atividades (nome) VALUES (?)').run(nome);
+  // Vocabulário→Modelo: nova atividade entra no checklist das obras (sem duplicar).
+  // Antes o RDO aceitava a atividade mas o modelo não tinha → etapa per-local ordem 999 e progresso cego.
+  try {
+    const obras = await db.prepare('SELECT id FROM obras WHERE ativo=1').all();
+    for (const o of obras) {
+      const ex = await db.prepare('SELECT id FROM etapas WHERE obra_id=? AND local_id IS NULL AND UPPER(nome)=UPPER(?)').get(o.id, nome);
+      if (!ex) {
+        const mx = await db.prepare('SELECT COALESCE(MAX(ordem),0) as m FROM etapas WHERE obra_id=? AND (local_id IS NULL OR local_id=0)').get(o.id);
+        await db.prepare("INSERT INTO etapas (obra_id,local_id,nome,ordem,status) VALUES (?,?,?,?,'pendente')").run(o.id, null, nome, (Number(mx.m) || 0) + 1);
+      }
+    }
+  } catch (e) { console.error('[atividade-template]', e.message); }
   res.json({ ok: true, id: r.lastInsertRowid });
 });
 
@@ -954,10 +1143,26 @@ app.get('/api/materiais', async (req, res) => {
 });
 
 app.post('/api/materiais', gestor, async (req, res) => {
-  const { nome, categoria } = req.body;
+  const { nome, categoria, unidade, quantidade_minima } = req.body;
   if (!nome) return res.status(400).json({ error: 'Nome obrigatorio' });
-  const r = await db.prepare('INSERT INTO materiais (nome,categoria) VALUES (?,?)').run(nome, categoria || 'Geral');
+  const r = await db.prepare('INSERT INTO materiais (nome,categoria,unidade,quantidade_minima) VALUES (?,?,?,?)').run(nome, categoria || 'Geral', unidade || 'UND', Number(quantidade_minima) || 0);
   res.json({ ok: true, id: r.lastInsertRowid });
+});
+
+app.put('/api/materiais/:id', gestor, async (req, res) => {
+  const id = Number(req.params.id);
+  const atual = await db.prepare('SELECT * FROM materiais WHERE id=?').get(id);
+  if (!atual) return res.status(404).json({ error: 'Material não encontrado' });
+  const { nome, categoria, unidade, quantidade_minima } = req.body;
+  await db.prepare('UPDATE materiais SET nome=?, categoria=?, unidade=?, quantidade_minima=? WHERE id=?')
+    .run(
+      (nome || atual.nome).trim(),
+      categoria != null ? categoria : atual.categoria,
+      unidade != null ? unidade : (atual.unidade || 'UND'),
+      quantidade_minima != null ? (Number(quantidade_minima) || 0) : (Number(atual.quantidade_minima) || 0),
+      id
+    );
+  res.json({ ok: true });
 });
 
 app.delete('/api/materiais/:id', gestor, async (req, res) => {
@@ -966,31 +1171,148 @@ app.delete('/api/materiais/:id', gestor, async (req, res) => {
 });
 
 // ============================================================
+// ESTOQUE POR EQUIPE - saldo por equipe x minimo global (materiais.quantidade_minima)
+// ============================================================
+// Visão geral: cada linha = 1 material x 1 equipe, com gasto total e status
+app.get('/api/estoque/equipes', async (req, res) => {
+  const { equipe_id, busca, so_alertas } = req.query;
+  const mats = await db.prepare('SELECT id, nome, categoria, COALESCE(unidade,\'UND\') as unidade, COALESCE(quantidade_minima,0) as quantidade_minima FROM materiais WHERE ativo=1 ORDER BY nome').all();
+  const eqs = await db.prepare('SELECT id, nome, COALESCE(eh_geral,0) as eh_geral FROM equipes WHERE ativo=1 ORDER BY COALESCE(eh_geral,0) DESC, nome').all();
+  const eqFiltradas = equipe_id ? eqs.filter(e => Number(e.id) === Number(equipe_id)) : eqs;
+  const saldos = await db.prepare('SELECT equipe_id, material_id, quantidade_atual FROM estoque_equipes').all();
+  const mapSaldo = new Map(saldos.map(s => [`${s.equipe_id}:${s.material_id}`, Number(s.quantidade_atual) || 0]));
+  const gastos = await db.prepare(`SELECT equipe_id, material_id, SUM(CASE WHEN tipo IN ('saida','rdo') THEN quantidade WHEN tipo='estorno' THEN -quantidade ELSE 0 END) as gasto FROM estoque_movimentacoes GROUP BY equipe_id, material_id`).all();
+  const mapGasto = new Map(gastos.map(g => [`${g.equipe_id}:${g.material_id}`, Number(g.gasto) || 0]));
+  let linhas = [];
+  for (const eq of eqFiltradas) {
+    for (const m of mats) {
+      const saldo = mapSaldo.get(`${eq.id}:${m.id}`) ?? 0;
+      const minimo = Number(m.quantidade_minima) || 0;
+      const gasto = mapGasto.get(`${eq.id}:${m.id}`) ?? 0;
+      let status = 'ok';
+      if (minimo > 0 && saldo <= minimo) status = 'critico';
+      else if (minimo > 0 && saldo <= minimo * 1.2) status = 'atencao';
+      else if (saldo === 0 && gasto > 0) status = 'zerado';
+      linhas.push({ equipe_id: eq.id, equipe_nome: eq.nome, eh_geral: Number(eq.eh_geral) || 0, material_id: m.id, material_nome: m.nome, categoria: m.categoria, unidade: m.unidade, saldo, minimo: minimo, gasto, status });
+    }
+  }
+  if (busca) {
+    const n = busca.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    linhas = linhas.filter(l => l.material_nome.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().includes(n) || l.equipe_nome.toLowerCase().includes(n));
+  }
+  if (String(so_alertas) === '1' || String(so_alertas) === 'true') linhas = linhas.filter(l => l.status === 'critico' || l.status === 'atencao' || l.status === 'zerado');
+  res.json(linhas);
+});
+
+// Só alertas (para badge / aviso): saldo <= minimo global
+app.get('/api/estoque/alertas', async (req, res) => {
+  const { equipe_id } = req.query;
+  const eqF = equipe_id ? 'AND s.equipe_id=?' : '';
+  const params = equipe_id ? [Number(equipe_id)] : [];
+  const rows = await db.prepare(`
+    SELECT e.nome as equipe_nome, m.nome as material_nome, m.unidade as unidade,
+      s.equipe_id, s.material_id, s.quantidade_atual as saldo,
+      COALESCE(m.quantidade_minima,0) as minimo
+    FROM estoque_equipes s
+    JOIN equipes e ON e.id=s.equipe_id
+    JOIN materiais m ON m.id=s.material_id
+    WHERE COALESCE(m.quantidade_minima,0) > 0 AND s.quantidade_atual <= COALESCE(m.quantidade_minima,0) ${eqF}
+    ORDER BY s.quantidade_atual - COALESCE(m.quantidade_minima,0), e.nome, m.nome
+  `).all(...params);
+  res.json(rows.map(r => ({ ...r, saldo: Number(r.saldo) || 0, minimo: Number(r.minimo) || 0, falta: Math.max(0, (Number(r.minimo) || 0) - (Number(r.saldo) || 0)) })));
+});
+
+// Lançar: compra (→geral), saida_geral (baixa do geral), distribuir (geral→equipe), entrada/saida (ajuste direto na equipe)
+// Fluxo: cadastra GERAL primeiro, depois distribui para equipes. RDO dá baixa sozinho.
+app.post('/api/estoque/lancar', gestor, async (req, res) => {
+  const { equipe_id, material_id, tipo, quantidade, origem } = req.body;
+  const matId = Number(material_id), qtd = Number(quantidade);
+  if (!matId || !qtd || qtd <= 0) return res.status(400).json({ error: 'material_id e quantidade (>0) são obrigatórios' });
+  if (!['entrada', 'saida', 'compra', 'saida_geral', 'distribuir'].includes(tipo)) return res.status(400).json({ error: "tipo deve ser 'entrada', 'saida', 'compra', 'saida_geral' ou 'distribuir'" });
+  const mat = await db.prepare('SELECT id, nome, COALESCE(unidade,\'UND\') as unidade, COALESCE(quantidade_minima,0) as quantidade_minima FROM materiais WHERE id=? AND ativo=1').get(matId);
+  if (!mat) return res.status(400).json({ error: 'Material inválido' });
+  const minimo = Number(mat.quantidade_minima) || 0;
+  const uid = req.usuario?.id || req.user?.id || null;
+  const origTxt = (origem || '').toString().slice(0, 200);
+
+  if (tipo === 'compra' || tipo === 'saida_geral') {
+    // Soma ou baixa no GERAL (estoque central)
+    const gid = await getGeralId();
+    const mov = tipo === 'compra' ? 'entrada' : 'saida';
+    const r = await movimentarEstoqueRdo(gid, matId, mov, qtd, origTxt || tipo, uid);
+    return res.json({ ok: true, equipe: r.equipe_nome, geral: true, material: mat.nome, unidade: mat.unidade, saldo: r.saldo, minimo, alerta: r.alerta, msg: r.alerta ? `⚠️ ${r.equipe_nome} com ${r.saldo} ${mat.unidade} de ${mat.nome} (mínimo ${minimo})` : (tipo === 'compra' ? `Compra: +${qtd} ${mat.unidade} no geral (saldo ${r.saldo})` : `Baixa no geral: -${qtd} ${mat.unidade} (saldo ${r.saldo})`) });
+  }
+
+  const eqId = Number(equipe_id);
+  if (!eqId) return res.status(400).json({ error: 'Escolha a equipe' });
+  const eq = await db.prepare('SELECT id, nome FROM equipes WHERE id=? AND ativo=1').get(eqId);
+  if (!eq) return res.status(400).json({ error: 'Equipe inválida' });
+
+  if (tipo === 'distribuir') {
+    // Transfere GERAL → equipe (duas pernas, auditoria preservada)
+    const gid = await getGeralId();
+    if (gid === eqId) return res.status(400).json({ error: 'Distribuir é do geral para uma equipe' });
+    const g = await movimentarEstoqueRdo(gid, matId, 'saida', qtd, `distribuição → ${eq.nome}${origTxt ? ' (' + origTxt + ')' : ''}`, uid);
+    const t = await movimentarEstoqueRdo(eqId, matId, 'entrada', qtd, `recebido do geral${origTxt ? ' (' + origTxt + ')' : ''}`, uid);
+    const avisoGeral = minimo > 0 && g.saldo <= minimo;
+    return res.json({ ok: true, equipe: eq.nome, material: mat.nome, unidade: mat.unidade, saldo: t.saldo, saldo_geral: g.saldo, minimo, alerta: t.alerta, avisoGeral,
+      msg: t.alerta ? `⚠️ ${eq.nome} ficou com ${t.saldo} ${mat.unidade} de ${mat.nome} (mínimo ${minimo})` : `Distribuído: ${qtd} ${mat.unidade} geral→${eq.nome} (geral: ${g.saldo})` });
+  }
+
+  // entrada/saida: ajuste direto no saldo da equipe
+  const reg = await db.prepare('SELECT id, quantidade_atual FROM estoque_equipes WHERE equipe_id=? AND material_id=?').get(eqId, matId);
+  const saldoAnt = reg ? (Number(reg.quantidade_atual) || 0) : 0;
+  const r = await movimentarEstoqueRdo(eqId, matId, tipo, qtd, origTxt, uid);
+  res.json({ ok: true, equipe: eq.nome, material: mat.nome, unidade: mat.unidade, saldo_anterior: saldoAnt, saldo: r.saldo, minimo, alerta: r.alerta, msg: r.alerta ? `⚠️ ${eq.nome} ficou com ${r.saldo} ${mat.unidade} de ${mat.nome} (mínimo ${minimo})` : 'Lançamento ok' });
+});
+
+// Histórico de gastos (o que foi gasto por equipe)
+app.get('/api/estoque/movimentacoes', async (req, res) => {
+  const { equipe_id, material_id, limite } = req.query;
+  let sql = `SELECT mv.*, e.nome as equipe_nome, m.nome as material_nome, m.unidade as unidade FROM estoque_movimentacoes mv JOIN equipes e ON e.id=mv.equipe_id JOIN materiais m ON m.id=mv.material_id WHERE 1=1`;
+  const p = [];
+  if (equipe_id) { sql += ' AND mv.equipe_id=?'; p.push(Number(equipe_id)); }
+  if (material_id) { sql += ' AND mv.material_id=?'; p.push(Number(material_id)); }
+  sql += ' ORDER BY mv.id DESC LIMIT ' + (Math.min(Number(limite) || 100, 500));
+  res.json(await db.prepare(sql).all(...p));
+});
+
+// ============================================================
 // ESTOQUE POR OBRA - Estimativa vs Consumo (Materiais.xlsx)
 // ============================================================
 // Lista estimativas de uma obra
 app.get('/api/obras/:obra_id/materiais/estimativas', async (req, res) => {
   const obraId = Number(req.params.obra_id);
-  const rows = await db.prepare('SELECT * FROM obra_materiais WHERE obra_id=? ORDER BY material_nome').all(obraId);
+  const rows = await db.prepare(`SELECT m.*, l.nome as local_nome, e.nome as equipe_nome
+    FROM obra_materiais m LEFT JOIN locais l ON l.id=m.local_id LEFT JOIN equipes e ON e.id=m.equipe_id
+    WHERE m.obra_id=? ORDER BY m.material_nome`).all(obraId);
   res.json(rows);
 });
-// Cria/atualiza uma estimativa (upsert por material_nome)
+// Cria/atualiza uma estimativa (upsert por material + escopo local/equipe; NULL = obra toda)
 app.post('/api/obras/:obra_id/materiais/estimativas', gestor, async (req, res) => {
   const obraId = Number(req.params.obra_id);
-  const { material_nome, unidade, quantidade_estimada, valor_unitario, fornecedor, etapa, observacao } = req.body;
+  const { material_nome, unidade, quantidade_estimada, valor_unitario, fornecedor, etapa, observacao, local_id, equipe_id } = req.body;
   if (!material_nome || !material_nome.trim()) return res.status(400).json({error:'material_nome obrigatório'});
   const nome = material_nome.trim();
   const qtd = Number(quantidade_estimada)||0;
   if (qtd <0) return res.status(400).json({error:'Quantidade inválida'});
+  const locId = local_id ? Number(local_id) : null;
+  const eqId = equipe_id ? Number(equipe_id) : null;
+  if (locId) { const l = await db.prepare('SELECT id FROM locais WHERE id=? AND obra_id=? AND ativo=1').get(locId, obraId); if (!l) return res.status(400).json({error:'Local não pertence a esta obra'}); }
+  if (eqId) { const t = await db.prepare('SELECT id FROM equipes WHERE id=? AND ativo=1').get(eqId); if (!t) return res.status(400).json({error:'Equipe inválida'}); }
   // upsert: tenta insert, se conflito atualiza
-  const existe = await db.prepare('SELECT id FROM obra_materiais WHERE obra_id=? AND UPPER(material_nome)=UPPER(?)').get(obraId, nome);
+  const conds = ['obra_id=?', 'UPPER(material_nome)=UPPER(?)'];
+  const vals = [obraId, nome];
+  if (locId) { conds.push('local_id=?'); vals.push(locId); } else conds.push('local_id IS NULL');
+  if (eqId) { conds.push('equipe_id=?'); vals.push(eqId); } else conds.push('equipe_id IS NULL');
+  const existe = await db.prepare(`SELECT id FROM obra_materiais WHERE ${conds.join(' AND ')}`).get(...vals);
   if (existe) {
-    await db.prepare('UPDATE obra_materiais SET unidade=?, quantidade_estimada=?, valor_unitario=?, fornecedor=?, etapa=?, observacao=? WHERE id=?')
-      .run(unidade||'UND', qtd, Number(valor_unitario)||0, fornecedor||'', etapa||'ETAPA 1', observacao||'', existe.id);
+    await db.prepare('UPDATE obra_materiais SET unidade=?, quantidade_estimada=?, valor_unitario=?, fornecedor=?, etapa=?, observacao=?, local_id=?, equipe_id=? WHERE id=?')
+      .run(unidade||'UND', qtd, Number(valor_unitario)||0, fornecedor||'', etapa||'ETAPA 1', observacao||'', locId, eqId, existe.id);
     return res.json({ok:true, id: existe.id, atualizado:true});
   } else {
-    const r = await db.prepare('INSERT INTO obra_materiais (obra_id, material_nome, unidade, quantidade_estimada, valor_unitario, fornecedor, etapa, observacao) VALUES (?,?,?,?,?,?,?,?)')
-      .run(obraId, nome, unidade||'UND', qtd, Number(valor_unitario)||0, fornecedor||'', etapa||'ETAPA 1', observacao||'');
+    const r = await db.prepare('INSERT INTO obra_materiais (obra_id, material_nome, unidade, quantidade_estimada, valor_unitario, fornecedor, etapa, observacao, local_id, equipe_id) VALUES (?,?,?,?,?,?,?,?,?,?)')
+      .run(obraId, nome, unidade||'UND', qtd, Number(valor_unitario)||0, fornecedor||'', etapa||'ETAPA 1', observacao||'', locId, eqId);
     // garante que material existe no catálogo
     try { await db.prepare('INSERT OR IGNORE INTO materiais (nome,categoria) VALUES (?,?)').run(nome, 'Geral'); } catch(e){}
     return res.json({ok:true, id: r.lastInsertRowid});
@@ -998,11 +1320,21 @@ app.post('/api/obras/:obra_id/materiais/estimativas', gestor, async (req, res) =
 });
 app.put('/api/obra-materiais/:id', gestor, async (req, res) => {
   const id = Number(req.params.id);
-  const { material_nome, unidade, quantidade_estimada, valor_unitario, fornecedor, etapa, observacao } = req.body;
+  const { material_nome, unidade, quantidade_estimada, valor_unitario, fornecedor, etapa, observacao, local_id, equipe_id } = req.body;
   const atual = await db.prepare('SELECT * FROM obra_materiais WHERE id=?').get(id);
   if(!atual) return res.status(404).json({error:'Estimativa não encontrada'});
-  await db.prepare('UPDATE obra_materiais SET material_nome=?, unidade=?, quantidade_estimada=?, valor_unitario=?, fornecedor=?, etapa=?, observacao=? WHERE id=?')
-    .run(material_nome||atual.material_nome, unidade||atual.unidade, quantidade_estimada!=null? Number(quantidade_estimada):atual.quantidade_estimada, valor_unitario!=null? Number(valor_unitario):atual.valor_unitario, fornecedor!=null? fornecedor:atual.fornecedor, etapa||atual.etapa, observacao!=null? observacao:atual.observacao, id);
+  const locId = local_id === null || local_id === '' ? null : (local_id != null ? Number(local_id) : atual.local_id);
+  const eqId = equipe_id === null || equipe_id === '' ? null : (equipe_id != null ? Number(equipe_id) : atual.equipe_id);
+  const nomeFinal = (material_nome || atual.material_nome).trim();
+  // evita duplicar outro registro no mesmo escopo
+  const conds = ['obra_id=?', 'UPPER(material_nome)=UPPER(?)', 'id<>?'];
+  const vals = [atual.obra_id, nomeFinal, id];
+  if (locId) { conds.push('local_id=?'); vals.push(locId); } else conds.push('local_id IS NULL');
+  if (eqId) { conds.push('equipe_id=?'); vals.push(eqId); } else conds.push('equipe_id IS NULL');
+  const choque = await db.prepare(`SELECT id FROM obra_materiais WHERE ${conds.join(' AND ')}`).get(...vals);
+  if (choque) return res.status(400).json({error:'Já existe estimativa deste material neste local/equipe — edite a existente'});
+  await db.prepare('UPDATE obra_materiais SET material_nome=?, unidade=?, quantidade_estimada=?, valor_unitario=?, fornecedor=?, etapa=?, observacao=?, local_id=?, equipe_id=? WHERE id=?')
+    .run(nomeFinal, unidade||atual.unidade, quantidade_estimada!=null? Number(quantidade_estimada):atual.quantidade_estimada, valor_unitario!=null? Number(valor_unitario):atual.valor_unitario, fornecedor!=null? fornecedor:atual.fornecedor, etapa||atual.etapa, observacao!=null? observacao:atual.observacao, locId, eqId, id);
   res.json({ok:true});
 });
 app.delete('/api/obra-materiais/:id', gestor, async (req, res) => {
@@ -1028,7 +1360,8 @@ app.post('/api/obras/:obra_id/materiais/importar', gestor, async (req, res) => {
     const etapa = norm(l['etapa']||'ETAPA 1');
     // valor unitário deriva do total/qtd se não vier separado
     const valorUnit = valorTotal && qtd ? valorTotal/qtd : Number(String(l['Valor Unitário']||l['valor_unitario']||0).toString().replace(',','.'))||0;
-    const existe = await db.prepare('SELECT id FROM obra_materiais WHERE obra_id=? AND UPPER(material_nome)=UPPER(?)').get(obraId, nome);
+    // importação é sempre escopo OBRA (não toca linhas por local/equipe)
+    const existe = await db.prepare('SELECT id FROM obra_materiais WHERE obra_id=? AND UPPER(material_nome)=UPPER(?) AND local_id IS NULL AND equipe_id IS NULL').get(obraId, nome);
     if(existe){
       await db.prepare('UPDATE obra_materiais SET unidade=?, quantidade_estimada=?, valor_unitario=?, fornecedor=?, etapa=? WHERE id=?').run(unidade, qtd, valorUnit, fornecedor, etapa, existe.id);
       atualizados++;
@@ -1044,7 +1377,7 @@ app.post('/api/obras/:obra_id/materiais/importar', gestor, async (req, res) => {
 app.get('/api/obras/:obra_id/materiais/consumo', async (req, res) => {
   const obraId = Number(req.params.obra_id);
   const estimativas = await db.prepare('SELECT * FROM obra_materiais WHERE obra_id=? ORDER BY material_nome').all(obraId);
-  const rdos = await db.prepare('SELECT id, local, local_id, materiais_json, equipe_json, usuario_id, data FROM rdos WHERE obra_id=?').all(obraId);
+  const rdos = await db.prepare('SELECT id, local, local_id, materiais_json, equipe_json, usuario_id, data FROM rdos WHERE obra_id=? AND COALESCE(ativo,1)=1').all(obraId);
   const locais = await db.prepare('SELECT id FROM locais WHERE obra_id=? AND ativo=1').all(obraId);
   const totalLocais = locais.length;
   // locais com pelo menos 1 RDO (considera concluído se tem RDO)
@@ -1079,11 +1412,52 @@ app.get('/api/obras/:obra_id/materiais/consumo', async (req, res) => {
       consumoPorLocal[locKey]=(consumoPorLocal[locKey]||0)+qtd;
     }
   }
+  // mapas de escopo (estimativa por local/equipe)
+  const locRows = await db.prepare('SELECT id,nome FROM locais WHERE obra_id=? AND ativo=1').all(obraId);
+  const mapLocalNome = Object.fromEntries(locRows.map(l => [Number(l.id), l.nome]));
+  const eqRows = await db.prepare('SELECT id,nome FROM equipes WHERE ativo=1').all();
+  const mapEquipeNome = Object.fromEntries(eqRows.map(e => [Number(e.id), e.nome]));
+  // consumo recortado para linhas com escopo: RDO conta se (local bate ou linha é obra-toda) E (equipe contém ou linha é obra-toda)
+  const consumoEscopado = (est) => {
+    const locNome = est.local_id ? (mapLocalNome[Number(est.local_id)] || '') : '';
+    const eqNome = est.equipe_id ? (mapEquipeNome[Number(est.equipe_id)] || '') : '';
+    let total = 0, nrdos = 0;
+    const porEquipe = {}, porLocal = {};
+    for (const r of rdos) {
+      if (est.local_id && !(Number(r.local_id) === Number(est.local_id) || (r.local && locNome && mapNorm(r.local) === mapNorm(locNome)))) continue;
+      let eqs = []; try { eqs = JSON.parse(r.equipe_json || '[]'); } catch (e) { eqs = []; }
+      if (est.equipe_id && eqNome && !eqs.some(x => normEquipe(x) === normEquipe(eqNome))) continue;
+      let mats = []; try { mats = JSON.parse(r.materiais_json || '[]'); } catch (e) { mats = []; }
+      let somou = false;
+      for (const m of mats) {
+        const nome = (m.nome || m.material_nome || m.descricao || '').toString().trim();
+        if (!nome || mapNorm(nome) !== mapNorm(est.material_nome)) continue;
+        const qtd = Number(m.qtd ?? m.quantidade ?? m.qty ?? 1) || 0;
+        total += qtd; somou = true;
+        const eqList = eqs.length ? eqs : ['SEM EQUIPE'];
+        for (const eq of eqList) porEquipe[eq] = (porEquipe[eq] || 0) + qtd;
+        const locKey = r.local || (r.local_id ? String(r.local_id) : 'SEM LOCAL');
+        porLocal[locKey] = (porLocal[locKey] || 0) + qtd;
+      }
+      if (somou) nrdos++;
+    }
+    return { total, nrdos, porEquipe, porLocal };
+  };
   // monta resposta por material estimado
+  // Nexo com Materiais: anexa minimo do catálogo (referência) por nome normalizado
+  const catMinimos = await db.prepare('SELECT nome, COALESCE(quantidade_minima,0) as minimo FROM materiais WHERE ativo=1').all();
+  const mapMinimo = new Map(catMinimos.map(c => [mapNorm(c.nome), Number(c.minimo) || 0]));
   const itens = estimativas.map(e=>{
     const norm = mapNorm(e.material_nome);
-    const cons = consumoPorMat[norm];
-    const consumido = cons? cons.total : 0;
+    let consumido, nrdos, porEq, porLoc;
+    if (e.local_id || e.equipe_id) {
+      const sc = consumoEscopado(e);
+      consumido = sc.total; nrdos = sc.nrdos; porEq = sc.porEquipe; porLoc = sc.porLocal;
+    } else {
+      const cons = consumoPorMat[norm];
+      consumido = cons? cons.total : 0; nrdos = cons? cons.rdos : 0;
+      porEq = cons? cons.porEquipe : {}; porLoc = cons? cons.porLocal : {};
+    }
     const estimado = Number(e.quantidade_estimada)||0;
     const saldo = estimado - consumido;
     const pct = estimado>0? Math.round(consumido/estimado*100) : (consumido>0?100:0);
@@ -1104,16 +1478,20 @@ app.get('/api/obras/:obra_id/materiais/consumo', async (req, res) => {
     const sugestaoCompra = precisaComprar ? Math.ceil(Math.max(necessidade, estimado*0.2 - saldo, 0) + (estimado*0.05)) : 0; // 20% buffer + 5% margem
     return {
       id:e.id, material_nome:e.material_nome, unidade:e.unidade, etapa:e.etapa, fornecedor:e.fornecedor, valor_unitario:Number(e.valor_unitario)||0,
+      local_id:e.local_id||null, local_nome:e.local_id?(mapLocalNome[Number(e.local_id)]||null):null,
+      equipe_id:e.equipe_id||null, equipe_nome:e.equipe_id?(mapEquipeNome[Number(e.equipe_id)]||null):null,
+      escopo:(e.local_id||e.equipe_id)?'direcionado':'obra',
       estimado, consumido, saldo, pct, valorEstimado, valorConsumido, valorSaldo,
-      rdos: cons? cons.rdos:0, porEquipe: cons? cons.porEquipe:{}, porLocal: cons? cons.porLocal:{},
+      rdos: nrdos, porEquipe: porEq, porLocal: porLoc,
       mediaPorLocal: Math.round(mediaPorLocal*100)/100, projecaoRestante: Math.round(projecaoRestante*100)/100,
-      necessidade: Math.round(necessidade*100)/100, status, precisaComprar, sugestaoCompra
+      necessidade: Math.round(necessidade*100)/100, status, precisaComprar, sugestaoCompra,
+      minimo_catalogo: mapMinimo.get(norm) || 0
     };
   });
   // materiais consumidos sem estimativa (extra)
   const estimNorms = new Set(estimativas.map(e=> mapNorm(e.material_nome)));
   const extras = Object.entries(consumoPorMat).filter(([k])=> !estimNorms.has(k)).map(([norm, v])=>{
-    return { material_nome: v.nome, unidade:'UND', estimado:0, consumido: v.total, saldo: -v.total, pct:100, valorEstimado:0, valorConsumido:0, valorSaldo:0, rdos:v.rdos, porEquipe:v.porEquipe, porLocal:v.porLocal, status:'extra', precisaComprar:true, sugestaoCompra:0 };
+    return { material_nome: v.nome, unidade:'UND', estimado:0, consumido: v.total, saldo: -v.total, pct:100, valorEstimado:0, valorConsumido:0, valorSaldo:0, rdos:v.rdos, porEquipe:v.porEquipe, porLocal:v.porLocal, status:'extra', precisaComprar:true, sugestaoCompra:0, minimo_catalogo: mapMinimo.get(norm) || 0 };
   });
   const todosItens = [...itens, ...extras].sort((a,b)=> (b.pct - a.pct) || (b.consumido - a.consumido));
   const alertas = todosItens.filter(i=> i.precisaComprar);
@@ -1134,11 +1512,65 @@ app.get('/api/obras/:obra_id/materiais/consumo', async (req, res) => {
   const rankingLocais = Object.entries(consumoPorLocal).map(([nome,total])=>({nome, total})).sort((a,b)=>b.total-a.total).slice(0,10);
   res.json({resumo, itens: todosItens, alertas, rankingEquipes, rankingLocais});
 });
+// Materiais liberados para o técnico (login): recorte equipe × local.
+// Lógica: se a obra NÃO tem estimativa direcionada → scoped:false e o app usa o catálogo cheio (compat).
+// Se tem → scoped:true e o app mostra SÓ o recorte (linhas obra-toda entram como coringa).
+app.get('/api/obras/:obra_id/materiais/para-rdo', async (req, res) => {
+  const obraId = Number(req.params.obra_id);
+  const localId = req.query.local_id ? Number(req.query.local_id) : null;
+  const equipeId = req.query.equipe_id ? Number(req.query.equipe_id) : null;
+  const rows = await db.prepare(`SELECT m.*, l.nome as local_nome, e.nome as equipe_nome, mt.categoria as categoria
+    FROM obra_materiais m LEFT JOIN locais l ON l.id=m.local_id LEFT JOIN equipes e ON e.id=m.equipe_id
+    LEFT JOIN materiais mt ON UPPER(mt.nome)=UPPER(m.material_nome)
+    WHERE m.obra_id=? ORDER BY m.material_nome`).all(obraId);
+  const temEscopo = rows.some(r => r.local_id || r.equipe_id);
+  if (!temEscopo) return res.json({ scoped: false, materiais: [] });
+  const seen = new Set();
+  const materiais = [];
+  for (const r of rows) {
+    if (r.local_id && (!localId || Number(r.local_id) !== localId)) continue;
+    if (r.equipe_id && (!equipeId || Number(r.equipe_id) !== equipeId)) continue;
+    const k = (r.material_nome || '').toUpperCase();
+    if (seen.has(k)) continue;
+    seen.add(k);
+    materiais.push({ nome: r.material_nome, categoria: r.categoria || 'Geral', unidade: r.unidade || 'UND',
+      local_nome: r.local_nome || null, equipe_nome: r.equipe_nome || null });
+  }
+  res.json({ scoped: true, materiais });
+});
 
 // ============================================================
-// RDOs
+// RDOs — documento legal de obra: edição com trilha + exclusão lógica com auditoria
+// Regra padrão obra gigante: nunca apaga fisicamente; desativa (ativo=0) + motivo + quem/quando.
 // ============================================================
+async function rdoLog(rdo_id, acao, req, motivo, antes, depois) {
+  try {
+    await db.prepare(`INSERT INTO rdo_auditoria (rdo_id,acao,usuario_id,usuario_nome,motivo,dados_antes,dados_depois) VALUES (?,?,?,?,?,?,?)`)
+      .run(rdo_id, acao, req.user ? req.user.id : null, req.user ? req.user.nome : 'Anonimo',
+        (motivo || '').toString().slice(0, 500),
+        JSON.stringify(antes || {}).slice(0, 8000), JSON.stringify(depois || {}).slice(0, 8000));
+  } catch (e) { console.error('[rdo-auditoria]', e.message); }
+}
+function podeEditarRdo(req, rdo) {
+  if (!rdo) return false;
+  if (req.user.perfil === 'gestor') return true;
+  return Number(rdo.usuario_id) === Number(req.user.id);
+}
+// Trava 24h: técnico só altera RDO recente (anti-fraude em medição); após 24h só gestor.
+function rdoTravado24h(rdo, req) {
+  if (!rdo || (req.user && req.user.perfil === 'gestor')) return null;
+  let base = rdo.criado_em || rdo.data || null;
+  if (!base) return null;
+  let dt = new Date(String(base).includes('T') ? base : String(base).replace(' ', 'T') + 'Z');
+  if (isNaN(dt.getTime()) && rdo.data) { dt = new Date(rdo.data + 'T23:59:59'); }
+  if (isNaN(dt.getTime())) return null;
+  const horas = (Date.now() - dt.getTime()) / 3600000;
+  if (horas > 24) return Math.floor(horas);
+  return null;
+}
 app.get('/api/rdos', async (req, res) => {
+  const verLixeira = String(req.query.incluir_excluidos || '') === '1' || String(req.query.somente_excluidos || '') === '1';
+  if (verLixeira && req.user.perfil !== 'gestor') return res.status(403).json({ error: 'So gestor ve excluidos' });
   let sql = `SELECT r.*, o.nome as obra_nome, o.responsavel as obra_responsavel, o.status as obra_status,
     l.comarca as cidade, l.latitude as local_lat, l.longitude as local_lng, l.endereco as local_endereco
     FROM rdos r 
@@ -1146,6 +1578,8 @@ app.get('/api/rdos', async (req, res) => {
     LEFT JOIN locais l ON (r.local_id=l.id OR (r.local_id IS NULL AND (r.local = l.nome OR UPPER(l.nome) LIKE '%' || UPPER(r.local) || '%' OR UPPER(l.comarca) LIKE '%' || UPPER(r.local) || '%'))) AND l.ativo=1
     WHERE 1=1`;
   const p = [];
+  if (String(req.query.somente_excluidos || '') === '1') { sql += ' AND COALESCE(r.ativo,1)=0'; }
+  else if (String(req.query.incluir_excluidos || '') !== '1') { sql += ' AND COALESCE(r.ativo,1)=1'; }
   if (req.query.obra_id) { sql += ' AND r.obra_id=?'; p.push(req.query.obra_id); }
   if (req.query.local_id) { sql += ' AND r.local_id=?'; p.push(req.query.local_id); }
   if (req.query.usuario_id) { sql += ' AND r.usuario_id=?'; p.push(req.query.usuario_id); }
@@ -1162,8 +1596,128 @@ app.get('/api/rdos/:id', async (req, res) => {
     LEFT JOIN locais l ON (r.local_id=l.id OR (r.local_id IS NULL AND (r.local = l.nome OR UPPER(l.nome) LIKE '%' || UPPER(r.local) || '%' OR UPPER(l.comarca) LIKE '%' || UPPER(r.local) || '%'))) AND l.ativo=1
     WHERE r.id=?`).get(req.params.id);
   if (!rdo) return res.status(404).json({ error: 'RDO nao encontrado' });
+  if (Number(rdo.ativo) === 0 && req.user.perfil !== 'gestor' && Number(rdo.usuario_id) !== Number(req.user.id)) {
+    return res.status(403).json({ error: 'RDO excluido — acesso restrito' });
+  }
   res.json(rdo);
 });
+
+// Trilha geral de auditoria de RDOs (somente gestor) — alimenta aba Auditoria
+app.get('/api/auditoria/rdo', gestor, async (req, res) => {
+  const lim = Math.min(Number(req.query.limit || 200), 500);
+  const p = [];
+  let sql = `SELECT a.*, r.data as rdo_data, r.local as rdo_local, r.atividade as rdo_atividade, r.obra_id
+    FROM rdo_auditoria a LEFT JOIN rdos r ON r.id=a.rdo_id WHERE 1=1`;
+  if (req.query.acao) { sql += ' AND a.acao=?'; p.push(String(req.query.acao).toUpperCase()); }
+  if (req.query.obra_id) { sql += ' AND r.obra_id=?'; p.push(req.query.obra_id); }
+  if (req.query.busca) { sql += ' AND (a.usuario_nome LIKE ? OR a.motivo LIKE ? OR r.local LIKE ?)'; p.push(`%${req.query.busca}%`, `%${req.query.busca}%`, `%${req.query.busca}%`); }
+  sql += ' ORDER BY a.id DESC LIMIT ' + lim;
+  res.json(await db.prepare(sql).all(...p));
+});
+
+// Historico / trilha de auditoria de um RDO (dono ou gestor)
+app.get('/api/rdos/:id/historico', async (req, res) => {
+  const rdo = await db.prepare('SELECT id, usuario_id FROM rdos WHERE id=?').get(req.params.id);
+  if (!rdo) return res.status(404).json({ error: 'RDO nao encontrado' });
+  if (req.user.perfil !== 'gestor' && Number(rdo.usuario_id) !== Number(req.user.id)) {
+    return res.status(403).json({ error: 'Sem acesso ao historico' });
+  }
+  res.json(await db.prepare('SELECT * FROM rdo_auditoria WHERE rdo_id=? ORDER BY id DESC').all(req.params.id));
+});
+
+// ============================================================
+// BAIXA AUTOMÁTICA RDO → ESTOQUE POR EQUIPE
+// RDO consome saldo da equipe sozinho (sem digitação dupla).
+// Nomes livres do RDO (material/equipe) são resolvidos para ids.
+// Qtd rateada igualmente entre as equipes do RDO.
+// Estorno via contramovimento (auditoria preservada).
+// ============================================================
+const normMatRdo = s => (s||'').toString().normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().trim().replace(/\s+/g,' ');
+
+async function resolverMaterialIdRdo(nome) {
+  const n = (nome || '').toString().trim();
+  if (!n) return null;
+  let m = await db.prepare('SELECT id FROM materiais WHERE UPPER(nome)=UPPER(?) AND ativo=1').get(n);
+  if (m) return m.id;
+  const todos = await db.prepare('SELECT id, nome FROM materiais WHERE ativo=1').all();
+  const nm = normMatRdo(n);
+  m = todos.find(t => normMatRdo(t.nome) === nm);
+  if (m) return m.id;
+  // RDO citou material fora do catálogo → auto-cria para não perder a baixa
+  try {
+    const r = await db.prepare('INSERT INTO materiais (nome,categoria,unidade,quantidade_minima) VALUES (?,?,?,?)').run(n, categoriaAuto(n), 'UND', 0);
+    return r.lastInsertRowid;
+  } catch (e) {
+    const d = await db.prepare('SELECT id FROM materiais WHERE UPPER(nome)=UPPER(?)').get(n);
+    return d ? d.id : null;
+  }
+}
+
+async function movimentarEstoqueRdo(equipeId, materialId, tipo, qtd, origem, usuarioId) {
+  const reg = await db.prepare('SELECT id, quantidade_atual FROM estoque_equipes WHERE equipe_id=? AND material_id=?').get(equipeId, materialId);
+  const saldoAnt = reg ? (Number(reg.quantidade_atual) || 0) : 0;
+  const delta = (tipo === 'entrada' || tipo === 'estorno') ? Math.abs(qtd) : -Math.abs(qtd);
+  const novo = Math.round((saldoAnt + delta) * 100) / 100;
+  if (db.isPostgres) {
+    if (reg) await db.prepare('UPDATE estoque_equipes SET quantidade_atual=?, atualizado_em=NOW() WHERE id=?').run(novo, reg.id);
+    else await db.prepare('INSERT INTO estoque_equipes (equipe_id, material_id, quantidade_atual) VALUES (?,?,?)').run(equipeId, materialId, novo);
+  } else {
+    if (reg) await db.prepare(`UPDATE estoque_equipes SET quantidade_atual=?, atualizado_em=datetime('now') WHERE id=?`).run(novo, reg.id);
+    else await db.prepare('INSERT INTO estoque_equipes (equipe_id, material_id, quantidade_atual) VALUES (?,?,?)').run(equipeId, materialId, novo);
+  }
+  await db.prepare('INSERT INTO estoque_movimentacoes (equipe_id, material_id, tipo, quantidade, saldo_apos, origem, usuario_id) VALUES (?,?,?,?,?,?,?)')
+    .run(equipeId, materialId, tipo, Math.abs(qtd), novo, (origem || '').toString().slice(0, 200), usuarioId || null);
+  const mat = await db.prepare('SELECT COALESCE(quantidade_minima,0) as minimo, COALESCE(unidade,\'UND\') as unidade, nome FROM materiais WHERE id=?').get(materialId);
+  const eq = await db.prepare('SELECT nome FROM equipes WHERE id=?').get(equipeId);
+  const minimo = Number(mat?.minimo) || 0;
+  return { equipe_id: equipeId, equipe_nome: eq?.nome || '', material_id: materialId, material_nome: mat?.nome || '', unidade: mat?.unidade || 'UND', saldo: novo, minimo, alerta: minimo > 0 && novo <= minimo };
+}
+
+async function baixarEstoqueDoRdo(rdoId, equipeNomes, materiais, usuarioId) {
+  const alertas = [];
+  let baixas = 0;
+  const eqAtivas = await db.prepare('SELECT id, nome FROM equipes WHERE ativo=1').all();
+  const eqIds = [];
+  for (const nome of (equipeNomes || [])) {
+    const e = eqAtivas.find(x => normEquipe(x.nome) === normEquipe(nome));
+    if (e && !eqIds.includes(e.id)) eqIds.push(e.id);
+  }
+  if (!eqIds.length) return { baixas: 0, alertas, ignorado: 'equipe do RDO não encontrada no cadastro' };
+  for (const m of (materiais || [])) {
+    const nome = (m.nome || m.material_nome || m.descricao || '').toString().trim();
+    const qtd = Number(m.qtd ?? m.quantidade ?? m.qty ?? 0) || 0;
+    if (!nome || qtd <= 0) continue;
+    const matId = await resolverMaterialIdRdo(nome);
+    if (!matId) continue;
+    const porEquipe = Math.round((qtd / eqIds.length) * 100) / 100; // rateio igual entre equipes do RDO
+    for (const eqId of eqIds) {
+      const r = await movimentarEstoqueRdo(eqId, matId, 'rdo', porEquipe, `RDO #${rdoId}${eqIds.length > 1 ? ` (rateio ${eqIds.length} equipes)` : ''}`, usuarioId);
+      baixas++;
+      if (r.alerta) alertas.push(r);
+    }
+  }
+  return { baixas, alertas };
+}
+
+async function estornarBaixaDoRdo(rdoId, usuarioId) {
+  // Reverte via contramovimento (não apaga histórico). Reverte o LÍQUIDO pendente
+  // por equipe/material (idempotente: pode rodar após várias edições).
+  const id = Number(rdoId);
+  const exata = `RDO #${id}`, prefixo = `RDO #${id} (%`;
+  const rdoRows = await db.prepare(`SELECT equipe_id, material_id, SUM(quantidade) as q FROM estoque_movimentacoes WHERE tipo='rdo' AND (origem=? OR origem LIKE ?) GROUP BY equipe_id, material_id`).all(exata, prefixo);
+  if (!rdoRows.length) return { estornos: 0 };
+  const estRows = await db.prepare(`SELECT equipe_id, material_id, SUM(quantidade) as q FROM estoque_movimentacoes WHERE tipo='estorno' AND origem=? GROUP BY equipe_id, material_id`).all(`ESTORNO RDO #${id}`);
+  const mapEst = new Map(estRows.map(r => [`${r.equipe_id}:${r.material_id}`, Number(r.q) || 0]));
+  let n = 0;
+  for (const r of rdoRows) {
+    const pend = Math.round(((Number(r.q) || 0) - (mapEst.get(`${r.equipe_id}:${r.material_id}`) || 0)) * 100) / 100;
+    if (pend > 0.0001) {
+      await movimentarEstoqueRdo(r.equipe_id, r.material_id, 'estorno', pend, `ESTORNO RDO #${id}`, usuarioId);
+      n++;
+    }
+  }
+  return { estornos: n };
+}
 
 app.post('/api/rdos', async (req, res) => {
   const d = req.body;
@@ -1223,14 +1777,34 @@ app.post('/api/rdos', async (req, res) => {
         } else {
           await db.prepare("UPDATE etapas SET status='concluida' WHERE id=?").run(existe.id);
         }
+        // Fecha o ciclo: RDO→etapa→progresso da obra na mesma fonte do Relatórios
+        try { await atualizarProgresso(targetObraId); } catch (e2) { console.error('[etapa-auto-progresso]', e2.message); }
       }
     }
   } catch(e){ console.error('[etapa-auto]', e.message); }
-  res.json({ ok: true, id: r.lastInsertRowid });
+  try {
+    await rdoLog(r.lastInsertRowid, 'CRIACAO', req, '', null, { obra_id: obraId, local_id: localId, data: d.data, local: localNome, atividade: d.atividade || '' });
+    io.emit('rdo_novo', { id: r.lastInsertRowid });
+  } catch(e){}
+  // Baixa automática no estoque da equipe (sem digitação dupla)
+  let estoqueInfo = null;
+  try {
+    estoqueInfo = await baixarEstoqueDoRdo(r.lastInsertRowid, d.equipe || [], d.materiais || [], req.user ? req.user.id : null);
+    if (estoqueInfo.alertas?.length) try { io.emit('estoque_alerta', { rdo_id: r.lastInsertRowid, alertas: estoqueInfo.alertas }); } catch (e2) {}
+  } catch (e) { console.error('[estoque-rdo-baixa]', e.message); }
+  res.json({ ok: true, id: r.lastInsertRowid, estoque: estoqueInfo });
 });
 
 app.put('/api/rdos/:id', async (req, res) => {
   const d = req.body;
+  const antes = await db.prepare('SELECT * FROM rdos WHERE id=?').get(req.params.id);
+  if (!antes) return res.status(404).json({ error: 'RDO nao encontrado' });
+  if (Number(antes.ativo) === 0) return res.status(400).json({ error: 'RDO excluido — restaure antes de editar' });
+  if (!podeEditarRdo(req, antes)) return res.status(403).json({ error: 'So o dono do RDO ou gestor pode editar' });
+  const travH = rdoTravado24h(antes, req);
+  if (travH) return res.status(403).json({ error: 'RDO com mais de 24h (' + travH + 'h) — só o gestor pode corrigir. Fale com o encarregado.' });
+  const motivoEdicao = (d.motivo_edicao || d.motivo || '').toString().trim();
+  if (!motivoEdicao || motivoEdicao.length < 3) return res.status(400).json({ error: 'Informe o motivo da edicao (min. 3 letras) — exigido para auditoria de documento de obra' });
   let localId = d.local_id ? Number(d.local_id) : null;
   if (!localId && d.local) {
     const loc = await db.prepare('SELECT id FROM locais WHERE nome=? AND ativo=1').get(d.local);
@@ -1242,32 +1816,85 @@ app.put('/api/rdos/:id', async (req, res) => {
     if (loc) obraId = loc.obra_id;
   }
   // se veio obra_id/local_id, atualiza, senão mantém os antigos
-  const atual = await db.prepare('SELECT obra_id, local_id FROM rdos WHERE id=?').get(req.params.id);
-  if (!obraId) obraId = atual ? atual.obra_id : null;
-  if (!localId) localId = atual ? atual.local_id : null;
+  if (!obraId) obraId = antes.obra_id;
+  if (!localId) localId = antes.local_id;
+  const dataFinal = d.data || antes.data;
+  const localFinal = d.local !== undefined ? d.local : antes.local;
+  if (!dataFinal || !localFinal) return res.status(400).json({ error: 'Data e local obrigatorios' });
+  const depois = {
+    obra_id: obraId, local_id: localId, data: dataFinal, local: localFinal,
+    atividade: d.atividade !== undefined ? (d.atividade || '') : antes.atividade,
+    equipe: d.equipe !== undefined ? d.equipe : JSON.parse(antes.equipe_json || '[]'),
+    materiais: d.materiais !== undefined ? d.materiais : JSON.parse(antes.materiais_json || '[]')
+  };
   await db.prepare(`UPDATE rdos SET obra_id=?,local_id=?,data=?,local=?,atividade=?,equipe_json=?,materiais_json=?,
     entrada_manha=?,saida_manha=?,entrada_tarde=?,saida_tarde=?,
     parou=?,motivo_parada=?,switch_instalado=?,nom_switch=?,local_switch=?,
-    camera_instalada=?,nom_camera=?,local_camera=?,fotos_json=? WHERE id=?`).run(
-    obraId, localId, d.data, d.local, d.atividade || '',
-    JSON.stringify(d.equipe || []), JSON.stringify(d.materiais || []),
-    d.entrada_manha, d.saida_manha, d.entrada_tarde, d.saida_tarde,
-    d.parou || 'nao', d.motivo_parada || '',
-    d.switch_instalado || 'nao', d.nom_switch || '', d.local_switch || '',
-    d.camera_instalada || 'nao', d.nom_camera || '', d.local_camera || '',
-    JSON.stringify(d.fotos || []),
+    camera_instalada=?,nom_camera=?,local_camera=?,fotos_json=?,
+    atualizado_em=datetime('now'),atualizado_por=? WHERE id=?`).run(
+    obraId, localId, dataFinal, localFinal, depois.atividade,
+    JSON.stringify(depois.equipe), JSON.stringify(depois.materiais),
+    d.entrada_manha !== undefined ? d.entrada_manha : antes.entrada_manha,
+    d.saida_manha !== undefined ? d.saida_manha : antes.saida_manha,
+    d.entrada_tarde !== undefined ? d.entrada_tarde : antes.entrada_tarde,
+    d.saida_tarde !== undefined ? d.saida_tarde : antes.saida_tarde,
+    d.parou !== undefined ? d.parou : antes.parou,
+    d.motivo_parada !== undefined ? d.motivo_parada : antes.motivo_parada,
+    d.switch_instalado !== undefined ? d.switch_instalado : antes.switch_instalado,
+    d.nom_switch !== undefined ? d.nom_switch : antes.nom_switch,
+    d.local_switch !== undefined ? d.local_switch : antes.local_switch,
+    d.camera_instalada !== undefined ? d.camera_instalada : antes.camera_instalada,
+    d.nom_camera !== undefined ? d.nom_camera : antes.nom_camera,
+    d.local_camera !== undefined ? d.local_camera : antes.local_camera,
+    JSON.stringify(d.fotos !== undefined ? d.fotos : JSON.parse(antes.fotos_json || '[]')),
+    req.user ? req.user.nome : 'Anonimo',
     req.params.id
   );
-  res.json({ ok: true });
+  await rdoLog(req.params.id, 'EDICAO', req, motivoEdicao, antes, depois);
+  try { io.emit('rdo_atualizado', { id: Number(req.params.id), por: req.user ? req.user.nome : '' }); } catch(e){}
+  // Recompõe estoque: estorna baixa antiga e aplica a nova (materiais/equipe podem ter mudado)
+  let estoqueInfo = null;
+  try {
+    await estornarBaixaDoRdo(req.params.id, req.user ? req.user.id : null);
+    estoqueInfo = await baixarEstoqueDoRdo(req.params.id, depois.equipe || [], depois.materiais || [], req.user ? req.user.id : null);
+    if (estoqueInfo.alertas?.length) try { io.emit('estoque_alerta', { rdo_id: Number(req.params.id), alertas: estoqueInfo.alertas }); } catch (e2) {}
+  } catch (e) { console.error('[estoque-rdo-edicao]', e.message); }
+  res.json({ ok: true, estoque: estoqueInfo });
 });
 
 app.delete('/api/rdos/:id', async (req, res) => {
-  const rdo = await db.prepare('SELECT usuario_id FROM rdos WHERE id=?').get(req.params.id);
+  const rdo = await db.prepare('SELECT * FROM rdos WHERE id=?').get(req.params.id);
   if (!rdo) return res.status(404).json({ error: 'RDO nao encontrado' });
-  if (req.user.perfil !== 'gestor' && rdo.usuario_id !== req.user.id) {
-    return res.status(403).json({ error: 'So o dono do RDO pode excluir' });
+  if (Number(rdo.ativo) === 0) return res.status(400).json({ error: 'RDO ja excluido' });
+  if (req.user.perfil !== 'gestor' && Number(rdo.usuario_id) !== Number(req.user.id)) {
+    return res.status(403).json({ error: 'So o dono do RDO ou gestor pode excluir' });
   }
-  await db.prepare('DELETE FROM rdos WHERE id=?').run(req.params.id);
+  const travHx = rdoTravado24h(rdo, req);
+  if (travHx) return res.status(403).json({ error: 'RDO com mais de 24h (' + travHx + 'h) — só o gestor pode excluir. Fale com o encarregado.' });
+  const motivo = ((req.body && req.body.motivo) || req.query.motivo || '').toString().trim();
+  if (!motivo || motivo.length < 5) return res.status(400).json({ error: 'Informe o motivo da exclusao (min. 5 letras) — exigido para auditoria' });
+  const quem = req.user ? req.user.nome : 'Anonimo';
+  await db.prepare(`UPDATE rdos SET ativo=0, excluido_em=datetime('now'), excluido_por=?, motivo_exclusao=? WHERE id=?`).run(quem, motivo.slice(0, 500), req.params.id);
+  await rdoLog(req.params.id, 'EXCLUSAO', req, motivo, rdo, { ativo: 0, excluido_por: quem, motivo_exclusao: motivo });
+  try { await estornarBaixaDoRdo(req.params.id, req.user ? req.user.id : null); } catch (e) { console.error('[estoque-rdo-exclusao]', e.message); }
+  try { io.emit('rdo_excluido', { id: Number(req.params.id), por: quem, motivo }); } catch(e){}
+  res.json({ ok: true, auditoria: { por: quem, motivo } });
+});
+
+// Restaurar RDO excluido (somente gestor) — mantem trilha
+app.post('/api/rdos/:id/restaurar', gestor, async (req, res) => {
+  const rdo = await db.prepare('SELECT * FROM rdos WHERE id=?').get(req.params.id);
+  if (!rdo) return res.status(404).json({ error: 'RDO nao encontrado' });
+  if (Number(rdo.ativo) !== 0) return res.status(400).json({ error: 'RDO nao esta excluido' });
+  await db.prepare(`UPDATE rdos SET ativo=1, excluido_em=NULL, excluido_por=NULL, motivo_exclusao=NULL, atualizado_em=datetime('now'), atualizado_por=? WHERE id=?`)
+    .run(req.user ? req.user.nome : 'Anonimo', req.params.id);
+  await rdoLog(req.params.id, 'RESTAURACAO', req, (req.body && req.body.motivo) || 'Restaurado pelo gestor', { ativo: 0 }, { ativo: 1 });
+  try {
+    const rdoRest = await db.prepare('SELECT equipe_json, materiais_json FROM rdos WHERE id=?').get(req.params.id);
+    await baixarEstoqueDoRdo(req.params.id, JSON.parse(rdoRest.equipe_json || '[]'), JSON.parse(rdoRest.materiais_json || '[]'), req.user ? req.user.id : null);
+  } catch (e) { console.error('[estoque-rdo-restaurar]', e.message); }
+  await rdoLog(req.params.id, 'RESTAURACAO', req, (req.body && req.body.motivo) || 'Restaurado pelo gestor', { ativo: 0 }, { ativo: 1 });
+  try { io.emit('rdo_restaurado', { id: Number(req.params.id) }); } catch(e){}
   res.json({ ok: true });
 });
 
@@ -1326,11 +1953,11 @@ app.get('/api/minha-equipe', async (req, res) => {
 // Dashboard
 app.get('/api/dashboard', gestor, async (req, res) => {
   const totalObras = Number((await db.prepare('SELECT COUNT(*) as c FROM obras WHERE ativo=1').get()).c)||0;
-  const totalRdos = Number((await db.prepare('SELECT COUNT(*) as c FROM rdos').get()).c)||0;
-  const rdosHoje = Number((await db.prepare("SELECT COUNT(*) as c FROM rdos WHERE data=date('now')").get()).c)||0;
+  const totalRdos = Number((await db.prepare('SELECT COUNT(*) as c FROM rdos WHERE COALESCE(ativo,1)=1').get()).c)||0;
+  const rdosHoje = Number((await db.prepare("SELECT COUNT(*) as c FROM rdos WHERE COALESCE(ativo,1)=1 AND data=date('now')").get()).c)||0;
   const totalUsuarios = Number((await db.prepare('SELECT COUNT(*) as c FROM usuarios WHERE ativo=1').get()).c)||0;
   const totalEquipes = Number((await db.prepare('SELECT COUNT(*) as c FROM equipes WHERE ativo=1').get()).c)||0;
-  const recentes = await db.prepare('SELECT id,data,local,atividade,usuario_nome FROM rdos ORDER BY criado_em DESC LIMIT 10').all();
+  const recentes = await db.prepare('SELECT id,data,local,atividade,usuario_nome FROM rdos WHERE COALESCE(ativo,1)=1 ORDER BY criado_em DESC LIMIT 10').all();
   res.json({ totalObras, totalRdos, rdosHoje, totalUsuarios, totalEquipes, recentes });
 });
 
@@ -1355,7 +1982,7 @@ app.get('/api/dashboard/por-equipe', gestor, async (req, res) => {
     porRegiaoNorm[n].com_coord+=Number(r.com_coord)||0;
     // mantém nome da equipe quando existir
   }
-  const equipes = await db.prepare('SELECT id,nome,cor FROM equipes WHERE ativo=1').all();
+  const equipes = await db.prepare('SELECT id,nome,cor FROM equipes WHERE ativo=1 AND COALESCE(eh_geral,0)=0').all();
   const equipesByNorm={}; equipes.forEach(e=>{ const n=normEquipe(e.nome); if(!equipesByNorm[n]) equipesByNorm[n]=e; else if(e.nome.length<equipesByNorm[n].nome.length) equipesByNorm[n]=e; });
   // corrige display: se equipe existe, usa nome da equipe
   for(const n of Object.keys(porRegiaoNorm)){

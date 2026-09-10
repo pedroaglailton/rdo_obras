@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="theme-color" content="#0f3d4c">
@@ -12,84 +13,171 @@
 <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" />
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
 <style>
-  :root{--primary:#0f3d4c;--primary-dark:#0a2c37;--accent:#ff7a33;--bg:#f2f4f6;--card:#fff;--line:#e1e5ea;--text:#1c2b33;--muted:#68767f;--ok:#1f8a4c;--danger:#c6392f;--radius:12px;font-size:16px}
+  :root{
+    --primary:#0f3d4c;--primary-dark:#0a2c37;--primary-light:#1a6b7a;
+    --accent:#ff7a33;--accent-dark:#e8621d;
+    --bg:#eef1f4;--card:#fff;--card-glass:rgba(255,255,255,.86);
+    --line:#e2e6ec;--text:#1a2332;--muted:#68767f;
+    --ok:#1f8a4c;--ok-bg:#e9f7ef;--danger:#c6392f;--danger-bg:#fbeceb;--info:#1565c0;--info-bg:#e3f2fd;--warn:#ef6c00;--warn-bg:#fff3e0;
+    --radius:16px;--radius-sm:11px;--radius-xs:8px;
+    --shadow:0 1px 2px rgba(15,30,40,.04),0 6px 20px rgba(15,30,40,.06);
+    --shadow-lg:0 10px 36px rgba(10,25,32,.16);
+    font-size:16px;
+  }
   *{box-sizing:border-box}
-  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--text)}
-  header{background:linear-gradient(135deg,var(--primary),var(--primary-dark));color:#fff;padding:14px 16px;position:sticky;top:0;z-index:20;box-shadow:0 2px 10px rgba(0,0,0,.15)}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:
+    radial-gradient(1100px 480px at 100% -8%,rgba(15,61,76,.05),transparent),
+    var(--bg);color:var(--text);-webkit-font-smoothing:antialiased}
+  header{background:linear-gradient(160deg,var(--primary),var(--primary-dark) 78%);color:#fff;padding:16px 16px 14px;position:sticky;top:0;z-index:20;box-shadow:0 4px 18px rgba(0,0,0,.16)}
   header .brand{display:flex;align-items:center;justify-content:space-between}
-  header .brand-name{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#9fd6c9;font-weight:700}
-  header h1{margin:2px 0 0;font-size:18px;font-weight:700}
+  header .brand-name{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#8fd0c1;font-weight:700}
+  header h1{margin:2px 0 0;font-size:18px;font-weight:800;letter-spacing:-.01em}
   .header-actions{display:flex;align-items:center;gap:10px}
-  .user-name{font-size:12px;opacity:.8}
-  .btn-logout{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;padding:5px 12px;border-radius:8px;font-size:11px;cursor:pointer;font-weight:600}
-  nav.tabs{display:flex;gap:0;margin-top:10px;background:rgba(255,255,255,.08);border-radius:10px;padding:3px;overflow-x:auto}
-  nav.tabs button{flex:1;min-width:70px;border:none;background:0 0;color:#cfe4e4;padding:8px 5px;font-size:12px;font-weight:600;border-radius:8px;cursor:pointer;white-space:nowrap}
-  nav.tabs button.active{background:#fff;color:var(--primary-dark)}
-  main{padding:12px;max-width:900px;margin:0 auto}
-  .view{display:none}.view.active{display:block}
-  .card{background:var(--card);border-radius:var(--radius);padding:16px;margin-bottom:12px;box-shadow:0 1px 3px rgba(20,30,40,.06);border:1px solid var(--line)}
-  .card h2{font-size:13px;text-transform:uppercase;letter-spacing:.05em;color:var(--primary);margin:0 0 10px}
-  label{display:block;font-size:13px;font-weight:600;margin:10px 0 4px}
-  input[type=text],select{width:100%;padding:10px 12px;border:1.5px solid var(--line);border-radius:9px;font-size:14px;background:#fbfcfd;color:var(--text);font-family:inherit}
-  input:focus,select:focus{outline:none;border-color:var(--primary);background:#fff}
+  .user-name{font-size:12px;font-weight:600;background:rgba(255,255,255,.13);border:1px solid rgba(255,255,255,.22);padding:5px 12px;border-radius:99px;max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;backdrop-filter:blur(6px)}
+  .btn-logout{background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.28);color:#fff;padding:6px 14px;border-radius:99px;font-size:11px;cursor:pointer;font-weight:700;transition:background .15s,transform .15s}
+  .btn-logout:hover{background:rgba(255,255,255,.26)}
+  .btn-logout:active{transform:scale(.96)}
+  nav.tabs{display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:8px;margin-top:14px;background:transparent;border-radius:0;padding:0;overflow:visible}
+  nav.tabs button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-height:58px;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.07);color:#dcece8;padding:9px 6px 8px;font-size:10.5px;font-weight:700;letter-spacing:.04em;border-radius:12px;cursor:pointer;white-space:nowrap;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);transition:transform .15s,box-shadow .15s,background .15s;line-height:1.25}
+  nav.tabs button .t-ic{display:inline-flex;line-height:0}
+  nav.tabs button .t-ic svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+  nav.tabs button:hover{background:rgba(255,255,255,.16);transform:translateY(-1px)}
+  nav.tabs button:focus-visible{outline:2px solid #fff;outline-offset:2px}
+  nav.tabs button.active{background:#fff;color:var(--primary-dark);border-color:#fff;box-shadow:0 6px 16px rgba(0,0,0,.25)}
+  @media(max-width:900px){nav.tabs{display:flex;gap:8px;overflow-x:auto;padding:2px 2px 10px;scroll-snap-type:x mandatory;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.4) transparent}nav.tabs button{flex:0 0 auto;min-width:98px;scroll-snap-align:start}nav.tabs::-webkit-scrollbar{height:6px}nav.tabs::-webkit-scrollbar-thumb{background:rgba(255,255,255,.35);border-radius:99px}}
+  /* ===== Sidebar lateral com ocultar (desktop) ===== */
+  #sideToggle{display:none}
+  #sideOpen{display:none}
+  @media(min-width:901px){
+    header{display:flex;flex-direction:column;position:fixed;left:0;top:0;bottom:0;width:248px;padding:18px 14px 14px;transition:transform .25s ease;box-shadow:2px 0 24px rgba(0,0,0,.12)}
+    header .brand{align-items:center}
+    header h1{font-size:16px}
+    #sideToggle{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;flex:none;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.22);color:#fff;border-radius:9px;cursor:pointer;transition:background .15s}
+    #sideToggle:hover{background:rgba(255,255,255,.24)}
+    #sideToggle svg{width:16px;height:16px;stroke:#fff;fill:none;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
+    nav.tabs{flex:1;display:flex;flex-direction:column;gap:4px;margin-top:18px;overflow-y:auto;overflow-x:hidden;padding:2px;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.3) transparent}
+    nav.tabs::-webkit-scrollbar{width:6px}
+    nav.tabs::-webkit-scrollbar-thumb{background:rgba(255,255,255,.3);border-radius:99px}
+    nav.tabs button{flex-direction:row;justify-content:flex-start;gap:11px;min-height:42px;padding:10px 12px;position:relative}
+    nav.tabs button.active::before{content:'';position:absolute;left:0;top:9px;bottom:9px;width:3px;border-radius:99px;background:var(--accent)}
+    main{margin-left:248px}
+    .header-actions{margin-top:auto;padding-top:14px;border-top:1px solid rgba(255,255,255,.13);justify-content:space-between}
+    .user-name{max-width:128px}
+    body.side-hidden header{transform:translateX(-105%);box-shadow:none}
+    body.side-hidden main{margin-left:0}
+    body.side-hidden #sideOpen{display:inline-flex;position:fixed;top:14px;left:14px;z-index:60;align-items:center;gap:8px;background:var(--primary);color:#fff;border:1px solid rgba(255,255,255,.3);padding:9px 14px;border-radius:99px;font-size:12px;font-weight:700;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.3)}
+    body.side-hidden #sideOpen svg{width:15px;height:15px;stroke:#fff;fill:none;stroke-width:2.2;stroke-linecap:round}
+  }
+  @media(max-width:900px){#sideToggle,#sideOpen{display:none!important}}
+  main{padding:16px;max-width:1080px;margin:0 auto}
+  .view{display:none}.view.active{display:block;animation:fadeUp .25s cubic-bezier(.4,0,.2,1)}
+  @keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+  .card{background:var(--card-glass);backdrop-filter:blur(10px);border-radius:var(--radius);padding:18px;margin-bottom:14px;box-shadow:var(--shadow);border:1px solid var(--line)}
+  .card h2{font-size:12.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--primary);margin:0 0 14px;font-weight:800;display:flex;align-items:center;gap:8px}
+  .card h2::before{content:'';width:4px;height:14px;border-radius:3px;background:linear-gradient(180deg,var(--accent),var(--accent-dark));display:inline-block}
+  label{display:block;font-size:12.5px;font-weight:700;color:var(--muted);margin:12px 0 5px;letter-spacing:.01em}
+  input[type=text],select{width:100%;padding:11px 13px;border:1.5px solid var(--line);border-radius:var(--radius-xs);font-size:14px;background:#fbfcfd;color:var(--text);font-family:inherit;transition:border-color .2s,box-shadow .2s}
+  input:focus,select:focus{outline:none;border-color:var(--primary);background:#fff;box-shadow:0 0 0 3px rgba(15,61,76,.1)}
   .form-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px}
   .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;text-align:center}
-  .stat{padding:12px 6px;background:var(--bg);border-radius:var(--radius)}
-  .stat-num{display:block;font-size:24px;font-weight:700;color:var(--primary)}
-  .stat-label{font-size:10px;color:var(--muted);text-transform:uppercase}
-  .btn-primary{width:100%;background:var(--accent);color:#fff;border:none;padding:12px;border-radius:11px;font-size:14px;font-weight:700;cursor:pointer}
-  .btn-primary:active{background:#e8621d}
-  .btn-small{padding:5px 10px;font-size:11px;background:var(--primary);color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:600}
-  .btn-delete{background:0 0;border:none;color:var(--danger);font-size:18px;cursor:pointer;padding:0 4px}
+  .stat{padding:16px 6px;background:linear-gradient(160deg,#fff,var(--bg));border-radius:var(--radius);border:1px solid var(--line);transition:transform .18s,box-shadow .18s}
+  .stat:hover{transform:translateY(-2px);box-shadow:var(--shadow)}
+  .stat-num{display:block;font-size:26px;font-weight:800;letter-spacing:-.02em;background:linear-gradient(135deg,var(--primary),var(--primary-light));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .stat-label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;font-weight:700;margin-top:2px;display:block}
+  .btn-primary{width:100%;background:linear-gradient(135deg,var(--accent),var(--accent-dark));color:#fff;border:none;padding:12px;border-radius:var(--radius-xs);font-size:14px;font-weight:700;cursor:pointer;box-shadow:0 4px 14px rgba(255,122,51,.28);transition:transform .15s,box-shadow .15s}
+  .btn-primary:hover{box-shadow:0 6px 18px rgba(255,122,51,.36)}
+  .btn-primary:active{transform:scale(.98)}
+  .btn-small{padding:6px 12px;font-size:11px;background:var(--primary);color:#fff;border:none;border-radius:99px;cursor:pointer;font-weight:700;transition:background .15s}
+  .btn-small:hover{background:var(--primary-light)}
+  .btn-delete{background:0 0;border:none;color:var(--danger);font-size:18px;cursor:pointer;padding:0 4px;border-radius:6px;transition:background .15s}
+  .btn-delete:hover{background:var(--danger-bg)}
   .list{list-style:none;margin:8px 0 0;padding:0}
-  .list li{display:flex;align-items:center;gap:8px;padding:10px;background:#f7f9fa;border-radius:9px;margin-bottom:6px;border:1px solid var(--line)}
+  .list li{display:flex;align-items:center;gap:8px;padding:11px 12px;background:#f8fafb;border-radius:var(--radius-xs);margin-bottom:6px;border:1px solid var(--line);transition:border-color .15s,background .15s}
+  .list li:hover{border-color:#d3dae1;background:#f4f7f9}
   .list li span,.list li strong{flex:1;font-size:13px}
   .list li .meta{font-size:11px;color:var(--muted);display:block;flex:none}
-  .toast{position:fixed;left:16px;right:16px;bottom:16px;background:var(--primary-dark);color:#fff;padding:12px;border-radius:11px;font-size:13px;font-weight:600;text-align:center;box-shadow:0 6px 20px rgba(0,0,0,.25);transform:translateY(120%);transition:transform .25s;z-index:200;max-width:640px;margin:0 auto}
+  .toast{position:fixed;left:16px;right:16px;bottom:16px;background:var(--primary-dark);color:#fff;padding:13px;border-radius:var(--radius-sm);font-size:13px;font-weight:600;text-align:center;box-shadow:var(--shadow-lg);transform:translateY(120%);transition:transform .3s cubic-bezier(.4,0,.2,1);z-index:200;max-width:640px;margin:0 auto}
   .toast.show{transform:translateY(0)}
-  .empty-state{text-align:center;padding:20px;color:var(--muted);font-size:13px}
-  .badge{display:inline-block;padding:3px 8px;border-radius:99px;font-size:10px;font-weight:600;text-transform:uppercase;background:#e3f2fd;color:#1565c0}
-  .badge-planejamento{background:#e3f2fd;color:#1565c0}
-  .badge-em_andamento{background:#fff3e0;color:#ef6c00}
-  .badge-concluida{background:#e8f5e9;color:#2e7d32}
-  .modal{display:none;position:fixed;inset:0;background:rgba(10,20,25,.6);z-index:100;align-items:center;justify-content:center}
+  .empty-state{text-align:center;padding:32px 16px;color:var(--muted);font-size:13px}
+  .badge{display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:99px;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.02em;background:var(--info-bg);color:var(--info)}
+  .badge::before{content:'';width:6px;height:6px;border-radius:50%;background:currentColor}
+  .badge-planejamento{background:var(--info-bg);color:var(--info)}
+  .badge-em_andamento{background:var(--warn-bg);color:var(--warn)}
+  .badge-concluida{background:var(--ok-bg);color:var(--ok)}
+  .modal{display:none;position:fixed;inset:0;background:rgba(10,20,25,.55);backdrop-filter:blur(3px);z-index:100;align-items:center;justify-content:center;padding:16px}
   .modal.show{display:flex}
-  .modal-content{background:#fff;border-radius:16px;width:90%;max-width:500px;max-height:80vh;overflow:hidden}
-  .modal-header{display:flex;justify-content:space-between;align-items:center;padding:14px;border-bottom:1px solid var(--line)}
-  .modal-header h3{margin:0;font-size:15px;color:var(--primary)}
-  .modal-close{background:0 0;border:none;font-size:22px;cursor:pointer;color:var(--muted)}
-  .modal-body{padding:14px;overflow-y:auto;max-height:calc(80vh - 56px)}
-  .detail-row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line);font-size:13px;gap:10px}
+  .modal-content{background:#fff;border-radius:20px;width:100%;max-width:500px;max-height:85vh;overflow:hidden;box-shadow:var(--shadow-lg);animation:popIn .2s cubic-bezier(.4,0,.2,1)}
+  @keyframes popIn{from{opacity:0;transform:scale(.96) translateY(6px)}to{opacity:1;transform:none}}
+  .modal-header{display:flex;justify-content:space-between;align-items:center;padding:16px 18px;border-bottom:1px solid var(--line)}
+  .modal-header h3{margin:0;font-size:15px;color:var(--primary);font-weight:800}
+  .modal-close{background:var(--bg);border:none;font-size:18px;line-height:1;width:30px;height:30px;border-radius:50%;cursor:pointer;color:var(--muted);transition:background .15s}
+  .modal-close:hover{background:var(--line)}
+  .modal-body{padding:16px 18px;overflow-y:auto;max-height:calc(85vh - 60px)}
+  .detail-row{display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--line);font-size:13px;gap:10px}
   .detail-row span:first-child{color:var(--muted)}
   .detail-row span:last-child{text-align:right;font-weight:600}
   .foto-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-top:8px}
-  .foto-grid img{width:100%;border-radius:8px;border:1px solid var(--line)}
-  .chip-membro{display:inline-block;background:#e3f2fd;color:#1565c0;padding:2px 8px;border-radius:12px;font-size:11px;margin:2px}
-  .chk-label{display:flex;align-items:center;gap:8px;padding:6px 8px;cursor:pointer;border-radius:6px}
-  .chk-label:hover{background:#e8f0fe}
-  @media(max-width:600px){.stats{grid-template-columns:repeat(2,1fr)}.form-row{grid-template-columns:1fr}}
+  .foto-grid img{width:100%;border-radius:var(--radius-xs);border:1px solid var(--line)}
+  .chip-membro{display:inline-block;background:var(--info-bg);color:var(--info);padding:3px 10px;border-radius:99px;font-size:11px;font-weight:600;margin:2px}
+  .chk-label{display:flex;align-items:center;gap:8px;padding:7px 9px;cursor:pointer;border-radius:var(--radius-xs);transition:background .15s}
+  .chk-label:hover{background:var(--info-bg)}
+  /* ===== Mapa de estatísticas (dashboard) ===== */
+  .stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+  .stat-tile{display:flex;align-items:center;gap:12px;padding:14px 12px;border-radius:14px;border:1px solid var(--line);background:linear-gradient(160deg,#fff,var(--bg));position:relative;overflow:hidden;transition:transform .18s,box-shadow .18s}
+  .stat-tile::after{content:'';position:absolute;right:-14px;bottom:-14px;width:56px;height:56px;border-radius:50%;background:radial-gradient(circle,rgba(15,61,76,.05),transparent 70%)}
+  .stat-tile:hover{transform:translateY(-3px);box-shadow:var(--shadow)}
+  .stat-tile-icon{width:42px;height:42px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:19px;flex:none;color:#fff;box-shadow:0 4px 10px rgba(0,0,0,.14)}
+  .stat-tile--blue .stat-tile-icon{background:linear-gradient(135deg,#42a5f5,#1565c0)}
+  .stat-tile--green .stat-tile-icon{background:linear-gradient(135deg,#66bb6a,#1b5e20)}
+  .stat-tile--orange .stat-tile-icon{background:linear-gradient(135deg,#ffa726,#ef6c00)}
+  .stat-tile--purple .stat-tile-icon{background:linear-gradient(135deg,#ba68c8,#6a1b9a)}
+  .stat-tile-body{min-width:0}
+  .stat-tile-num{font-size:23px;font-weight:800;line-height:1.05;color:var(--text);letter-spacing:-.02em}
+  .stat-tile-label{font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.04em;margin-top:2px}
+  .stat-tile-sub{font-size:10.5px;color:var(--muted);margin-top:2px}
+  .gps-coverage{margin-top:14px;padding:14px 15px;border-radius:14px;background:linear-gradient(135deg,rgba(15,61,76,.05),rgba(15,61,76,.01));border:1px solid var(--line)}
+  .gps-coverage-head{display:flex;justify-content:space-between;align-items:center;font-size:12px;font-weight:800;color:var(--primary)}
+  .gps-coverage-bar{height:9px;border-radius:99px;background:var(--line);overflow:hidden;margin-top:9px}
+  .gps-coverage-fill{height:100%;border-radius:99px;background:linear-gradient(90deg,var(--accent),var(--primary-light));transition:width .6s cubic-bezier(.4,0,.2,1);width:0%}
+  .gps-coverage-sub{font-size:10.5px;color:var(--muted);margin-top:6px}
+  @media(max-width:700px){.stat-grid{grid-template-columns:repeat(2,1fr)}}
+  /* ===== Card de detalhes da obra (modal Etapas) ===== */
+  .obra-head-card{background:linear-gradient(160deg,#fff,var(--bg));border:1px solid var(--line);border-radius:16px;padding:16px;margin-bottom:14px}
+  .obra-head-top{display:flex;gap:14px;align-items:center}
+  .obra-head-ring{position:relative;width:64px;height:64px;flex:none}
+  .obra-head-ring-num{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:800;color:var(--text)}
+  .obra-head-chips{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-top:14px}
+  .obra-chip{background:#fff;border:1px solid var(--line);border-radius:10px;padding:8px 10px}
+  .obra-chip span{display:block;font-size:9.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:700}
+  .obra-chip strong{display:block;font-size:12.5px;color:var(--text);margin-top:2px;font-weight:600;word-break:break-word}
+  @media(max-width:520px){.obra-head-chips{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
 <header>
-  <div class="brand">
+   <div class="brand">
     <div><div class="brand-name">IPQ TECNOLOGIA</div><h1>Painel de Obras</h1></div>
-    <div class="header-actions"><span class="user-name" id="headerUser"></span><button class="btn-logout" onclick="logout()">Sair</button></div>
+    <button id="sideToggle" title="Ocultar menu"><svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg></button>
   </div>
   <nav class="tabs">
-    <button data-view="dashboard" class="active">Dashboard</button>
-    <button data-view="por-equipe">Por Equipe</button>
-    <button data-view="desempenho">Desempenho</button>
-    <button data-view="mapa3d">Mapa 3D</button>
-    <button data-view="obras">Obras</button>
-    <button data-view="rdos">RDOs</button>
-    <button data-view="locais">Locais</button>
-    <button data-view="atividades">Atividades</button>
-    <button data-view="materiais">Materiais</button>
-    <button data-view="equipes">Equipes</button>
-    <button data-view="usuarios">Usuarios</button>
+    <button data-view="dashboard" class="active"><span class="t-ic"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></span><span>Dashboard</span></button>
+    <button data-view="equipes"><span class="t-ic"><svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span><span>Equipes</span></button>
+	<button data-view="locais"><span class="t-ic"><svg viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg></span><span>Locais/Equipes</span></button>
+	<button data-view="por-equipe"><span class="t-ic"><svg viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></span><span>Por Equipe</span></button>
+    <button data-view="mapa3d"><span class="t-ic"><svg viewBox="0 0 24 24"><path d="M1 6v16l7-4 8 4 7-4V2l-7 4-8-4-7 4z"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg></span><span>Map/Locais</span></button>
+    <button data-view="obras"><span class="t-ic"><svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/></svg></span><span>Obras</span></button>
+    <button data-view="vincular-obras"><span class="t-ic"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.07 0l2.83-2.83a5 5 0 0 0-7.07-7.07l-1.5 1.5"/><path d="M14 11a5 5 0 0 0-7.07 0L4.1 13.83a5 5 0 0 0 7.07 7.07l1.5-1.5"/></svg></span><span>Vincular Obras</span></button>
+	<button data-view="rdos"><span class="t-ic"><svg viewBox="0 0 24 24"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/></svg></span><span>RDOs</span></button>
+    <button data-view="atividades"><span class="t-ic"><svg viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg></span><span>Atividades</span></button>
+    <button data-view="materiais"><span class="t-ic"><svg viewBox="0 0 24 24"><path d="M16.5 9.4L7.55 4.24"/><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="M3.27 6.96L12 12.01l8.73-5.05"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg></span><span>Cadastro de Mat./Equipes</span></button>
+    <button data-view="estoque"><span class="t-ic"><svg viewBox="0 0 24 24"><path d="M21 8v13H3V8"/><path d="M1 3h22v5H1z"/><path d="M10 12h4"/></svg></span><span>Estoque/Locais</span></button>
+    <button data-view="usuarios"><span class="t-ic"><svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span><span>Usuários</span></button>
+    <button data-view="desempenho"><span class="t-ic"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></span><span>Relatórios</span></button>
+	<button data-view="auditoria"><span class="t-ic"><svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg></span><span>Auditoria</span></button>
   </nav>
+  <div class="header-actions"><span class="user-name" id="headerUser"></span><button class="btn-logout" onclick="logout()">Sair</button></div>
 </header>
+<button id="sideOpen" title="Mostrar menu"><svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg><span>Menu</span></button>
 <main>
   <!-- DASHBOARD - Visual profissional igual Atividades -->
   <section class="view active" id="view-dashboard">
@@ -101,27 +189,44 @@
       <p style="font-size:11px;color:var(--muted);margin:6px 0 0">Visão consolidada de <strong>obras multi-obra</strong>, RDOs por período e atividade. Use os filtros de obra nas abas seguintes para detalhar.</p>
     </div>
     <div class="card">
-      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px">
-        <div style="padding:14px;background:#e3f2fd;border-radius:10px;border:1px solid var(--line);text-align:center;border-left:4px solid #1565c0">
-          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;font-weight:700;letter-spacing:.05em">🏗️ Obras</div>
-          <div style="font-size:26px;font-weight:800;color:#1565c0;margin-top:4px" id="sObras">0</div>
-          <div style="font-size:10px;color:var(--muted)">ativas</div>
+      <div class="stat-grid">
+        <div class="stat-tile stat-tile--blue">
+          <div class="stat-tile-icon">🏗️</div>
+          <div class="stat-tile-body">
+            <div class="stat-tile-num" id="sObras">0</div>
+            <div class="stat-tile-label">Obras</div>
+            <div class="stat-tile-sub">ativas</div>
+          </div>
         </div>
-        <div style="padding:14px;background:#e8f5e9;border-radius:10px;border:1px solid var(--line);text-align:center;border-left:4px solid #2e7d32">
-          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;font-weight:700;letter-spacing:.05em">📋 RDOs</div>
-          <div style="font-size:26px;font-weight:800;color:#2e7d32;margin-top:4px" id="sRdos">0</div>
-          <div style="font-size:10px;color:var(--muted)"><span id="sHoje">0</span> hoje</div>
+        <div class="stat-tile stat-tile--green">
+          <div class="stat-tile-icon">📋</div>
+          <div class="stat-tile-body">
+            <div class="stat-tile-num" id="sRdos">0</div>
+            <div class="stat-tile-label">RDOs</div>
+            <div class="stat-tile-sub"><span id="sHoje">0</span> hoje</div>
+          </div>
         </div>
-        <div style="padding:14px;background:#fff3e0;border-radius:10px;border:1px solid var(--line);text-align:center;border-left:4px solid #ef6c00">
-          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;font-weight:700;letter-spacing:.05em">👥 Equipes</div>
-          <div style="font-size:26px;font-weight:800;color:#ef6c00;margin-top:4px" id="sEquipes">0</div>
-          <div style="font-size:10px;color:var(--muted)"><span id="sUsers">0</span> usuários</div>
+        <div class="stat-tile stat-tile--orange">
+          <div class="stat-tile-icon">👥</div>
+          <div class="stat-tile-body">
+            <div class="stat-tile-num" id="sEquipes">0</div>
+            <div class="stat-tile-label">Equipes</div>
+            <div class="stat-tile-sub"><span id="sUsers">0</span> usuários</div>
+          </div>
         </div>
-        <div style="padding:14px;background:#f3e5f5;border-radius:10px;border:1px solid var(--line);text-align:center;border-left:4px solid #6a1b9a">
-          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;font-weight:700;letter-spacing:.05em">📍 Locais</div>
-          <div style="font-size:26px;font-weight:800;color:#6a1b9a;margin-top:4px" id="sLocais">0</div>
-          <div style="font-size:10px;color:var(--muted)">TJCE + outras</div>
+        <div class="stat-tile stat-tile--purple">
+          <div class="stat-tile-icon">📍</div>
+          <div class="stat-tile-body">
+            <div class="stat-tile-num" id="sLocais">0</div>
+            <div class="stat-tile-label">Locais</div>
+            <div class="stat-tile-sub">TJCE + outras</div>
+          </div>
         </div>
+      </div>
+      <div class="gps-coverage">
+        <div class="gps-coverage-head"><span>📡 Cobertura de GPS nos locais</span><strong id="gpsPct">0%</strong></div>
+        <div class="gps-coverage-bar"><div class="gps-coverage-fill" id="gpsFill"></div></div>
+        <div class="gps-coverage-sub" id="gpsSub">0 de 0 locais georreferenciados</div>
       </div>
       <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
         <button class="btn-small" onclick="carregarDashboard()" style="background:#0f3d4c">↻ Atualizar</button>
@@ -131,7 +236,10 @@
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
         <h2 style="margin:0">🕒 RDOs Recentes</h2>
-        <span style="font-size:11px;background:#fff3e0;color:#ef6c00;padding:4px 10px;border-radius:20px;font-weight:700" id="countRdosRecentes">0 recentes</span>
+        <div style="display:flex;gap:6px;align-items:center">
+          <span style="font-size:11px;background:#fff3e0;color:#ef6c00;padding:4px 10px;border-radius:20px;font-weight:700" id="countRdosRecentes">0 recentes</span>
+          <button class="btn-small" onclick="document.querySelector('nav.tabs button[data-view=rdos]').click()" style="background:#0f3d4c">Ver todos →</button>
+        </div>
       </div>
       <p style="font-size:11px;color:var(--muted);margin:6px 0 0">Últimos registros de campo — toque para ver detalhes completos.</p>
       <div id="rdosRecentes" style="margin-top:12px;display:grid;gap:8px"></div>
@@ -154,7 +262,8 @@
       <div id="porEquipeStats" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;margin-top:12px"></div>
     </div>
     <div class="card">
-      <h2>Detalhamento — Locais por equipe</h2>
+      <h2>Detalhamento — Locais por equipe (atribuição)</h2>
+      <p style="font-size:11px;color:var(--muted);margin:4px 0 8px">Onde cada equipe trabalha (REGIÃO + endereço). Para <strong>progresso % e RDOs por local</strong>, use a aba <em>Relatórios</em>.</p>
       <div class="form-row">
         <select id="filtroPorEquipe" onchange="filtrarPorEquipe()"><option value="">Todas as equipes</option></select>
         <input type="text" id="buscaPorEquipe" placeholder="Buscar comarca/endereço..." oninput="filtrarPorEquipe()">
@@ -163,7 +272,7 @@
     </div>
   </section>
 
-  <!-- DESEMPENHO POR ETAPA (engenheiro) -->
+  <!-- RELATÓRIOS (ex-Desempenho): Excel BI + progresso por etapa/local -->
   <section class="view" id="view-desempenho">
     <div class="card" style="border-left:4px solid #1b5e20">
       <h2>📗 Relatório Excel — BI por Equipe</h2>
@@ -178,7 +287,7 @@
 
     <div class="card" style="border-left:4px solid #0f3d4c">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
-        <h2 style="margin:0">📊 Desempenho por Etapa</h2>
+        <h2 style="margin:0">📊 Relatórios — progresso por etapa</h2>
         <div style="display:flex;gap:6px;align-items:center">
           <select id="filtroDesempenhoObra" onchange="carregarDesempenho()" style="padding:6px 8px;font-size:12px;border:1.5px solid var(--line);border-radius:8px;min-width:140px"><option value="">Todas obras</option></select>
           <button class="btn-small" onclick="carregarDesempenho()" style="background:#0f3d4c">↻ Atualizar</button>
@@ -190,9 +299,10 @@
 
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
-        <h2 style="margin:0">Locais — progresso e RDOs</h2>
+        <h2 style="margin:0">Locais — progresso e RDOs (visão obra)</h2>
         <span id="desempenhoInfo" style="font-size:11px;color:var(--muted)"></span>
       </div>
+      <p style="font-size:11px;color:var(--muted);margin:6px 0 0">Diferente de <em>Por Equipe → Detalhamento</em> (atribuição), aqui é <strong>avanço físico</strong>: % por local, RDOs e último registro.</p>
       <div class="form-row" style="margin-top:8px">
         <select id="filtroDesempenhoRegiao" onchange="carregarDesempenho()"><option value="">Todas equipes</option></select>
         <input type="text" id="buscaDesempenho" placeholder="Buscar local/comarca..." oninput="filtrarDesempenhoLocal()">
@@ -208,6 +318,7 @@
       <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
         <h2 style="margin:0">🗺️ Mapa 3D — Equipes e Locais</h2>
         <div style="display:flex;gap:6px;align-items:center">
+          <select id="filtroMapa3dObra" onchange="carregarMapa3D()" style="padding:6px 8px;font-size:12px;border:1.5px solid var(--line);border-radius:8px"><option value="">Todas obras</option></select>
           <select id="filtroMapa3dEquipe" onchange="carregarMapa3D()" style="padding:6px 8px;font-size:12px;border:1.5px solid var(--line);border-radius:8px"><option value="">Todas equipes</option></select>
           <button class="btn-small" onclick="carregarMapa3D()" style="background:#0f3d4c">↻ Atualizar</button>
         </div>
@@ -229,7 +340,7 @@
       <input type="hidden" id="obraEditId">
       <label>Nome da obra</label>
       <input type="text" id="obraNome" placeholder="Nome da obra">
-      <label>Local <span style="font-weight:400;color:var(--muted)">(opcional para TJ-CE — global)</span></label>
+      <label>Local <span style="font-weight:400;color:var(--muted)">(vínculo principal fica em Locais)</span></label>
       <div style="display:flex;gap:6px;align-items:center">
         <select id="obraLocal" style="flex:1"><option value="">Selecione o local</option></select>
         <button type="button" class="btn-small" onclick="abrirNovoLocalObra()" style="white-space:nowrap;background:#e3f2fd;color:#1565c0;border:1px solid #90caf9">+ Novo Local</button>
@@ -241,7 +352,7 @@
         <div style="display:flex;gap:6px;margin-top:6px"><button type="button" class="btn-small" onclick="criarLocalParaObra()" style="background:#0f3d4c">Criar e selecionar</button><button type="button" class="btn-small" onclick="fecharNovoLocalObra()" style="background:#e0e0e0;color:#333">Cancelar</button></div>
         <div id="msgNovoLocalObra" style="font-size:11px;margin-top:6px"></div>
       </div>
-      <div style="font-size:11px;color:var(--muted);margin-top:4px">TJ-CE é global (sem local). Para outras obras, selecione ou crie um local específico. Gerencie todos em <em>Locais</em>.</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:4px">TJ-CE é global (sem local fixo). Para vincular <strong>vários locais</strong> use <em>Vincular Obras → Vincular Locais à Obra</em> — este campo é só o local principal (legado).</div>
       <div class="form-row">
         <div><label>Prazo (dias)</label><input type="number" id="obraPrazo" placeholder="Prazo" value="30"></div>
         <div><label>Data inicio</label><input type="date" id="obraInicio"></div>
@@ -258,10 +369,39 @@
   <!-- MODAL ETAPAS -->
   <div class="modal" id="modalEtapas">
     <div class="modal-content" style="max-width:600px">
-      <div class="modal-header"><h3 id="tituloEtapas">Etapas da Obra</h3><button class="modal-close" onclick="document.getElementById('modalEtapas').classList.remove('show')">&times;</button></div>
+      <div class="modal-header"><h3 id="tituloEtapas">Detalhes da Obra</h3><div style="display:flex;gap:6px;align-items:center"><button class="btn-small" id="btnEditarObraInline" onclick="entrarEdicaoObraInline()" style="background:#1565c0">✏️ Editar</button><button class="modal-close" onclick="document.getElementById('modalEtapas').classList.remove('show')">&times;</button></div></div>
       <div class="modal-body">
-        <div id="infoObraEtapas" style="margin-bottom:12px;font-size:13px;color:var(--muted)"></div>
+        <div id="obraHeadCard" class="obra-head-card"></div>
+        <div id="obraEditInline" style="display:none;margin-bottom:12px;padding:12px;background:#f7f9fa;border:1.5px solid #90caf9;border-radius:10px">
+          <div style="font-size:11px;font-weight:800;color:#1565c0;text-transform:uppercase;margin-bottom:8px">Editar obra (salva direto no Detalhes)</div>
+          <label style="font-size:11px;font-weight:700">Nome da obra *</label>
+          <input type="text" id="editObraNome" placeholder="Nome da obra" style="width:100%;padding:8px;border:1.5px solid var(--line);border-radius:8px;font-size:13px;margin-bottom:8px">
+          <div class="form-row">
+            <div><label style="font-size:11px;font-weight:700">Status</label><select id="editObraStatus" style="width:100%;padding:8px;border:1.5px solid var(--line);border-radius:8px;font-size:13px"><option value="planejamento">Planejamento</option><option value="em_andamento">Em andamento</option><option value="concluida">Concluída</option></select></div>
+            <div><label style="font-size:11px;font-weight:700">Responsável</label><input type="text" id="editObraResponsavel" placeholder="Responsável" style="width:100%;padding:8px;border:1.5px solid var(--line);border-radius:8px;font-size:13px"></div>
+          </div>
+          <div class="form-row" style="margin-top:8px">
+            <div><label style="font-size:11px;font-weight:700">Comarca</label><input type="text" id="editObraComarca" placeholder="Comarca" style="width:100%;padding:8px;border:1.5px solid var(--line);border-radius:8px;font-size:13px"></div>
+            <div><label style="font-size:11px;font-weight:700">Local vinculado</label><select id="editObraLocal" style="width:100%;padding:8px;border:1.5px solid var(--line);border-radius:8px;font-size:13px"><option value="">Sem local (ex: TJ-CE global)</option></select></div>
+          </div>
+          <div class="form-row" style="margin-top:8px">
+            <div><label style="font-size:11px;font-weight:700">Data início</label><input type="date" id="editObraInicio" style="width:100%;padding:8px;border:1.5px solid var(--line);border-radius:8px;font-size:13px"></div>
+            <div><label style="font-size:11px;font-weight:700">Prazo (dias)</label><input type="number" id="editObraPrazo" min="1" value="30" style="width:100%;padding:8px;border:1.5px solid var(--line);border-radius:8px;font-size:13px"></div>
+          </div>
+          <label style="font-size:11px;font-weight:700;margin-top:8px;display:block">Descrição</label>
+          <textarea id="editObraDescricao" rows="2" placeholder="Descrição..." style="width:100%;padding:8px;border:1.5px solid var(--line);border-radius:8px;font-size:13px"></textarea>
+          <div style="font-size:10.5px;color:var(--muted);margin:6px 0">Progresso e RDOs são automáticos (não editáveis). Câmeras/endereço/mapa vêm do Local — edite em Locais.</div>
+          <div style="display:flex;gap:8px;margin-top:6px"><button class="btn-primary" onclick="salvarEdicaoObraInline()" id="btnSalvarObraInline" style="flex:1;padding:9px;font-size:13px">💾 Salvar</button><button class="btn-small" onclick="cancelarEdicaoObraInline()" style="flex:1;background:#e0e0e0;color:#333">Cancelar</button></div>
+          <div id="msgEditObraInline" style="font-size:11px;margin-top:6px;min-height:14px"></div>
+        </div>
+        <div id="infoObraEtapas" style="display:none"></div>
+        <div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap">
+          <input type="text" id="buscaEtapaLocal" placeholder="Filtrar por local/etapa..." oninput="_etapaFiltro=this.value;_etapaMostrar=60;renderEtapas()" style="flex:1;min-width:140px;padding:7px;font-size:12px;border:1.5px solid var(--line);border-radius:8px">
+          <select id="filtroEtapaStatus" onchange="_etapaStatus=this.value;_etapaMostrar=60;renderEtapas()" style="padding:7px;font-size:12px;border:1.5px solid var(--line);border-radius:8px"><option value="">Todos status</option><option value="concluida">Concluídas</option><option value="em_andamento">Andamento</option><option value="pendente">Pendentes</option></select>
+          <button class="btn-small" onclick="abrirRelatoriosDaObra()" style="background:#1b5e20" title="Ver esta obra em Relatórios">📗 Relatórios</button>
+        </div>
         <div style="margin-bottom:12px">
+          <div style="font-size:11px;color:var(--muted);margin-bottom:6px">Adicionar entra no <strong>modelo</strong> da obra (o por-local nasce sozinho via RDO).</div>
           <div class="form-row"><input type="text" id="etapaNome" placeholder="Nome da etapa"><input type="number" id="etapaOrdem" placeholder="Ordem" value="1"></div>
           <button class="btn-primary" onclick="adicionarEtapa()" style="padding:8px;font-size:13px">Adicionar Etapa</button>
         </div>
@@ -292,8 +432,10 @@
       <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
         <button class="btn-small" onclick="carregarRdos()" style="background:#0f3d4c">↻ Atualizar</button>
         <button class="btn-small" onclick="document.getElementById('filtroRdoData').value='';document.getElementById('buscaRdo').value='';carregarRdos()" style="background:#e1e5ea;color:#1c2b33">✕ Limpar</button>
+        <button class="btn-small" id="btnLixeira" onclick="toggleLixeira()" style="background:#fff;border:1px solid var(--line);color:var(--muted)">🗑️ Lixeira</button>
         <span style="font-size:11px;color:var(--muted);align-self:center" id="rdosInfo"></span>
       </div>
+      <div style="font-size:11px;color:var(--muted);margin-top:6px">Exclusão exige <strong>motivo</strong> e registra <strong>quem apagou/quando</strong> (auditoria). Nada é apagado fisicamente.</div>
     </div>
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
@@ -308,16 +450,12 @@
 
   <!-- LOCAIS -->
   <section class="view" id="view-locais">
-    <div class="card" style="border-left:4px solid #1565c0">
-      <h2>📥 Importar TJCE_Mesclado (com equipes)</h2>
-      <p style="font-size:12px;color:var(--muted);margin:4px 0 10px">Arraste o <code>TJCE_Mesclado_Geolocalizacao.xlsx</code> (971 linhas, REGIAO=Equipe 1-4/TERCEIRIZADA, CAM FIXA/ANALÍTICA/LPR). O sistema <strong>deduplica por endereço</strong> (229 únicos), soma câmeras e cria as equipes automaticamente.</p>
-      <input type="file" id="fileMesclado" accept=".xlsx,.xls" style="width:100%;padding:10px;border:1.5px dashed var(--line);border-radius:9px;background:#f7f9fa;margin-bottom:8px">
-      <div style="display:flex;gap:8px">
-        <button class="btn-primary" onclick="importarMesclado()" id="btnImportMesclado" style="flex:1">Importar Mesclado</button>
-        <button class="btn-small" onclick="document.getElementById('fileMesclado').value=''" style="background:#e0e0e0;color:#333">Limpar</button>
-      </div>
-      <div id="msgMesclado" style="font-size:12px;margin-top:8px;min-height:16px"></div>
-      <div id="previewMesclado" style="margin-top:10px;max-height:200px;overflow:auto;font-size:11px;display:none"></div>
+    <div class="card" style="border-left:4px solid #0f3d4c">
+      <h2>＋ Novo Local</h2>
+      <div class="form-row"><input type="text" id="novoLocNome" placeholder="Nome do imóvel *"><input type="text" id="novoLocComarca" placeholder="Comarca"></div>
+      <div class="form-row"><input type="text" id="novoLocEndereco" placeholder="Endereço"><select id="novoLocObra"><option value="">Obra (opcional)...</option></select></div>
+      <div style="display:flex;gap:8px"><button class="btn-primary" onclick="criarLocal()" style="flex:1">Criar local</button></div>
+      <div id="msgNovoLoc" style="font-size:12px;margin-top:6px;min-height:16px"></div>
     </div>
     <div class="card" style="border-left:4px solid #2e7d32">
       <h2>🎯 Definir onde cada equipe vai trabalhar</h2>
@@ -329,9 +467,35 @@
       </div>
       <div id="msgAtribuir" style="font-size:11px;margin-top:6px;min-height:14px"></div>
     </div>
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+        <h2 style="margin:0">Imoveis TJCE (<span id="countLocais">0</span>)</h2>
+        <label style="font-size:11px;color:var(--muted);display:flex;align-items:center;gap:4px"><input type="checkbox" id="chkInativosLoc" onchange="carregarLocais()" style="accent-color:var(--primary)"> Mostrar inativos</label>
+      </div>
+      <div class="form-row">
+        <select id="filtroComarca" onchange="carregarLocais()"><option value="">Todas as comarcas</option></select>
+        <input type="text" id="buscaLocal" placeholder="Buscar..." oninput="carregarLocais()">
+      </div>
+      <div id="listaLocais"></div>
+    </div>
+  </section>
+
+  <!-- VINCULAR OBRAS -->
+  <section class="view" id="view-vincular-obras">
+    <div class="card" style="border-left:4px solid #1565c0">
+      <h2>📥 Importar TJCE_Mesclado (com equipes)</h2>
+      <p style="font-size:12px;color:var(--muted);margin:4px 0 10px">Arraste o <code>TJCE_Mesclado_Geolocalizacao.xlsx</code> (971 linhas, REGIAO=Equipe 1-4/TERCEIRIZADA, CAM FIXA/ANALÍTICA/LPR). O sistema <strong>deduplica por endereço</strong> (229 únicos), soma câmeras e cria as equipes automaticamente.</p>
+      <input type="file" id="fileMesclado" accept=".xlsx,.xls" style="width:100%;padding:10px;border:1.5px dashed var(--line);border-radius:9px;background:#f7f9fa;margin-bottom:8px">
+      <div style="display:flex;gap:8px">
+        <button class="btn-primary" onclick="importarMesclado()" id="btnImportMesclado" style="flex:1">Importar Mesclado</button>
+        <button class="btn-small" onclick="document.getElementById('fileMesclado').value=''" style="background:#e0e0e0;color:#333">Limpar</button>
+      </div>
+      <div id="msgMesclado" style="font-size:12px;margin-top:8px;min-height:16px"></div>
+      <div id="previewMesclado" style="margin-top:10px;max-height:200px;overflow:auto;font-size:11px;display:none"></div>
+    </div>
     <div class="card" style="border-left:4px solid #6a1b9a">
-      <h2>🔗 Vincular Locais à Obra</h2>
-      <p style="font-size:11px;color:var(--muted);margin:4px 0 8px">Selecione a obra e veja os locais já vinculados (cadastrados em <em>Obras</em>). Adicione ou remova locais dinamicamente.</p>
+      <h2>🔗 Vincular Locais à Obra (local oficial)</h2>
+      <p style="font-size:11px;color:var(--muted);margin:4px 0 8px">Local <strong>canônico</strong> para amarrar locais ↔ obra (1 obra tem N locais). O campo "Local" dentro de <em>Obras</em> é só o principal/legado.</p>
       <label>Obra</label>
       <select id="localObraSelect" onchange="carregarVinculoObra()"><option value="">Selecione a obra</option></select>
       <div id="vinculoObraInfo" style="font-size:11px;color:var(--muted);margin:6px 0"></div>
@@ -344,14 +508,6 @@
         </div>
       </div>
     </div>
-    <div class="card">
-      <h2>Imoveis TJCE (<span id="countLocais">0</span>)</h2>
-      <div class="form-row">
-        <select id="filtroComarca" onchange="carregarLocais()"><option value="">Todas as comarcas</option></select>
-        <input type="text" id="buscaLocal" placeholder="Buscar..." oninput="carregarLocais()">
-      </div>
-      <div id="listaLocais"></div>
-    </div>
   </section>
 
   <!-- ATIVIDADES - Visual profissional -->
@@ -361,7 +517,7 @@
         <h2 style="margin:0">🔧 Atividades / Etapas</h2>
         <span style="font-size:11px;background:#f7f9fa;border:1px solid var(--line);padding:4px 10px;border-radius:20px"><span id="countAtividades">0</span> atividades • <span id="countAtvTemplate">0</span> do template TJ-CE</span>
       </div>
-      <p style="font-size:11px;color:var(--muted);margin:6px 0 0">Atividades viram <strong>etapas per-local</strong> automaticamente: cada RDO com essa atividade marca a etapa como concluída naquele local (progresso 25%/50%...).</p>
+      <p style="font-size:11px;color:var(--muted);margin:6px 0 0">Vocabulário do RDO: novas atividades entram <strong>sozinhas no modelo de todas as obras</strong>. Cada RDO com essa atividade conclui a etapa naquele local (progresso 25%/50%...).</p>
     </div>
     <div class="card">
       <h2>Nova Atividade</h2>
@@ -380,33 +536,19 @@
     </div>
   </section>
 
-  <!-- MATERIAIS & ESTOQUE - Unificado (catálogo + por obra) -->
+  <!-- MATERIAIS - Catálogo geral -->
   <section class="view" id="view-materiais">
     <div class="card" style="border-left:4px solid var(--accent)">
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
-        <h2 style="margin:0">📦 Materiais & Estoque por Obra</h2>
-        <span style="font-size:11px;background:#f7f9fa;border:1px solid var(--line);padding:4px 10px;border-radius:20px"><span id="countMateriais">0</span> itens • <span id="countCategorias">0</span> cat • <span id="estoqueBadgeMini">0 alertas</span></span>
+        <h2 style="margin:0">📦 Materiais — Catálogo</h2>
+        <span style="font-size:11px;background:#f7f9fa;border:1px solid var(--line);padding:4px 10px;border-radius:20px"><span id="countMateriais">0</span> itens • <span id="countCategorias">0</span> cat</span>
       </div>
-      <p style="font-size:11px;color:var(--muted);margin:6px 0 0">Catálogo geral (<code>lista.txt</code> 106 itens) + <strong>controle por obra</strong> com estimativa <code>Materiais.xlsx</code> vs consumo real dos <strong>RDOs</strong> por equipe/local. Use as sub-abas abaixo.</p>
-      <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap">
-        <button onclick="switchMateriaisTab('catalogo')" id="btnMatCatalogo" class="btn-small" style="background:#0f3d4c">📦 Catálogo</button>
-        <button onclick="switchMateriaisTab('estoque')" id="btnMatEstoque" class="btn-small" style="background:#e1e5ea;color:#1c2b33">📊 Estoque por Obra</button>
-        <span style="font-size:11px;color:var(--muted);align-self:center" id="materiaisTabInfo">Catálogo: busca rápida • Estoque: selecione a obra</span>
-      </div>
+      <p style="font-size:11px;color:var(--muted);margin:6px 0 0">Lista auto-categorizada para usar no RDO. O <strong>controle de estoque por obra</strong> (estimativa vs consumo) fica na aba <em>Estoque</em>.</p>
     </div>
 
-    <!-- Sub-aba: Catálogo -->
-    <div id="materiais-sub-catalogo">
-      <div class="card" style="border-left:4px solid var(--accent)">
-        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
-          <h2 style="margin:0">📦 Catálogo de Materiais</h2>
-          <span style="font-size:11px;background:#f7f9fa;border:1px solid var(--line);padding:4px 10px;border-radius:20px"><span id="countMateriais2">0</span> itens • <span id="countCategorias2">0</span> categorias</span>
-        </div>
-        <p style="font-size:11px;color:var(--muted);margin:6px 0 0">Lista auto-categorizada. Busque e filtre para usar no RDO.</p>
-        <div id="chipsCategorias" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px"></div>
-      </div>
       <div class="card">
         <h2>Buscar & Filtrar</h2>
+        <div id="chipsCategorias" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px"></div>
         <div class="form-row">
           <input type="text" id="buscaMat" placeholder="🔍 Digite 2 letras para buscar (a/A igual)..." oninput="buscarMateriais()">
           <select id="filtroCatMat" onchange="filtrarMateriais()"><option value="">Todas categorias</option></select>
@@ -416,20 +558,56 @@
       <div class="card">
         <h2>Adicionar Material</h2>
         <div class="form-row"><input type="text" id="nomeMaterial" placeholder="Nome do material *"><input type="text" id="catMaterial" placeholder="Categoria" value="Geral" list="listaCats"><datalist id="listaCats"><option value="Câmeras"><option value="Cabeamento"><option value="Óptico / Ativos"><option value="Infra Rack"><option value="Infra Elétrica"><option value="Fixação"><option value="Geral"></datalist></div>
-        <div style="display:flex;gap:8px"><button class="btn-primary" onclick="adicionarMaterial()" style="flex:1">Adicionar</button><button class="btn-small" onclick="importarListaTxt()" style="background:#e8f5e9;color:#2e7d32;border:1px solid #a5d6a7">↻ Reimportar lista.txt</button></div>
+        <div class="form-row">
+          <div><label style="font-size:10px;font-weight:800;color:var(--muted);text-transform:uppercase;display:block;margin-bottom:4px">Unidade</label><input type="text" id="unidMaterial" placeholder="UND" value="UND" style="width:100%"></div>
+          <div><label style="font-size:10px;font-weight:800;color:var(--muted);text-transform:uppercase;display:block;margin-bottom:4px">Qtd. mínima p/ aviso (ex: 10)</label><input type="number" id="minMaterial" placeholder="Ex: 10" min="0" value="0" style="width:100%"><input type="hidden" id="editMatId"></div>
+        </div>
+        <div id="boxQtdInicial">
+          <div id="labelQtdInicial" style="font-size:10px;font-weight:800;color:var(--muted);text-transform:uppercase;margin:4px 0">Qtd inicial no GERAL (estoque central. Ex: 100 bolas — depois você distribui p/ equipes)</div>
+          <div class="form-row">
+            <div style="grid-column:1/-1"><label style="font-size:10px;font-weight:800;color:var(--muted);text-transform:uppercase;display:block;margin-bottom:4px">Qtd geral</label><input type="number" id="qtdInicialMaterial" placeholder="Ex: 100" min="0" value="" style="width:100%"><input type="hidden" id="geralAntigo" value=""></div>
+          </div>
+        </div>
+        <div id="infoSaldosMat" style="display:none;margin:4px 0;padding:10px 12px;background:#f7f9fa;border:1px dashed var(--line);border-radius:9px;font-size:12px"></div>
+        <div style="display:flex;gap:8px"><button class="btn-primary" onclick="adicionarMaterial()" style="flex:1" id="btnAddMat">Adicionar</button><button class="btn-small" onclick="cancelarEdicaoMaterial()" id="btnCancelMat" style="display:none;background:var(--muted)">Cancelar</button><button class="btn-small" onclick="importarListaTxt()" style="background:#e8f5e9;color:#2e7d32;border:1px solid #a5d6a7">↻ Reimportar lista.txt</button></div>
         <div id="msgMat" style="font-size:12px;margin-top:6px;min-height:16px"></div>
       </div>
-      <div class="card"><h2>Catálogo Organizado</h2><div id="listaMateriais"></div></div>
-    </div>
+      <div class="card" style="border-left:4px solid #1565c0">
+        <h2 id="tituloLanc" style="margin:0">📥 Lançar movimentação</h2>
+        <p style="font-size:11px;color:var(--muted);margin:4px 0 8px"><strong>Distribuir</strong> = geral → equipe. <strong>Compra</strong> = soma no geral. <strong>Saída/Entrada</strong> = ajuste direto na equipe. O <strong>RDO dá baixa sozinho</strong>. Se ficar abaixo do mínimo, avisa na hora.</p>
+        <div class="form-row"><select id="lancEquipe"><option value="">Selecione a equipe...</option></select><select id="lancMaterial"><option value="">Selecione o material...</option></select></div>
+        <div class="form-row"><select id="lancTipo" onchange="toggleLancTipo()"><option value="distribuir">📦➡️👷 Distribuir (geral → equipe)</option><option value="compra">📥 Compra (soma no geral)</option><option value="saida">📤 Saída da equipe (gasto manual)</option><option value="entrada">📥 Entrada na equipe (ajuste)</option></select><input type="number" id="lancQtd" placeholder="Qtd *" min="0"><input type="text" id="lancOrigem" placeholder="Origem (ex: entrega manhã)"></div>
+        <div style="display:flex;gap:8px"><button class="btn-primary" onclick="lancarEstoque()" style="flex:1">Lançar</button><button class="btn-small" onclick="carregarSaldos()" style="background:#0f3d4c">↻ Saldo</button></div>
+        <div id="msgLanc" style="font-size:12px;margin-top:6px;min-height:16px"></div>
+      </div>
+      <div class="card" style="border-left:4px solid #c62828">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+          <h2 style="margin:0">🚨 Equipes precisando de material</h2>
+          <button class="btn-small" onclick="carregarAlertasEquipes()" style="background:#c62828">↻ Atualizar</button>
+        </div>
+        <p style="font-size:11px;color:var(--muted);margin:6px 0 0">Compara <strong>saldo da equipe</strong> com o <strong>mínimo global</strong> do material. Ex: mínimo 10 — saldo 8 = alerta.</p>
+        <div id="listaAlertasEquipes" style="margin-top:10px;display:grid;gap:8px"><p class="empty-state">Carregando...</p></div>
+      </div>
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+          <h2 style="margin:0">📦 Materiais e saldos <small style="font-weight:400;color:var(--muted)">(GERAL + por equipe — clique ✏️ para editar)</small></h2>
+          <div style="display:flex;gap:6px">
+            <button class="btn-small" onclick="expandirTodasCats(true)" style="background:#e3f2fd;color:#1565c0" title="Abrir todas">▼ todas</button>
+            <button class="btn-small" onclick="expandirTodasCats(false)" style="background:#f5f5f5;color:#555" title="Fechar todas">▶ todas</button>
+          </div>
+        </div>
+        <div id="listaMateriais"></div>
+      </div>
+  </section>
 
-    <!-- Sub-aba: Estoque por Obra -->
-    <div id="materiais-sub-estoque" style="display:none">
+  <!-- ESTOQUE POR OBRA - Estimativa vs Consumo (view própria) -->
+  <section class="view" id="view-estoque">
       <div class="card" style="border-left:4px solid #0f3d4c">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
           <h2 style="margin:0">📦 Estoque por Obra — Estimativa vs Consumo</h2>
           <span style="font-size:11px;background:#f7f9fa;border:1px solid var(--line);padding:4px 10px;border-radius:20px" id="estoqueBadge">0 materiais • 0 alertas</span>
         </div>
-        <p style="font-size:11px;color:var(--muted);margin:6px 0 0">Cada obra tem sua <strong>estimativa (Materiais.xlsx)</strong>. O consumo vem dos <strong>RDOs</strong> (por equipe/local). O sistema calcula <strong>saldo, % usado e projeção</strong> e avisa <strong>quando comprar</strong>.</p>
+        <p style="font-size:11px;color:var(--muted);margin:6px 0 0">Cada obra tem sua <strong>estimativa (Materiais.xlsx)</strong>. O consumo vem dos <strong>RDOs</strong> (por equipe/local). O sistema calcula <strong>saldo, % usado e projeção</strong> e avisa <strong>quando comprar</strong>. O <strong>saldo físico, mínimos e alertas por equipe</strong> ficam na aba <strong>Materiais</strong> — o botão <strong>📦 saldo</strong> de cada item pula para lá. O RDO alimenta os dois lados.</p>
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;align-items:center">
           <select id="estoqueObra" onchange="carregarEstoque()" style="padding:7px;font-size:12px;border:1.5px solid var(--line);border-radius:8px;min-width:180px"><option value="">Selecione a obra...</option></select>
           <button class="btn-small" onclick="carregarEstoque()" style="background:#0f3d4c">↻ Atualizar</button>
@@ -449,22 +627,13 @@
       </div>
 
       <div class="card" id="estoqueKpis" style="display:none">
-        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px">
-          <div style="padding:12px;background:#e3f2fd;border-radius:10px;border:1px solid var(--line);text-align:center;border-left:4px solid #1565c0">
-            <div style="font-size:10px;color:var(--muted);text-transform:uppercase;font-weight:700">💰 Estimado</div>
-            <div style="font-size:18px;font-weight:800;color:#1565c0;margin-top:4px" id="estoqueValorEst">R$ 0</div>
-            <div style="font-size:10px;color:var(--muted)" id="estoqueQtdEst">0 unid</div>
-          </div>
+        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px">
           <div style="padding:12px;background:#fff3e0;border-radius:10px;border:1px solid var(--line);text-align:center;border-left:4px solid #ef6c00">
             <div style="font-size:10px;color:var(--muted);text-transform:uppercase;font-weight:700">📉 Consumido</div>
-            <div style="font-size:18px;font-weight:800;color:#ef6c00;margin-top:4px" id="estoqueValorCons">R$ 0</div>
-            <div style="font-size:10px;color:var(--muted)" id="estoquePctMedio">0% médio</div>
+            <div style="font-size:18px;font-weight:800;color:#ef6c00;margin-top:4px" id="estoquePctMedio">0%</div>
+            <div style="font-size:10px;color:var(--muted)" id="estoqueConsQtd">0 unid</div>
           </div>
-          <div style="padding:12px;background:#e8f5e9;border-radius:10px;border:1px solid var(--line);text-align:center;border-left:4px solid #2e7d32">
-            <div style="font-size:10px;color:var(--muted);text-transform:uppercase;font-weight:700">📦 Saldo</div>
-            <div style="font-size:18px;font-weight:800;color:#2e7d32;margin-top:4px" id="estoqueValorSaldo">R$ 0</div>
-            <div style="font-size:10px;color:var(--muted)" id="estoqueSaldoQtd">0 unid</div>
-          </div>
+         
           <div style="padding:12px;background:#fce4ec;border-radius:10px;border:1px solid var(--line);text-align:center;border-left:4px solid #c62828">
             <div style="font-size:10px;color:var(--muted);text-transform:uppercase;font-weight:700">⚠️ Alertas</div>
             <div style="font-size:18px;font-weight:800;color:#c62828;margin-top:4px" id="estoqueAlertas">0</div>
@@ -480,16 +649,22 @@
         <div id="listaAlertas" style="display:grid;gap:8px"></div>
       </div>
 
-      <div class="card">
+      <div class="card" id="cardEstimativa" style="border-left:4px solid #1565c0">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
-          <h2 style="margin:0">Adicionar / Editar estimativa</h2>
-          <span style="font-size:11px;color:var(--muted)">Vincula ao catálogo automaticamente</span>
+          <h2 style="margin:0">➕ Estimativa da obra (planejamento)</h2>
+          <span id="estModeBadge" style="font-size:11px;background:#e3f2fd;color:#1565c0;padding:4px 10px;border-radius:20px;font-weight:700">NOVO</span>
         </div>
+        <p style="font-size:11px;color:var(--muted);margin:6px 0 12px">Quanto a obra <strong>planeja usar</strong> (teto). O <strong>saldo físico</strong> de cada equipe (com mínimo e baixa automática do RDO) fica na aba <strong>Materiais</strong>. Direcionando por <strong>local</strong>, o app do técnico mostra <strong>só esses materiais</strong> naquele local.</p>
         <input type="hidden" id="estEditId">
-        <div class="form-row"><input type="text" id="estMaterial" placeholder="Material * (ex: ABRAÇADEIRA DE NYLON...)" list="listaMateriaisDatalist"><datalist id="listaMateriaisDatalist"></datalist><input type="text" id="estUnidade" placeholder="Unidade" value="UND"></div>
-        <div class="form-row"><input type="number" id="estQtd" placeholder="Qtd estimada *"><input type="number" step="0.01" id="estValor" placeholder="Valor unitário (R$)"></div>
-        <div class="form-row"><input type="text" id="estFornecedor" placeholder="Fornecedor"><input type="text" id="estEtapa" placeholder="Etapa" value="ETAPA 1"></div>
-        <div style="display:flex;gap:8px;margin-top:8px"><button class="btn-primary" onclick="salvarEstimativa()" style="flex:1" id="btnEst">Salvar estimativa</button><button class="btn-primary" onclick="cancelarEstimativa()" style="flex:1;display:none;background:var(--muted)" id="btnCancelEst">Cancelar</button></div>
+        <label style="font-size:11px;font-weight:700;color:var(--muted)">MATERIAL *</label>
+        <div class="form-row"><input type="text" id="estMaterial" placeholder="Ex: ABRAÇADEIRA DE NYLON..." list="listaMateriaisDatalist" oninput="atualizarPreviewEst()" style="font-weight:600"><datalist id="listaMateriaisDatalist"></datalist><input type="text" id="estUnidade" placeholder="Unid." value="UND" title="Unidade" oninput="atualizarPreviewEst()"></div>
+        <label style="font-size:11px;font-weight:700;color:var(--muted)">QUANTIDADE ESTIMADA *</label>
+        <div class="form-row"><input type="number" id="estQtd" placeholder="Ex: 1500" min="0" oninput="atualizarPreviewEst()" style="font-size:16px;font-weight:700"></div>
+        <label style="font-size:11px;font-weight:700;color:var(--muted)">DIRECIONAR PARA LOCAL <span style="font-weight:400">(vazio = obra toda — equipe se gerencia na aba Materiais)</span></label>
+        <div class="form-row"><select id="estLocal" onchange="atualizarPreviewEst()" style="grid-column:1/-1"><option value="">📍 Toda a obra (sem local)</option></select></div>
+        <div class="form-row"><input type="text" id="estFornecedor" placeholder="Fornecedor (opcional)"><input type="text" id="estEtapa" placeholder="Etapa" value="ETAPA 1"></div>
+        <div id="estPreview" style="margin-top:10px;padding:10px 12px;background:#f7f9fa;border:1px dashed var(--line);border-radius:9px;font-size:12px;color:var(--muted)">Preencha material e quantidade para pré-visualizar…</div>
+        <div style="display:flex;gap:8px;margin-top:10px"><button class="btn-primary" onclick="salvarEstimativa()" style="flex:1" id="btnEst">💾 Salvar estimativa</button><button class="btn-primary" onclick="cancelarEstimativa()" style="flex:1;display:none;background:var(--muted)" id="btnCancelEst">Cancelar</button></div>
         <div id="msgEst" style="font-size:12px;margin-top:6px;min-height:16px"></div>
       </div>
 
@@ -498,7 +673,8 @@
           <h2 style="margin:0">Materiais — estimado vs consumido</h2>
           <div style="display:flex;gap:6px;align-items:center">
             <input type="text" id="buscaEstoque" placeholder="Buscar material..." oninput="filtrarEstoque()" style="width:160px;padding:7px;font-size:12px;border:1.5px solid var(--line);border-radius:8px">
-            <select id="filtroStatusEstoque" onchange="filtrarEstoque()" style="padding:7px;font-size:12px;border:1.5px solid var(--line);border-radius:8px"><option value="">Todos status</option><option value="ok">OK</option><option value="atencao">Atenção</option><option value="critico">Crítico</option><option value="estourado">Estourado</option><option value="extra">Extra</option><option value="comprar">Precisa comprar</option></select>
+            <select id="filtroEstoqueLocal" onchange="filtrarEstoque()" style="padding:7px;font-size:12px;border:1.5px solid var(--line);border-radius:8px;max-width:150px"><option value="">Todos locais</option></select>
+            <select id="filtroStatusEstoque" onchange="filtrarEstoque()" style="padding:7px;font-size:12px;border:1.5px solid var(--line);border-radius:8px"><option value="">Todos status</option><option value="ok">OK</option><option value="atencao">Atenção</option><option value="critico">Crítico</option><option value="estourado">Estourado</option><option value="extra">Extra</option><option value="comprar">Precisa comprar</option><option value="direcionado">Direcionados</option><option value="obra">Obra toda</option></select>
           </div>
         </div>
         <p style="font-size:11px;color:var(--muted);margin:6px 0 0">Progresso = consumido/estimado. <strong>Projeção</strong> usa média por local concluído × locais pendentes.</p>
@@ -506,13 +682,12 @@
       </div>
 
       <div class="card">
-        <h2>🏆 Ranking — quem mais consome</h2>
+        <h2>🏆 Consumo nesta obra (via RDO) — quem mais usou</h2>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
           <div><div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:6px">Por equipe</div><div id="rankingEquipes"></div></div>
           <div><div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:6px">Por local</div><div id="rankingLocais"></div></div>
         </div>
       </div>
-    </div>
   </section>
 
   <!-- EQUIPES - Gestao robusta (logica de obras) -->
@@ -539,7 +714,7 @@
         <div style="font-size:11px;color:var(--muted);margin-top:6px;display:flex;gap:10px;flex-wrap:wrap">
           <span id="eqSemEquipeInfo">0 sem equipe</span>
           <span>•</span>
-          <span>Arraste/alteração reflete imediatamente em RDO e Presença</span>
+          <span>Alteração reflete imediatamente em RDO e Presença</span>
         </div>
       </div>
       <div style="display:flex;gap:8px"><button class="btn-primary" onclick="salvarEquipe()" style="flex:1" id="btnEq">Criar Equipe</button><button class="btn-primary" onclick="cancelarEq()" style="flex:1;display:none;background:var(--muted)" id="btnCancelEq">Cancelar</button></div>
@@ -590,6 +765,28 @@
       <div id="listaUsuarios" style="margin-top:10px"></div>
     </div>
   </section>
+
+  <!-- AUDITORIA - Trilha geral de RDOs (quem criou/editou/apagou) -->
+  <section class="view" id="view-auditoria">
+    <div class="card" style="border-left:4px solid #4a148c">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+        <h2 style="margin:0">🕵️ Auditoria de RDOs</h2>
+        <span style="font-size:11px;background:#f7f9fa;border:1px solid var(--line);padding:4px 10px;border-radius:20px" id="auditoriaBadge">0 eventos</span>
+      </div>
+      <p style="font-size:11px;color:var(--muted);margin:6px 0 0">Trilha completa: <strong>criação, edição, exclusão e restauração</strong> com quem/quando/motivo. Para o detalhe antes → depois de um RDO, use <em>RDOs → 🕵️ Hist</em>.</p>
+      <div class="form-row" style="margin-top:10px">
+        <select id="filtroAudAcao" onchange="carregarAuditoria()" style="padding:7px;font-size:12px"><option value="">Todas ações</option><option value="CRIACAO">Criação</option><option value="EDICAO">Edição</option><option value="EXCLUSAO">Exclusão</option><option value="RESTAURACAO">Restauração</option></select>
+        <select id="filtroAudObra" onchange="carregarAuditoria()" style="padding:7px;font-size:12px"><option value="">Todas obras</option></select>
+        <input type="text" id="buscaAud" placeholder="Buscar usuário/motivo/local..." oninput="carregarAuditoriaDeb()" style="padding:7px;font-size:12px">
+      </div>
+      <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+        <button class="btn-small" onclick="carregarAuditoria()" style="background:#4a148c">↻ Atualizar</button>
+        <button class="btn-small" onclick="exportarAuditoriaExcel()" style="background:#1b5e20">📗 Excel geral</button>
+        <span style="font-size:11px;color:var(--muted);align-self:center" id="auditoriaInfo"></span>
+      </div>
+    </div>
+    <div class="card"><div id="listaAuditoria" style="display:grid;gap:8px"></div></div>
+  </section>
 </main>
 
 <div class="modal" id="modalDetalhe">
@@ -627,10 +824,17 @@ document.querySelectorAll('nav.tabs button').forEach(btn => {
     btn.classList.add('active');
     document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
     document.getElementById('view-' + btn.dataset.view).classList.add('active');
-    const loaders = { dashboard: carregarDashboard, 'por-equipe': carregarPorEquipe, desempenho: carregarDesempenho, mapa3d: carregarMapa3D, obras: carregarObras, rdos: carregarRdos, locais: carregarLocais, atividades: carregarAtividades, materiais: carregarMateriaisUnificado, equipes: carregarEquipes, usuarios: carregarUsuarios };
+    const loaders = { dashboard: carregarDashboard, 'por-equipe': carregarPorEquipe, desempenho: carregarDesempenho, mapa3d: carregarMapa3D, obras: carregarObras, rdos: carregarRdos, locais: carregarLocais, 'vincular-obras': carregarLocais, atividades: carregarAtividades, materiais: carregarMateriaisUnificado, estoque: carregarEstoque, equipes: carregarEquipes, usuarios: carregarUsuarios, auditoria: carregarAuditoria };
     if (loaders[btn.dataset.view]) loaders[btn.dataset.view]();
   });
 });
+
+// Sidebar: ocultar/mostrar (desktop, com memória)
+try{
+  if(localStorage.getItem('sideHidden')==='1' && window.innerWidth>900) document.body.classList.add('side-hidden');
+  document.getElementById('sideToggle')?.addEventListener('click',()=>{ document.body.classList.add('side-hidden'); localStorage.setItem('sideHidden','1'); });
+  document.getElementById('sideOpen')?.addEventListener('click',()=>{ document.body.classList.remove('side-hidden'); localStorage.setItem('sideHidden','0'); });
+}catch(e){}
 
 let toastTimer;
 function toast(msg) { const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 3000); }
@@ -650,17 +854,14 @@ function fmtDataHora(ts){
 }
 
 function switchMateriaisTab(tab){
-  document.getElementById('materiais-sub-catalogo').style.display = tab==='catalogo' ? 'block' : 'none';
-  document.getElementById('materiais-sub-estoque').style.display = tab==='estoque' ? 'block' : 'none';
-  document.getElementById('btnMatCatalogo').style.background = tab==='catalogo' ? '#0f3d4c' : '#e1e5ea';
-  document.getElementById('btnMatCatalogo').style.color = tab==='catalogo' ? '#fff' : '#1c2b33';
-  document.getElementById('btnMatEstoque').style.background = tab==='estoque' ? '#0f3d4c' : '#e1e5ea';
-  document.getElementById('btnMatEstoque').style.color = tab==='estoque' ? '#fff' : '#1c2b33';
-  document.getElementById('materiaisTabInfo').textContent = tab==='catalogo' ? 'Catálogo: busca rápida • Estoque: clique em Estoque por Obra' : 'Estoque: selecione a obra para ver estimativa vs consumo';
-  if(tab==='estoque') carregarEstoque();
+  // Legado: Materiais e Estoque agora são abas próprias (view-materiais / view-estoque).
+  // Mantido como no-op para compatibilidade com chamadas antigas.
+  if(tab==='estoque'){ document.querySelector('nav.tabs button[data-view=estoque]')?.click(); }
 }
 async function carregarMateriaisUnificado(){
   await carregarMateriais();
+  try{ await carregarAlertasEquipes(); }catch(e){}
+  try{ await carregarSaldos(); }catch(e){}
   // badge mini de alertas da primeira obra
   try{
     const sel=document.getElementById('estoqueObra');
@@ -671,7 +872,7 @@ async function carregarMateriaisUnificado(){
     }
     if(obraId){
       const data=await api('/api/obras/'+obraId+'/materiais/consumo').then(r=>r.json()).catch(()=>null);
-      if(data) document.getElementById('estoqueBadgeMini').textContent=data.resumo.alertas+' alertas';
+      const mini=document.getElementById('estoqueBadgeMini'); if(mini&&data) mini.textContent=data.resumo.alertas+' alertas';
       const c2=document.getElementById('countMateriais2'); if(c2) c2.textContent=document.getElementById('countMateriais').textContent;
       const cat2=document.getElementById('countCategorias2'); if(cat2) cat2.textContent=document.getElementById('countCategorias').textContent;
     }
@@ -694,6 +895,11 @@ async function carregarDashboard() {
   const elEquipes=document.getElementById('sEquipes'); if(elEquipes) elEquipes.textContent=d.totalEquipes||0;
   const elLocais=document.getElementById('sLocais'); if(elLocais) elLocais.textContent=locais.length||0;
   const elDashInfo=document.getElementById('dashInfo'); if(elDashInfo) elDashInfo.textContent=`${d.rdosHoje} RDO(s) hoje • ${locais.filter(l=>l.latitude).length}/${locais.length} locais com GPS`;
+  const comGps=locais.filter(l=>l.latitude).length, totalLocaisGps=locais.length;
+  const pctGps=totalLocaisGps? Math.round(comGps/totalLocaisGps*100):0;
+  const elGpsFill=document.getElementById('gpsFill'); if(elGpsFill) elGpsFill.style.width=pctGps+'%';
+  const elGpsPct=document.getElementById('gpsPct'); if(elGpsPct) elGpsPct.textContent=pctGps+'%';
+  const elGpsSub=document.getElementById('gpsSub'); if(elGpsSub) elGpsSub.textContent=`${comGps} de ${totalLocaisGps} locais georreferenciados`;
   const elCountRec=document.getElementById('countRdosRecentes'); if(elCountRec) elCountRec.textContent=d.recentes.length+' recentes';
   const elCountRdos=document.getElementById('countRdos'); if(elCountRdos) elCountRdos.textContent=d.totalRdos;
   const elCountHoje=document.getElementById('countRdosHoje'); if(elCountHoje) elCountHoje.textContent=d.rdosHoje;
@@ -769,8 +975,22 @@ async function carregarPorEquipe(){
   sel.value = cur;
   filtrarPorEquipe();
 }
-function filtrarPorEquipe(){
-  const reg = document.getElementById('filtroPorEquipe').value;
+// Editar/apagar equipe direto do cartão Por Equipe (usa o cadastro de Equipes)
+async function editarEquipeCard(id){
+  document.querySelector('nav.tabs button[data-view=equipes]')?.click();
+  setTimeout(async ()=>{
+    try{
+      if(!equipesCache.length) await carregarEquipes();
+      editarEq(id);
+    }catch(e){ toast('Abra a aba Equipes'); }
+  }, 250);
+}
+async function excluirEquipeCard(id){
+  try{ if(!equipesCache.length) await carregarEquipes(); }catch(e){}
+  await excluirEq(id);
+  try{ await carregarPorEquipe(); }catch(e){}
+}
+function filtrarPorEquipe(){  const reg = document.getElementById('filtroPorEquipe').value;
   const busca = (document.getElementById('buscaPorEquipe').value||'').toLowerCase();
   let lista = locaisPorEquipeCache.slice();
   if(reg) lista = lista.filter(l=> (l.regiao||'SEM EQUIPE')===reg);
@@ -935,6 +1155,14 @@ async function exportarDesempenhoExcelEquipe(){
 let mapa3d=null, marcadores3d=[];
 async function carregarMapa3D(){
   const sel=document.getElementById('filtroMapa3dEquipe');
+  const selObra=document.getElementById('filtroMapa3dObra');
+  // popula filtros na primeira carga
+  if(selObra && selObra.options.length===1){
+    try{
+      const obras=await api('/api/obras').then(r=>r.json());
+      selObra.innerHTML='<option value="">Todas obras</option>'+obras.filter(o=>o.ativo!==0).map(o=>`<option value="${o.id}">${o.nome}</option>`).join('');
+    }catch(e){}
+  }
   // popula filtro de equipes na primeira carga
   if(sel && sel.options.length===1){
     try{
@@ -1001,7 +1229,7 @@ async function carregarMapa3D(){
     if(equipeFiltro) urlPres='/api/presenca?equipe_id='+equipeFiltro.id;
     let [presencas, locais] = await Promise.all([
       api(urlPres).then(r=>r.json()).catch(()=>[]),
-      api('/api/locais').then(r=>r.json()).catch(()=>[])
+      api('/api/locais'+(selObra&&selObra.value?'?obra_id='+selObra.value:'')).then(r=>r.json()).catch(()=>[])
     ]);
     // só mostra quem está ativo no momento (último GPS < 15 min)
     const LIMITE_ATIVO_MS=15*60*1000;
@@ -1121,6 +1349,7 @@ async function carregarObras() {
       '<button class="btn-delete" onclick="excluirObra(' + o.id + ')">&times;</button>' +
       '</div></div>' +
       '<div style="font-size:12px;color:var(--muted);margin-top:6px">📍 ' + localInfo + ' | ' + o.prazo_dias + ' dias | ' + (o.responsavel || '') + ' | ' + (o.progresso || 0) + '% concluido</div>' +
+      '<div style="font-size:11px;color:var(--muted);margin-top:2px">📋 Modelo: ' + (o.tpl || 0) + ' etapas • 📍 ' + (o.nlocais || 0) + ' locais • ✅ ' + (o.nconcl || 0) + '/' + ((o.nlocais || 0) * (o.tpl || 0)) + ' combinações</div>' +
       '<div class="progress-bar" style="height:5px;background:var(--line);border-radius:3px;overflow:hidden;margin-top:4px"><div style="height:100%;background:var(--ok);border-radius:3px;width:' + (o.progresso || 0) + '%"></div></div>' +
       '</div>';
   }).join('') || '<p class="empty-state">Nenhuma obra</p>';
@@ -1212,32 +1441,206 @@ async function excluirObra(id) {
 // ETAPAS
 let etapaObraId = null;
 
+let _etapaRdoStats = null;
+function svgRing(pct, color) {
+  pct = Math.min(100, Math.max(0, pct || 0));
+  const r = 26, c = 2 * Math.PI * r, off = c - (pct / 100) * c;
+  return '<svg width="64" height="64" viewBox="0 0 64 64" style="transform:rotate(-90deg)">' +
+    '<circle cx="32" cy="32" r="' + r + '" fill="none" stroke="var(--line)" stroke-width="7"/>' +
+    '<circle cx="32" cy="32" r="' + r + '" fill="none" stroke="' + color + '" stroke-width="7" stroke-linecap="round" stroke-dasharray="' + c + '" stroke-dashoffset="' + off + '" style="transition:stroke-dashoffset .6s ease"/>' +
+    '</svg>';
+}
+function renderObraHead(obra, rdoStats) {
+  const el = document.getElementById('obraHeadCard');
+  if (!el || !obra) return;
+  const status = obra.status || 'planejamento';
+  const statusCor = status === 'concluida' ? 'var(--ok)' : status === 'em_andamento' ? '#ef6c00' : '#1565c0';
+  let prazoInfo = '—';
+  if (obra.data_inicio) {
+    const ini = new Date(obra.data_inicio + 'T00:00:00');
+    const fim = new Date(ini.getTime() + (obra.prazo_dias || 0) * 86400000);
+    const diffDias = Math.round((fim - new Date()) / 86400000);
+    prazoInfo = diffDias >= 0 ? diffDias + ' dia(s) restante(s)' : Math.abs(diffDias) + ' dia(s) em atraso';
+  }
+  const localTxt = (obra.local_nome || 'Sem local vinculado') + (obra.local_endereco ? ' — ' + obra.local_endereco : (obra.local_comarca ? ' — ' + obra.local_comarca : ''));
+  const mapsLink = obra.local_google_maps_link ? '<div style="margin-top:6px"><a href="' + obra.local_google_maps_link + '" target="_blank" style="color:var(--primary);font-weight:700;font-size:11px">Ver local no mapa ↗</a></div>' : '';
+  const rdoTxt = rdoStats ? rdoStats.total + ' RDO(s)' + (rdoStats.ultimo ? ' • último em ' + rdoStats.ultimo : '') : '—';
+  const chips = [
+    ['🏙️ Comarca', obra.comarca || obra.local_comarca || '—'],
+    ['📍 Local vinculado', localTxt],
+    ['👤 Responsável', obra.responsavel || '—'],
+    ['📅 Início', obra.data_inicio || '—'],
+    ['⏱️ Prazo', (obra.prazo_dias || 0) + ' dias — ' + prazoInfo],
+    ['📷 Câmeras previstas', obra.local_cameras || '—'],
+    ['📋 RDOs registrados', rdoTxt],
+    ['🗂️ Status', status.replace('_', ' ')]
+  ];
+  el.innerHTML =
+    '<div class="obra-head-top">' +
+      '<div class="obra-head-ring">' + svgRing(obra.progresso || 0, statusCor) + '<div class="obra-head-ring-num">' + (obra.progresso || 0) + '%</div></div>' +
+      '<div style="flex:1;min-width:0">' +
+        '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><h3 style="margin:0;font-size:16px;color:var(--primary)">' + obra.nome + '</h3><span class="badge badge-' + status + '">' + status.replace('_', ' ') + '</span></div>' +
+        (obra.descricao ? '<div style="font-size:12px;color:var(--muted);margin-top:4px">' + obra.descricao + '</div>' : '') +
+        mapsLink +
+      '</div>' +
+    '</div>' +
+    '<div class="obra-head-chips">' + chips.map(function(c){ return '<div class="obra-chip"><span>' + c[0] + '</span><strong>' + c[1] + '</strong></div>'; }).join('') + '</div>';
+}
 async function abrirEtapas(obraId) {
   etapaObraId = obraId;
+  const _box=document.getElementById('obraEditInline'); if(_box) _box.style.display='none';
+  const _btn=document.getElementById('btnEditarObraInline'); if(_btn) _btn.style.display='';
   const obra = await api('/api/obras/' + obraId).then(r => r.json());
-  document.getElementById('tituloEtapas').textContent = 'Etapas - ' + obra.nome;
-  document.getElementById('infoObraEtapas').innerHTML = '📍 ' + (obra.comarca || 'Sem comarca') + ' | Progresso: ' + (obra.progresso || 0) + '%';
+  document.getElementById('tituloEtapas').textContent = 'Detalhes da Obra';
+  document.getElementById('infoObraEtapas').dataset.base = '📍 ' + (obra.comarca || 'Sem comarca') + ' | Progresso: ' + (obra.progresso || 0) + '%';
+  try {
+    const rdos = await api('/api/rdos?obra_id=' + obraId).then(r => r.json());
+    const datas = (rdos || []).map(r => r.data).filter(Boolean).sort();
+    _etapaRdoStats = { total: (rdos || []).length, ultimo: datas.length ? datas[datas.length - 1].slice(0, 10) : '' };
+  } catch (e) { _etapaRdoStats = null; }
+  renderObraHead(obra, _etapaRdoStats);
   await carregarEtapas(obraId);
   document.getElementById('modalEtapas').classList.add('show');
 }
 
-async function carregarEtapas(obraId) {
-  const etapas = await api('/api/obras/' + obraId + '/etapas').then(r => r.json());
-  const div = document.getElementById('listaEtapas');
-  div.innerHTML = etapas.map(e => {
+async function abrirRelatoriosDaObra(){
+  document.getElementById('modalEtapas').classList.remove('show');
+  document.querySelector('nav.tabs button[data-view=desempenho]').click();
+  setTimeout(()=>{
+    const sel=document.getElementById('filtroDesempenhoObra');
+    if(sel && etapaObraId){ sel.value=etapaObraId; carregarDesempenho(); }
+  }, 80);
+}
+// Edição inline da obra dentro do Detalhes (não precisa voltar ao form de cima)
+async function entrarEdicaoObraInline(){
+  if(!etapaObraId){ toast('Abra os detalhes de uma obra primeiro'); return; }
+  const box=document.getElementById('obraEditInline');
+  const msg=document.getElementById('msgEditObraInline');
+  if(msg) msg.textContent='';
+  try{
+    const [obra, locais]=await Promise.all([
+      api('/api/obras/'+etapaObraId).then(r=>r.json()),
+      api('/api/locais').then(r=>r.json()).catch(()=>[])
+    ]);
+    if(obra.error){ toast(obra.error); return; }
+    document.getElementById('editObraNome').value=obra.nome||'';
+    document.getElementById('editObraStatus').value=obra.status||'planejamento';
+    document.getElementById('editObraResponsavel').value=obra.responsavel||'';
+    document.getElementById('editObraComarca').value=obra.comarca||obra.local_comarca||'';
+    document.getElementById('editObraInicio').value=(obra.data_inicio||'').slice(0,10);
+    document.getElementById('editObraPrazo').value=obra.prazo_dias||30;
+    document.getElementById('editObraDescricao').value=obra.descricao||'';
+    const sel=document.getElementById('editObraLocal');
+    sel.innerHTML='<option value="">Sem local (ex: TJ-CE global)</option>'+(locais||[]).map(l=>'<option value="'+l.id+'">'+l.nome+(l.comarca?' - '+l.comarca:'')+'</option>').join('');
+    sel.value=obra.local_id||'';
+    box.style.display='block';
+    document.getElementById('btnEditarObraInline').style.display='none';
+    box.scrollIntoView({behavior:'smooth',block:'nearest'});
+  }catch(e){ toast('Falha ao carregar obra: '+(e.message||e)); }
+}
+function cancelarEdicaoObraInline(){
+  document.getElementById('obraEditInline').style.display='none';
+  document.getElementById('btnEditarObraInline').style.display='';
+}
+async function salvarEdicaoObraInline(){
+  if(!etapaObraId) return;
+  const msg=document.getElementById('msgEditObraInline');
+  const btn=document.getElementById('btnSalvarObraInline');
+  const nome=document.getElementById('editObraNome').value.trim();
+  if(!nome){ msg.textContent='Nome obrigatório'; msg.style.color='var(--danger)'; return; }
+  const localVal=document.getElementById('editObraLocal').value;
+  const data={
+    nome,
+    status:document.getElementById('editObraStatus').value,
+    responsavel:document.getElementById('editObraResponsavel').value.trim(),
+    comarca:document.getElementById('editObraComarca').value.trim(),
+    local_id:localVal?parseInt(localVal):null,
+    data_inicio:document.getElementById('editObraInicio').value||null,
+    prazo_dias:parseInt(document.getElementById('editObraPrazo').value)||30,
+    descricao:document.getElementById('editObraDescricao').value.trim()
+  };
+  btn.disabled=true; btn.textContent='Salvando...'; msg.textContent='';
+  try{
+    const r=await api('/api/obras/'+etapaObraId,{method:'PUT',body:JSON.stringify(data)});
+    const d=await r.json();
+    if(d.error){ msg.textContent=d.error; msg.style.color='var(--danger)'; return; }
+    msg.textContent='Salvo!'; msg.style.color='var(--ok)';
+    cancelarEdicaoObraInline();
+    const obra=await api('/api/obras/'+etapaObraId).then(x=>x.json());
+    renderObraHead(obra,_etapaRdoStats);
+    if(typeof carregarObras==='function') carregarObras();
+    toast('Obra atualizada!');
+  }catch(e){ msg.textContent='Erro: '+(e.message||e); msg.style.color='var(--danger)'; }
+  btn.disabled=false; btn.textContent='💾 Salvar';
+}
+let _etapasCache = [];
+let _etapaFiltro = '';
+let _etapaStatus = '';
+let _etapaPorNome = '';
+let _etapaMostrar = 60;
+async function carregarEtapas(obraId, manterFiltro) {
+  if (!manterFiltro) { _etapaFiltro = ''; _etapaStatus = ''; _etapaPorNome = ''; _etapaMostrar = 60;
+    const b = document.getElementById('buscaEtapaLocal'); if (b) b.value = '';
+    const s = document.getElementById('filtroEtapaStatus'); if (s) s.value = '';
+  }
+  const [etapas, obra] = await Promise.all([
+    api('/api/obras/' + obraId + '/etapas').then(r => r.json()),
+    api('/api/obras/' + obraId).then(r => r.json()).catch(() => null)
+  ]);
+  _etapasCache = etapas;
+  // progresso ao vivo no cabeçalho (muda sozinho quando chega RDO)
+  const infoEl = document.getElementById('infoObraEtapas');
+  if (infoEl && obra) infoEl.dataset.base = '📍 ' + (obra.comarca || 'Sem comarca') + ' | Progresso: ' + (obra.progresso || 0) + '%';
+  if (obra) renderObraHead(obra, _etapaRdoStats);
+  renderEtapas();
+}
+function renderEtapas() {
+  const etapas = _etapasCache || [];
+  // Sequência lógica: MODELO (checklist da obra) → RDO conclui → POR LOCAL (espelho automático)
+  const modelo = etapas.filter(e => !e.local_id);
+  const porLocal = etapas.filter(e => e.local_id);
+  const infoEl = document.getElementById('infoObraEtapas');
+  if (infoEl && infoEl.dataset.base) infoEl.innerHTML = infoEl.dataset.base + ' • Modelo: ' + modelo.length + ' • Por local: ' + porLocal.length;
+  const conclPorNome = {};
+  porLocal.forEach(e => { if (e.status === 'concluida') { const k = (e.nome || '').toUpperCase(); conclPorNome[k] = (conclPorNome[k] || 0) + 1; } });
+  const nLocais = new Set(porLocal.map(e => e.local_id)).size;
+  const row = (e, clicavel) => {
     const statusCor = e.status === 'concluida' ? 'var(--ok)' : e.status === 'em_andamento' ? '#ef6c00' : 'var(--muted)';
-    return '<div style="display:flex;align-items:center;gap:8px;padding:10px;background:#f7f9fa;border-radius:8px;margin-bottom:6px;border:1px solid var(--line)">' +
-      '<span style="width:24px;height:24px;border-radius:50%;background:' + statusCor + ';color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700">' + e.ordem + '</span>' +
-      '<div style="flex:1"><strong style="font-size:13px">' + e.nome + '</strong>' +
-      (e.observacoes ? '<br><small style="color:var(--muted)">' + e.observacoes + '</small>' : '') + '</div>' +
-      '<select onchange="atualizarStatusEtapa(' + e.id + ',this.value)" style="width:auto;padding:4px 8px;font-size:11px">' +
+    const localBadge = e.local_id ? `<span style="font-size:10px;background:#e3f2fd;color:#1565c0;padding:2px 7px;border-radius:8px">📍 ${e.local_nome || ('local #' + e.local_id)}</span>` : `<span style="font-size:10px;background:#f3e5f5;color:#6a1b9a;padding:2px 7px;border-radius:8px">MODELO</span>`;
+    let extra = '';
+    if (!e.local_id) {
+      const c = conclPorNome[(e.nome || '').toUpperCase()] || 0;
+      extra = `<div style="height:4px;background:var(--line);border-radius:99px;overflow:hidden;margin-top:4px"><div style="height:100%;background:${c ? 'var(--ok)' : 'var(--line)'};width:${nLocais ? Math.round(c / nLocais * 100) : 0}%"></div></div>`
+        + `<div style="font-size:10px;color:var(--muted);margin-top:2px">${c}/${nLocais} locais concluíram • clique para filtrar ↓</div>`;
+    }
+    return '<div ' + (clicavel ? `onclick="_etapaPorNome='${e.nome.replace(/'/g, "\\'")}';_etapaMostrar=60;renderEtapas()" style="cursor:pointer;` : 'style="') + 'display:flex;align-items:center;gap:8px;padding:10px;background:#f7f9fa;border-radius:8px;margin-bottom:6px;border:1px solid var(--line)' + (clicavel && _etapaPorNome === e.nome ? ';border-color:var(--primary);box-shadow:0 0 0 2px rgba(15,61,76,.15)' : '') + '">' +
+      '<span style="width:24px;height:24px;border-radius:50%;background:' + statusCor + ';color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex:none">' + e.ordem + '</span>' +
+      '<div style="flex:1;min-width:0"><strong style="font-size:13px">' + e.nome + '</strong> ' + localBadge +
+      (e.observacoes ? '<br><small style="color:var(--muted)">' + e.observacoes + '</small>' : '') + extra + '</div>' +
+      '<select onclick="event.stopPropagation()" onchange="atualizarStatusEtapa(' + e.id + ',this.value)" style="width:auto;padding:4px 8px;font-size:11px">' +
       '<option value="pendente"' + (e.status === 'pendente' ? ' selected' : '') + '>Pendente</option>' +
       '<option value="em_andamento"' + (e.status === 'em_andamento' ? ' selected' : '') + '>Andamento</option>' +
       '<option value="concluida"' + (e.status === 'concluida' ? ' selected' : '') + '>Concluida</option>' +
       '</select>' +
-      '<button class="btn-delete" onclick="excluirEtapa(' + e.id + ')" style="font-size:14px">&times;</button>' +
+      '<button class="btn-delete" onclick="event.stopPropagation();excluirEtapa(' + e.id + ')" style="font-size:14px">&times;</button>' +
       '</div>';
-  }).join('') || '<p class="empty-state">Nenhuma etapa cadastrada</p>';
+  };
+  const busca = (_etapaFiltro || '').toLowerCase();
+  let lista = porLocal.filter(e => {
+    if (_etapaPorNome && (e.nome || '') !== _etapaPorNome) return false;
+    if (_etapaStatus && e.status !== _etapaStatus) return false;
+    if (busca && !((e.nome || '') + (e.local_nome || '')).toLowerCase().includes(busca)) return false;
+    return true;
+  });
+  const div = document.getElementById('listaEtapas');
+  div.innerHTML =
+    '<div style="display:flex;align-items:center;gap:6px;font-size:11px;font-weight:700;color:var(--muted);margin:6px 0;padding:8px;background:#f7f9fa;border-radius:8px">📋 MODELO (' + modelo.length + ')<span>→</span>📝 RDO conclui<span>→</span>📍 POR LOCAL (' + porLocal.length + ')</div>' +
+    '<div style="font-size:11px;font-weight:700;color:var(--muted);margin:4px 0 6px">📋 MODELO DA OBRA — checklist; clique numa etapa para ver os locais ↓</div>' +
+    (modelo.map(e => row(e, true)).join('') || '<p class="empty-state">Sem modelo — adicione abaixo</p>') +
+    '<div style="font-size:11px;font-weight:700;color:var(--muted);margin:10px 0 6px">📍 POR LOCAL — automático via RDO'
+    + (_etapaPorNome ? ` <button class="btn-small" onclick="_etapaPorNome='';renderEtapas()" style="background:#e1e5ea;color:#1c2b33;padding:2px 8px">✕ ${ _etapaPorNome}</button>` : '') + '</div>' +
+    (lista.slice(0, _etapaMostrar).map(e => row(e, false)).join('') || '<p class="empty-state">Nada aqui — ajuste o filtro ou aguarde o 1º RDO</p>') +
+    (lista.length > _etapaMostrar ? `<div style="text-align:center"><button class="btn-small" onclick="_etapaMostrar+=100;renderEtapas()" style="background:#fff;border:1px solid var(--line);color:var(--muted)">Mostrar mais (${lista.length - _etapaMostrar} restantes)</button></div>` : '');
 }
 
 async function adicionarEtapa() {
@@ -1247,27 +1650,34 @@ async function adicionarEtapa() {
   await api('/api/obras/' + etapaObraId + '/etapas', { method: 'POST', body: JSON.stringify({ nome, ordem }) });
   document.getElementById('etapaNome').value = '';
   document.getElementById('etapaOrdem').value = parseInt(document.getElementById('etapaOrdem').value || '1') + 1;
-  await carregarEtapas(etapaObraId);
+  await carregarEtapas(etapaObraId, true);
   carregarObras();
   toast('Etapa adicionada!');
 }
 
 async function atualizarStatusEtapa(etapaId, status) {
   await api('/api/etapas/' + etapaId, { method: 'PUT', body: JSON.stringify({ status }) });
-  await carregarEtapas(etapaObraId);
+  await carregarEtapas(etapaObraId, true);
   carregarObras();
 }
 
 async function excluirEtapa(etapaId) {
   if (!confirm('Excluir etapa?')) return;
   await api('/api/etapas/' + etapaId, { method: 'DELETE' });
-  await carregarEtapas(etapaObraId);
+  await carregarEtapas(etapaObraId, true);
   carregarObras();
   toast('Etapa excluida');
 }
 
-// RDOs - Visual profissional igual Atividades
+// RDOs - Visual profissional igual Atividades (dinâmico + auditoria)
 let rdosCache=[];
+let rdoVerLixeira=false;
+function toggleLixeira(){
+  rdoVerLixeira=!rdoVerLixeira;
+  const b=document.getElementById('btnLixeira');
+  if(b){ b.textContent=rdoVerLixeira?'📋 Voltar (ativos)':'🗑️ Lixeira'; b.style.background=rdoVerLixeira?'#c62828':'#fff'; b.style.color=rdoVerLixeira?'#fff':'var(--muted)'; }
+  carregarRdos();
+}
 async function carregarRdos() {
   // popula selects de obra/local na primeira carga
   const selObra=document.getElementById('filtroRdoObra');
@@ -1291,6 +1701,7 @@ async function carregarRdos() {
   let url = '/api/rdos?';
   const obraId=document.getElementById('filtroRdoObra')?.value||'';
   if(obraId) url+='obra_id='+obraId+'&';
+  if(rdoVerLixeira) url+='somente_excluidos=1&';
   const data = document.getElementById('filtroRdoData').value;
   if (data) url += 'data_de=' + data + '&data_ate=' + data+'&';
   const busca=(document.getElementById('buscaRdo')?.value||'').trim().toLowerCase();
@@ -1311,17 +1722,222 @@ async function carregarRdos() {
     const cor=coresAtv[r.atividade]|| (r.parou==='sim'?'#c62828':'#0f3d4c');
     const dataFmt=(r.data||'').slice(0,10);
     const hasFoto=(r.fotos_json && r.fotos_json!=='[]');
-    return `<div onclick="verRdo(${r.id})" style="display:flex;align-items:center;gap:12px;padding:12px;background:#fff;border:1px solid var(--line);border-left:4px solid ${cor};border-radius:10px;cursor:pointer">
-      <div style="width:38px;height:38px;border-radius:8px;background:${cor};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;flex:none">${letra}</div>
-      <div style="flex:1;min-width:0">
-        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><strong style="font-size:13px">${r.local||'—'}</strong><span style="font-size:10px;background:${cor};color:#fff;padding:2px 7px;border-radius:8px">${r.atividade||'—'}</span><span style="font-size:10px;background:#f7f9fa;border:1px solid var(--line);padding:2px 7px;border-radius:8px">${dataFmt}</span>${hasFoto?'<span style="font-size:10px;background:#e8f5e9;color:#2e7d32;padding:2px 6px;border-radius:8px">📷</span>':''}${r.parou==='sim'?'<span style="font-size:10px;background:#ffcdd2;color:#c62828;padding:2px 6px;border-radius:8px">⚠️ parada</span>':''}</div>
+    const excluido=Number(r.ativo)===0;
+    return `<div style="display:flex;align-items:center;gap:12px;padding:12px;background:#fff;border:1px solid var(--line);border-left:4px solid ${excluido?'#c62828':cor};border-radius:10px;${excluido?'opacity:.85':''}">
+      <div onclick="verRdo(${r.id})" style="width:38px;height:38px;border-radius:8px;background:${excluido?'#c62828':cor};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;flex:none;cursor:pointer">${letra}</div>
+      <div style="flex:1;min-width:0" onclick="verRdo(${r.id})">
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><strong style="font-size:13px">${r.local||'—'}</strong><span style="font-size:10px;background:${cor};color:#fff;padding:2px 7px;border-radius:8px">${r.atividade||'—'}</span><span style="font-size:10px;background:#f7f9fa;border:1px solid var(--line);padding:2px 7px;border-radius:8px">${dataFmt}</span>${hasFoto?'<span style="font-size:10px;background:#e8f5e9;color:#2e7d32;padding:2px 6px;border-radius:8px">📷</span>':''}${r.parou==='sim'?'<span style="font-size:10px;background:#ffcdd2;color:#c62828;padding:2px 6px;border-radius:8px">⚠️ parada</span>':''}${excluido?'<span style="font-size:10px;background:#c62828;color:#fff;padding:2px 6px;border-radius:8px">🗑️ excluído por '+(r.excluido_por||'?')+'</span>':''}</div>
         <div style="font-size:11px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">🏗️ ${r.obra_nome||'—'} • 👤 ${r.usuario_nome||'—'} • ${r.cidade||''}</div>
-        <div style="font-size:11px;color:var(--muted)">🕒 ${(r.entrada_manha||'—')+'-'+(r.saida_manha||'—')} • ${(r.entrada_tarde||'—')+'-'+(r.saida_tarde||'—')}</div>
+        <div style="font-size:11px;color:var(--muted)">🕒 ${(r.entrada_manha||'—')+'-'+(r.saida_manha||'—')} • ${(r.entrada_tarde||'—')+'-'+(r.saida_tarde||'—')}${r.atualizado_por?' • ✏️ editado por '+r.atualizado_por:''}</div>
+        ${excluido?'<div style="font-size:11px;color:#c62828">Motivo: '+(r.motivo_exclusao||'-')+'</div>':''}
       </div>
-      <span style="font-size:11px;color:var(--primary);font-weight:700;flex:none">Ver →</span>
+      <div style="display:flex;flex-direction:column;gap:4px;flex:none">
+        <button class="btn-small" onclick="verRdo(${r.id})" style="background:#0f3d4c;padding:4px 8px;font-size:11px">Ver</button>
+        ${excluido
+          ? `<button class="btn-small" onclick="restaurarRdo(${r.id})" style="background:#2e7d32;padding:4px 8px;font-size:11px">Restaurar</button>`
+          : `<button class="btn-small" onclick="editarRdoPainel(${r.id})" style="background:#1565c0;padding:4px 8px;font-size:11px">Editar</button>
+             <button class="btn-small" onclick="excluirRdoPainel(${r.id})" style="background:#fff;border:1px solid #ffcdd2;color:#c62828;padding:4px 8px;font-size:11px">Excluir</button>`}
+        <button class="btn-small" onclick="verHistoricoRdo(${r.id})" title="Quem criou/editou/apagou" style="background:#f7f9fa;border:1px solid var(--line);color:var(--muted);padding:4px 8px;font-size:11px">🕵️ Hist</button>
+      </div>
     </div>`;
   }).join('') + (rdos.length>200? `<p style="text-align:center;font-size:11px;color:var(--muted);margin-top:8px">Mostrando 200 de ${rdos.length} — refine o filtro</p>`:'');
 }
+// --- Dinâmica + auditoria (painel gestor) ---
+// Crítica gestor de obras: RDO é documento legal — prompt() com 2 campos não serve.
+// Edição completa: data, obra, local, atividade, horários, parada, switch/câmera + motivo obrigatório.
+async function editarRdoPainel(id){
+  const r=await api('/api/rdos/'+id).then(r=>r.json());
+  if(r.error){ toast(r.error); return; }
+  let obras=[]; try{ obras=await api('/api/obras').then(r=>r.json()); }catch(e){}
+  let atividades=[]; try{ atividades=await api('/api/atividades').then(r=>r.json()); }catch(e){}
+  const esc=s=>String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  const optObras=obras.filter(o=>o.ativo!==0).map(o=>`<option value="${o.id}"${Number(o.id)===Number(r.obra_id)?' selected':''}>${esc(o.nome)}</option>`).join('');
+  const atvList=(atividades&&atividades.length?atividades.map(a=>a.nome):['Levantamento','Infraestrutura','Cabeamento','Instalação e Testes']);
+  const optAtv=atvList.map(a=>`<option${a===r.atividade?' selected':''}>${esc(a)}</option>`).join('')+`<option value="__outra">Outra…</option>`;
+  let eqTxt=''; try{ eqTxt=(JSON.parse(r.equipe_json||'[]')||[]).join(', '); }catch(e){}
+  let matTxt=''; try{ matTxt=(JSON.parse(r.materiais_json||'[]')||[]).map(m=>`${m.nome} x ${m.qtd}`).join('\n'); }catch(e){}
+  document.getElementById('detalheBody').innerHTML=
+   `<h4 style="margin:0 0 4px">✏️ Editar RDO #${id}</h4>`
+   +`<p style="font-size:11px;color:var(--muted);margin:0 0 10px">Documento de obra: qualquer alteração gera trilha (quem/quando/motivo + antes/depois). Técnico dono também pode editar no app, mas com motivo.</p>`
+   +`<div style="display:grid;gap:8px">`
+   +`<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><label style="font-size:11px">Data*<input type="date" id="edRdoData" value="${esc((r.data||'').slice(0,10))}" style="width:100%;padding:8px;border:1.5px solid var(--line);border-radius:8px"></label>`
+   +`<label style="font-size:11px">Atividade*<select id="edRdoAtv" style="width:100%;padding:8px;border:1.5px solid var(--line);border-radius:8px">${optAtv}</select></label></div>`
+   +`<label id="edRdoAtvOutraWrap" style="font-size:11px;display:none">Outra atividade<input id="edRdoAtvOutra" style="width:100%;padding:8px;border:1.5px solid var(--line);border-radius:8px"></label>`
+   +`<label style="font-size:11px">Obra<select id="edRdoObra" style="width:100%;padding:8px;border:1.5px solid var(--line);border-radius:8px"><option value="">Manter atual</option>${optObras}</select></label>`
+   +`<label style="font-size:11px">Local* (nome exato)<input id="edRdoLocal" value="${esc(r.local||'')}" style="width:100%;padding:8px;border:1.5px solid var(--line);border-radius:8px"></label>`
+   +`<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">`
+   +`<label style="font-size:11px">Manhã entrada<input type="time" id="edRdoEM" value="${esc(r.entrada_manha||'')}" style="width:100%;padding:8px;border:1.5px solid var(--line);border-radius:8px"></label>`
+   +`<label style="font-size:11px">Manhã saída<input type="time" id="edRdoSM" value="${esc(r.saida_manha||'')}" style="width:100%;padding:8px;border:1.5px solid var(--line);border-radius:8px"></label>`
+   +`<label style="font-size:11px">Tarde entrada<input type="time" id="edRdoET" value="${esc(r.entrada_tarde||'')}" style="width:100%;padding:8px;border:1.5px solid var(--line);border-radius:8px"></label>`
+   +`<label style="font-size:11px">Tarde saída<input type="time" id="edRdoST" value="${esc(r.saida_tarde||'')}" style="width:100%;padding:8px;border:1.5px solid var(--line);border-radius:8px"></label></div>`
+   +`<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">`
+   +`<label style="font-size:11px">Parou?<select id="edRdoParou" style="width:100%;padding:8px;border:1.5px solid var(--line);border-radius:8px"><option value="nao"${r.parou!=='sim'?' selected':''}>Não</option><option value="sim"${r.parou==='sim'?' selected':''}>Sim</option></select></label>`
+   +`<label style="font-size:11px">Motivo parada<input id="edRdoMotParada" value="${esc(r.motivo_parada||'')}" style="width:100%;padding:8px;border:1.5px solid var(--line);border-radius:8px"></label></div>`
+   +`<details style="font-size:11px;border:1px solid var(--line);border-radius:8px;padding:8px"><summary style="cursor:pointer;font-weight:700">Switch / Câmera (opcional)</summary>`
+   +`<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px">`
+   +`<label>Switch?<select id="edRdoSW" style="width:100%;padding:8px;border:1.5px solid var(--line);border-radius:8px"><option value="nao"${r.switch_instalado!=='sim'?' selected':''}>Não</option><option value="sim"${r.switch_instalado==='sim'?' selected':''}>Sim</option></select></label>`
+   +`<label>Nom switch<input id="edRdoNomSW" value="${esc(r.nom_switch||'')}" style="width:100%;padding:8px;border:1.5px solid var(--line);border-radius:8px"></label>`
+   +`<label>Local switch<input id="edRdoLocSW" value="${esc(r.local_switch||'')}" style="width:100%;padding:8px;border:1.5px solid var(--line);border-radius:8px"></label>`
+   +`<label>Câmera?<select id="edRdoCAM" style="width:100%;padding:8px;border:1.5px solid var(--line);border-radius:8px"><option value="nao"${r.camera_instalada!=='sim'?' selected':''}>Não</option><option value="sim"${r.camera_instalada==='sim'?' selected':''}>Sim</option></select></label>`
+   +`<label>Nom câmera<input id="edRdoNomCAM" value="${esc(r.nom_camera||'')}" style="width:100%;padding:8px;border:1.5px solid var(--line);border-radius:8px"></label>`
+   +`<label>Local câmera<input id="edRdoLocCAM" value="${esc(r.local_camera||'')}" style="width:100%;padding:8px;border:1.5px solid var(--line);border-radius:8px"></label></div></details>`
+   +`<details open style="font-size:11px;border:1px solid var(--line);border-radius:8px;padding:8px"><summary style="cursor:pointer;font-weight:700">👥 Equipe / 📦 Materiais</summary>`
+   +`<label style="display:block;margin-top:6px">Equipe (nomes separados por vírgula)<textarea id="edRdoEquipe" rows="2" style="width:100%;padding:8px;border:1.5px solid var(--line);border-radius:8px">${esc(eqTxt)}</textarea></label>`
+   +`<label style="display:block;margin-top:6px">Materiais (1 por linha: NOME x QTD)<textarea id="edRdoMats" rows="3" placeholder="CABO UTP x 10&#10;CONECTOR RJ45 x 50" style="width:100%;padding:8px;border:1.5px solid var(--line);border-radius:8px">${esc(matTxt)}</textarea></label></details>`
+   +`<label style="font-size:11px">Motivo da edição* (auditoria, min. 3 letras)<input id="edRdoMotivo" placeholder="Ex: data errada, horário corrigido pelo encarregado…" style="width:100%;padding:8px;border:1.5px solid #1565c0;border-radius:8px"></label>`
+   +`<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn-small" onclick="salvarEdicaoRdoPainel(${id})" style="background:#1565c0;flex:1">💾 Salvar (auditado)</button>`
+   +`<button class="btn-small" onclick="verRdo(${id})" style="background:#e1e5ea;color:#1c2b33">Voltar</button></div>`
+   +`</div>`;
+  document.getElementById('modalDetalhe').classList.add('show');
+  const selAtv=document.getElementById('edRdoAtv');
+  selAtv.onchange=()=>{ document.getElementById('edRdoAtvOutraWrap').style.display=selAtv.value==='__outra'?'block':'none'; };
+}
+async function salvarEdicaoRdoPainel(id){
+  const v=i=>document.getElementById(i)?.value||'';
+  let atv=v('edRdoAtv'); if(atv==='__outra') atv=v('edRdoAtvOutra').trim();
+  const motivo=v('edRdoMotivo').trim();
+  if(!v('edRdoData')||!v('edRdoLocal').trim()||!atv){ toast('Data, local e atividade são obrigatórios'); return; }
+  if(!motivo||motivo.length<3){ toast('Motivo da edição obrigatório (min. 3 letras)'); return; }
+  const equipe=v('edRdoEquipe').split(/[,\n;]+/).map(s=>s.trim()).filter(Boolean);
+  const materiais=v('edRdoMats').split('\n').map(l=>l.trim()).filter(Boolean).map(l=>{
+    const m=l.match(/^(.+?)\s*[x×:;|]\s*(\d+(?:[.,]\d+)?)$/);
+    if(m) return { nome:m[1].trim(), qtd:Number(m[2].replace(',','.'))||1 };
+    return { nome:l, qtd:1 };
+  });
+  const body={ data:v('edRdoData'), local:v('edRdoLocal').trim(), atividade:atv,
+    entrada_manha:v('edRdoEM'), saida_manha:v('edRdoSM'), entrada_tarde:v('edRdoET'), saida_tarde:v('edRdoST'),
+    parou:v('edRdoParou'), motivo_parada:v('edRdoMotParada'),
+    switch_instalado:v('edRdoSW'), nom_switch:v('edRdoNomSW'), local_switch:v('edRdoLocSW'),
+    camera_instalada:v('edRdoCAM'), nom_camera:v('edRdoNomCAM'), local_camera:v('edRdoLocCAM'),
+    equipe, materiais, motivo_edicao:motivo };
+  const obraSel=v('edRdoObra'); if(obraSel) body.obra_id=Number(obraSel);
+  const resp=await api('/api/rdos/'+id,{method:'PUT',body:JSON.stringify(body)}).then(r=>r.json());
+  if(resp.ok){ toast('RDO #'+id+' atualizado (auditado)'); document.getElementById('modalDetalhe').classList.remove('show'); carregarRdos(); }
+  else toast('Erro: '+(resp.error||'tente novamente'));
+}
+async function excluirRdoPainel(id){
+  const motivo=prompt('EXCLUIR RDO #'+id+'\n\nMotivo obrigatório (auditoria — quem apagou fica registrado):','');
+  if(motivo===null) return;
+  if(!motivo || motivo.trim().length<5){ toast('Exclusão cancelada: motivo min. 5 letras'); return; }
+  if(!confirm('Confirmar exclusão lógica do RDO #'+id+'?\nEle sai das listas/m-template/medição mas fica na Lixeira com auditoria.')) return;
+  const resp=await api('/api/rdos/'+id,{method:'DELETE',body:JSON.stringify({motivo:motivo.trim()})}).then(r=>r.json());
+  if(resp.ok){ toast('RDO excluído — auditado ('+(resp.auditoria?.por||'')+')'); carregarRdos(); }
+  else toast('Erro: '+(resp.error||'tente novamente'));
+}
+async function restaurarRdo(id){
+  if(!confirm('Restaurar RDO #'+id+'? Ele volta para listas e medições.')) return;
+  const resp=await api('/api/rdos/'+id+'/restaurar',{method:'POST',body:JSON.stringify({})}).then(r=>r.json());
+  if(resp.ok){ toast('RDO #'+id+' restaurado'); carregarRdos(); }
+  else toast('Erro: '+(resp.error||'tente novamente'));
+}
+async function verHistoricoRdo(id){
+  const h=await api('/api/rdos/'+id+'/historico').then(r=>r.json());
+  if(h.error){ toast(h.error); return; }
+  if(!h.length){ toast('Sem eventos de auditoria para #'+id+' (RDO antigo, anterior à trilha)'); return; }
+  const esc=s=>String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').slice(0,300);
+  const html='<div style="display:grid;gap:8px;max-height:50vh;overflow:auto">'+h.map(e=>{
+    const qdo=(e.criado_em||'').toString().slice(0,19).replace('T',' ');
+    const cor=e.acao==='EXCLUSAO'?'#c62828':e.acao==='EDICAO'?'#1565c0':e.acao==='RESTAURACAO'?'#2e7d32':'#68767f';
+    let diff='';
+    try{
+      const a=JSON.parse(e.dados_antes||'{}'), b=JSON.parse(e.dados_depois||'{}');
+      const chaves=[...new Set([...Object.keys(a),...Object.keys(b)])].filter(k=>!k.includes('json')&&!k.includes('criado'));
+      const mud=chaves.filter(k=>String(a[k]??'')!==String(b[k]??'')).slice(0,8);
+      if(mud.length) diff='<div style="font-size:11px;margin-top:4px;background:#f7f9fa;border-radius:6px;padding:6px">'
+        +mud.map(k=>`<div>• <strong>${esc(k)}</strong>: ${esc(a[k]??'—')} → <strong>${esc(b[k]??'—')}</strong></div>`).join('')+'</div>';
+    }catch(_){}
+    return `<div style="border:1px solid var(--line);border-left:4px solid ${cor};border-radius:8px;padding:8px;background:#fff">
+      <div style="font-size:12px"><strong style="color:${cor}">${e.acao}</strong> • ${qdo}</div>
+      <div style="font-size:12px">👤 ${esc(e.usuario_nome||'-')}${e.motivo?' • 📝 '+esc(e.motivo):''}</div>${diff}
+    </div>`;
+  }).join('')+'</div>';
+  document.getElementById('detalheBody').innerHTML='<h4 style="margin:0 0 8px">🕵️ Auditoria — RDO #'+id+'</h4>'+html
+    +'<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap"><button class="btn-small" onclick="verRdo('+id+')" style="background:#e1e5ea;color:#1c2b33">← Voltar ao RDO</button>'
+    +'<button class="btn-small" onclick="exportarHistoricoRdo('+id+')" style="background:#1b5e20">📗 Excel p/ fiscal</button></div>';
+  document.getElementById('modalDetalhe').classList.add('show');
+}
+async function exportarHistoricoRdo(id){
+  const h=await api('/api/rdos/'+id+'/historico').then(r=>r.json());
+  if(!h || h.error || !h.length){ toast('Sem auditoria para exportar'); return; }
+  const rows=[['RDO','Data/Hora','Acao','Usuario','Motivo','O que mudou (antes -> depois)']];
+  h.forEach(e=>{
+    const qdo=(e.criado_em||'').toString().slice(0,19).replace('T',' ');
+    let mud='';
+    try{
+      const a=JSON.parse(e.dados_antes||'{}'), b=JSON.parse(e.dados_depois||'{}');
+      const ch=[...new Set([...Object.keys(a),...Object.keys(b)])].filter(k=>!k.includes('criado'));
+      mud=ch.filter(k=>String(a[k]??'')!==String(b[k]??'')).map(k=>{
+        const fa=x=>{ try{ const j=JSON.parse(x); return Array.isArray(j)?j.map(j2=>j2.nome||j2).join(', '):x; }catch(_){ return String(x??'—').slice(0,120); } };
+        return k+': '+(fa(a[k])||'—')+' -> '+(fa(b[k])||'—');
+      }).join(' | ');
+    }catch(_){}
+    rows.push([id, qdo, e.acao||'', e.usuario_nome||'', e.motivo||'', mud.slice(0,2000)]);
+  });
+  const wb=XLSX.utils.book_new(); const ws=XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols']=[{wch:8},{wch:19},{wch:13},{wch:22},{wch:40},{wch:80}];
+  XLSX.utils.book_append_sheet(wb, ws, 'Auditoria_RDO_'+id);
+  const nome=`auditoria_rdo_${id}_${new Date().toISOString().slice(0,10)}.xlsx`;
+  XLSX.writeFile(wb, nome); toast('Excel exportado: '+nome);
+}
+// --- Auditoria geral (aba) ---
+let _audTimer=null;
+function carregarAuditoriaDeb(){ clearTimeout(_audTimer); _audTimer=setTimeout(carregarAuditoria, 400); }
+async function carregarAuditoria(){
+  const selObra=document.getElementById('filtroAudObra');
+  if(selObra && selObra.options.length<=1){
+    try{
+      const obras=await api('/api/obras').then(r=>r.json());
+      selObra.innerHTML='<option value="">Todas obras</option>'+obras.filter(o=>o.ativo!==0).map(o=>`<option value="${o.id}">${o.nome}</option>`).join('');
+    }catch(e){}
+  }
+  let url='/api/auditoria/rdo?limit=200&';
+  const acao=document.getElementById('filtroAudAcao')?.value||'';
+  if(acao) url+='acao='+acao+'&';
+  const obra=document.getElementById('filtroAudObra')?.value||'';
+  if(obra) url+='obra_id='+obra+'&';
+  const busca=(document.getElementById('buscaAud')?.value||'').trim();
+  if(busca) url+='busca='+encodeURIComponent(busca)+'&';
+  const h=await api(url).then(r=>r.json()).catch(()=>[]);
+  if(!Array.isArray(h)){ toast('Erro ao carregar auditoria'); return; }
+  window._audCache=h;
+  document.getElementById('auditoriaBadge').textContent=h.length+' eventos';
+  document.getElementById('auditoriaInfo').textContent=h.length+' evento(s) • mais recentes primeiro';
+  const esc=s=>String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').slice(0,200);
+  document.getElementById('listaAuditoria').innerHTML=h.length?h.slice(0,200).map(e=>{
+    const qdo=(e.criado_em||'').toString().slice(0,19).replace('T',' ');
+    const cor=e.acao==='EXCLUSAO'?'#c62828':e.acao==='EDICAO'?'#1565c0':e.acao==='RESTAURACAO'?'#2e7d32':'#68767f';
+    return `<div style="border:1px solid var(--line);border-left:4px solid ${cor};border-radius:8px;padding:8px;background:#fff;display:flex;gap:10px;align-items:center;flex-wrap:wrap;cursor:pointer" onclick="verRdo(${e.rdo_id})">`
+      +`<strong style="font-size:12px;color:${cor}">${e.acao}</strong>`
+      +`<span style="font-size:11px;background:#f7f9fa;border:1px solid var(--line);padding:2px 7px;border-radius:8px">RDO #${e.rdo_id}</span>`
+      +`<span style="font-size:11px">👤 ${esc(e.usuario_nome||'-')}</span>`
+      +`<span style="font-size:11px;color:var(--muted)">${qdo} • 📍 ${esc(e.rdo_local||'-')} • ${esc(e.rdo_atividade||'')}</span>`
+      +(e.motivo?`<span style="font-size:11px">📝 ${esc(e.motivo)}</span>`:'')
+      +`<span style="font-size:11px;color:var(--primary);font-weight:700;margin-left:auto">Ver RDO →</span></div>`;
+  }).join(''):'<p class="empty-state">Nenhum evento. RDOs antigos (anteriores à trilha) não aparecem aqui.</p>';
+}
+async function exportarAuditoriaExcel(){
+  const h=window._audCache||await api('/api/auditoria/rdo?limit=500').then(r=>r.json()).catch(()=>[]);
+  if(!h.length){ toast('Sem auditoria para exportar'); return; }
+  const rows=[['RDO','Data/Hora','Acao','Usuario','Motivo','Local','Atividade']];
+  h.forEach(e=>rows.push([e.rdo_id,(e.criado_em||'').toString().slice(0,19).replace('T',' '),e.acao||'',e.usuario_nome||'',(e.motivo||'').slice(0,500),e.rdo_local||'',e.rdo_atividade||'']));
+  const wb=XLSX.utils.book_new(); const ws=XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols']=[{wch:8},{wch:19},{wch:13},{wch:22},{wch:50},{wch:30},{wch:22}];
+  XLSX.utils.book_append_sheet(wb, ws, 'Auditoria');
+  const nome=`auditoria_rdos_${new Date().toISOString().slice(0,10)}.xlsx`;
+  XLSX.writeFile(wb, nome); toast('Excel exportado: '+nome);
+}
+// Tempo real: se outro técnico/gestor criar, editar ou excluir, atualiza a lista sozinho
+try{
+  const _sock=io({auth:{token}});
+  _sock.on('rdo_novo',()=>{ if(document.getElementById('view-rdos')?.classList.contains('active')) carregarRdos(); });
+  _sock.on('rdo_atualizado',()=>{ if(document.getElementById('view-rdos')?.classList.contains('active')) carregarRdos(); });
+  _sock.on('rdo_excluido',()=>{ if(document.getElementById('view-rdos')?.classList.contains('active')) carregarRdos(); });
+  _sock.on('rdo_restaurado',()=>{ carregarRdos(); });
+  // Etapas ao vivo: RDO novo de técnico atualiza o modal aberto e a lista de obras sozinho
+  const _reEtapas=()=>{ if(document.getElementById('modalEtapas')?.classList.contains('show') && typeof etapaObraId!=='undefined' && etapaObraId){ carregarEtapas(etapaObraId, true); carregarObras(); } };
+  _sock.on('rdo_novo', _reEtapas);
+  _sock.on('rdo_atualizado', _reEtapas);
+}catch(e){}
 async function exportarRdosExcel(){
   if(!rdosCache.length){ toast('Nenhum RDO para exportar'); return; }
   const wb=XLSX.utils.book_new();
@@ -1360,8 +1976,16 @@ async function verRdo(id) {
   html += '<div class="detail-row"><span>Switch</span><span>' + (rdo.switch_instalado === 'sim' ? rdo.nom_switch + ' / ' + rdo.local_switch : 'Nao') + '</span></div>';
   html += '<div class="detail-row"><span>Camera</span><span>' + (rdo.camera_instalada === 'sim' ? rdo.nom_camera + ' / ' + rdo.local_camera : 'Nao') + '</span></div>';
   html += '<div class="detail-row"><span>Registrado por</span><span>' + (rdo.usuario_nome || '-') + '</span></div>';
+  if (rdo.atualizado_por) html += '<div class="detail-row"><span>Editado por</span><span>' + rdo.atualizado_por + ' • ' + (rdo.atualizado_em || '') + '</span></div>';
+  if (Number(rdo.ativo) === 0) html += '<div class="detail-row" style="color:#c62828"><span>Excluído por</span><span>' + (rdo.excluido_por || '-') + ' • ' + (rdo.excluido_em || '') + '</span></div>' + '<div class="detail-row" style="color:#c62828"><span>Motivo</span><span>' + (rdo.motivo_exclusao || '-') + '</span></div>';
   if (mats.length) { html += '<label style="margin-top:10px">Materiais</label>'; mats.forEach(m => { html += '<div class="detail-row"><span>' + m.nome + '</span><span>' + m.qtd + '</span></div>'; }); }
   if (fotos.length) { html += '<label style="margin-top:10px">Fotos</label><div class="foto-grid">' + fotos.map(f => '<img src="' + f + '">').join('') + '</div>'; }
+  html += '<div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">'
+    + (Number(rdo.ativo) === 0
+      ? '<button class="btn-small" onclick="restaurarRdo(' + rdo.id + ')" style="background:#2e7d32">♻️ Restaurar</button>'
+      : '<button class="btn-small" onclick="editarRdoPainel(' + rdo.id + ')" style="background:#1565c0">✏️ Editar</button>'
+      + '<button class="btn-small" onclick="excluirRdoPainel(' + rdo.id + ')" style="background:#fff;border:1px solid #ffcdd2;color:#c62828">🗑️ Excluir</button>')
+    + '<button class="btn-small" onclick="verHistoricoRdo(' + rdo.id + ')" style="background:#f7f9fa;border:1px solid var(--line);color:var(--muted)">🕵️ Auditoria</button></div>';
   document.getElementById('detalheBody').innerHTML = html;
   document.getElementById('modalDetalhe').classList.add('show');
 }
@@ -1378,7 +2002,11 @@ async function carregarLocais() {
   selComarca.value = valComarca;
 
   const selObra = document.getElementById('localObraSelect');
+  const curObra = selObra.value;
   selObra.innerHTML = '<option value="">Selecione a obra</option>' + obras.map(o => '<option value="' + o.id + '">' + o.nome + (o.comarca ? ' - ' + o.comarca : '') + '</option>').join('');
+  selObra.value = curObra;
+  const selNovaObra = document.getElementById('novoLocObra');
+  if(selNovaObra){ const v = selNovaObra.value; selNovaObra.innerHTML = '<option value="">Obra (opcional)...</option>' + obras.filter(o=>o.ativo!==0).map(o => '<option value="' + o.id + '">' + o.nome + '</option>').join(''); selNovaObra.value = v; }
 
   // popular atribuição equipe
   const selAtrib = document.getElementById('atribEquipe');
@@ -1388,13 +2016,16 @@ async function carregarLocais() {
     selAtrib.value = cur;
   }
 
-  // Carregar todos os locais para o select de vinculo
+  // Carregar todos os locais para o select de vinculo (só preenche se vazio — o filtro por obra é do carregarVinculoObra)
   const todosLocais = await api('/api/locais').then(r => r.json());
   const selLocal = document.getElementById('localSelect');
-  selLocal.innerHTML = '<option value="">Selecione o local</option>' + todosLocais.map(l => '<option value="' + l.id + '">' + l.nome + ' - ' + (l.comarca || '') + '</option>').join('');
+  if(selLocal && selLocal.options.length <= 1){
+    selLocal.innerHTML = '<option value="">Selecione o local</option>' + todosLocais.map(l => '<option value="' + l.id + '">' + l.nome + ' - ' + (l.comarca || '') + '</option>').join('');
+  }
 
-  // Filtrar locais
+  // Filtrar locais (com opcao de ver inativos p/ reativar)
   let url = '/api/locais?';
+  if(document.getElementById('chkInativosLoc')?.checked) url += 'ativo=todos&';
   if (selComarca.value) url += 'comarca=' + encodeURIComponent(selComarca.value) + '&';
   const busca = document.getElementById('buscaLocal').value;
   if (busca) url += 'busca=' + encodeURIComponent(busca);
@@ -1411,22 +2042,41 @@ async function carregarLocais() {
     const prog = obra? (obra.progresso||0) : 0;
     const status = obra? obra.status : 'sem obra';
     const corProg = prog===100?'#2e7d32': prog>0?'#ef6c00':'#90a4ae';
+    const inativo = Number(l.ativo) === 0;
     const regiaoBadge = l.regiao ? `<span style="background:${equipes.find(e=>e.nome===l.regiao)?.cor||'#1565c0'};color:#fff;padding:2px 7px;border-radius:10px;font-size:10px">${l.regiao}</span>` : '<span style="background:#ffcdd2;color:#c62828;padding:2px 6px;border-radius:8px;font-size:10px">SEM EQUIPE</span>';
-    return '<div style="padding:10px;background:#fff;border-radius:9px;margin-bottom:6px;border:1px solid var(--line);display:flex;gap:8px;align-items:flex-start">' +
-    `<input type="checkbox" class="chk-local" value="${l.id}" style="margin-top:4px;accent-color:var(--primary)">` +
-    '<div style="flex:1;min-width:0"><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><strong style="font-size:13px">' + l.nome + '</strong>' + regiaoBadge + (obra? `<span style="font-size:10px;background:#e8f5e9;color:#2e7d32;padding:2px 6px;border-radius:8px">${prog}%</span>`:'') + '</div>' +
+    return '<div style="padding:10px;background:#fff;border-radius:9px;margin-bottom:6px;border:1px solid var(--line);display:flex;gap:8px;align-items:flex-start;opacity:'+(inativo?'.65':'1')+'">' +
+    (inativo?'':`<input type="checkbox" class="chk-local" value="${l.id}" style="margin-top:4px;accent-color:var(--primary)">`) +
+    '<div style="flex:1;min-width:0"><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><strong style="font-size:13px">' + l.nome + '</strong>' + (inativo?'<span style="font-size:10px;background:#e0e0e0;color:#555;padding:2px 7px;border-radius:8px">INATIVO</span>':'') + regiaoBadge + (obra? `<span style="font-size:10px;background:#e8f5e9;color:#2e7d32;padding:2px 6px;border-radius:8px">${prog}%</span>`:'') + '</div>' +
     '<span style="font-size:11px;color:var(--muted)">' + (l.comarca || '') + ' • ' + (l.tipo || '') + ' • ' + (l.ocupacao || '') + '</span><br>' +
     '<span style="font-size:11px;color:var(--muted)">' + (l.endereco || '') + '</span><br>' +
     '<span style="font-size:11px;color:var(--muted)">📷 ' + (l.cameras || 0) + ' ('+(l.cam_fixa||0)+'/'+(l.cam_analitica||0)+'/'+(l.cam_lpr||0)+') • '+(l.area||'-')+ (obra? ` • <strong style="color:${corProg}">${prog}% ${status}</strong>`:'') + '</span>' +
     (obra? `<div style="height:4px;background:var(--line);border-radius:99px;margin-top:4px;overflow:hidden"><div style="height:100%;background:${corProg};width:${prog}%"></div></div>`:'') +
     (l.google_maps_link ? ' <a href="' + l.google_maps_link + '" target="_blank" style="font-size:11px;color:var(--primary)">Maps</a>' : '') +
     '</div>' +
-    '<button class="btn-delete" onclick="excluirLocal(' + l.id + ')" title="Desativar">&times;</button>' +
+    (inativo
+      ? '<button class="btn-small" onclick="reativarLocal(' + l.id + ')" title="Reativar" style="background:#e8f5e9;color:#2e7d32;border:1px solid #a5d6a7">↩ Reativar</button>'
+      : '<button class="btn-delete" onclick="excluirLocal(' + l.id + ')" title="Desativar">&times;</button>') +
     '</div>';
   }).join('') || '<p class="empty-state">Nenhum local</p>';
 }
-async function atribuirSelecionados(){
-  const regiao = document.getElementById('atribEquipe').value;
+async function criarLocal(){
+  const nome = document.getElementById('novoLocNome').value.trim();
+  const comarca = document.getElementById('novoLocComarca').value.trim();
+  const endereco = document.getElementById('novoLocEndereco').value.trim();
+  const obra_id = document.getElementById('novoLocObra').value || null;
+  const msg = document.getElementById('msgNovoLoc');
+  if(!nome){ msg.textContent = 'Nome obrigatório'; msg.style.color = 'var(--danger)'; toast('Nome obrigatório'); return; }
+  msg.textContent = 'Criando...'; msg.style.color = 'var(--muted)';
+  const r = await api('/api/locais', { method: 'POST', body: JSON.stringify({ nome, comarca, endereco, obra_id }) });
+  const d = await r.json().catch(()=>({}));
+  if(d.error || !d.id){ msg.textContent = d.error || 'Erro ao criar'; msg.style.color = 'var(--danger)'; toast(d.error || 'Erro'); return; }
+  document.getElementById('novoLocNome').value = '';
+  document.getElementById('novoLocComarca').value = '';
+  document.getElementById('novoLocEndereco').value = '';
+  msg.textContent = '✅ Local criado!'; msg.style.color = 'var(--ok)';
+  await carregarLocais(); toast('Local criado!');
+}
+async function atribuirSelecionados(){  const regiao = document.getElementById('atribEquipe').value;
   const ids = Array.from(document.querySelectorAll('.chk-local:checked')).map(c=>parseInt(c.value));
   const msg=document.getElementById('msgAtribuir');
   if(!regiao){ msg.textContent='Selecione a equipe'; msg.style.color='var(--danger)'; return; }
@@ -1452,6 +2102,7 @@ async function carregarVinculoObra(){
   if(!obraId){ info.textContent='Selecione uma obra acima'; lista.style.display='none'; lista.innerHTML=''; return; }
   info.textContent='Carregando...'; lista.style.display='block';
   const obra=await api('/api/obras/'+obraId).then(r=>r.json()).catch(()=>({nome:'Obra'}));
+  const isGlobalTJ = obra && obra.nome && obra.nome.trim().toUpperCase().replace(/[-\s]/g,'')==='TJCE';
   const locaisObra=await api('/api/locais?obra_id='+obraId).then(r=>r.json()).catch(()=>[]);
   info.textContent=`${obra.nome} — ${locaisObra.length} local(is) vinculado(s)`;
   if(!locaisObra.length){
@@ -1459,19 +2110,19 @@ async function carregarVinculoObra(){
   } else {
     lista.innerHTML=locaisObra.map(l=>`
       <div style="display:flex;align-items:center;gap:8px;padding:8px;background:#fff;border:1px solid var(--line);border-radius:8px;margin-bottom:6px">
-        <div style="flex:1;min-width:0"><strong style="font-size:13px">${l.nome}</strong><br><small style="color:var(--muted)">${l.comarca||''} • ${l.endereco||''}</small></div>
+        <div style="flex:1;min-width:0"><strong style="font-size:13px">${l.nome}</strong> ${!l.obra_id?'<span style="font-size:10px;background:#e8f5e9;color:#2e7d32;padding:2px 7px;border-radius:8px">livre (sem obra)</span>':''}<br><small style="color:var(--muted)">${l.comarca||''} • ${l.endereco||''}</small></div>
         <button class="btn-small" onclick="desvincularLocalObra(${l.id})" style="background:#fce4ec;color:#c62828;border:1px solid #ef9a9a">Remover</button>
       </div>
     `).join('');
   }
-  // Filtra o select de adicionar para mostrar só locais ainda não vinculados à obra selecionada (ou todos se quiser)
+  // Filtra o select de adicionar: SÓ locais livres (sem obra). Para mover um local, Remova-o da obra atual primeiro.
   const todos=await api('/api/locais').then(r=>r.json()).catch(()=>[]);
   const sel=document.getElementById('localSelect');
-  const vinculadosIds=new Set(locaisObra.map(l=>String(l.id)));
-  const disponiveis=todos.filter(l=> !vinculadosIds.has(String(l.id)));
+  const disponiveis=todos.filter(l=> !l.obra_id);
   const cur=sel.value;
-  sel.innerHTML='<option value="">Selecione o local</option>'+disponiveis.map(l=>`<option value="${l.id}">${l.nome} - ${l.comarca||''}${l.obra_id?` [${l.obra_id===Number(obraId)?'já nesta obra': 'outra obra'}]`:''}</option>`).join('');
-  sel.value=cur;
+  sel.innerHTML='<option value="">Selecione o local</option>'+disponiveis.map(l=>`<option value="${l.id}">${l.nome} - ${l.comarca||''}</option>`).join('');
+  sel.value=[...sel.options].some(o=>o.value===cur)?cur:'';
+  if(!disponiveis.length) info.textContent+=` • nenhum local livre — desvincular ou criar em Locais`;
 }
 async function vincularLocalObra() {
   const obraId = document.getElementById('localObraSelect').value;
@@ -1479,21 +2130,19 @@ async function vincularLocalObra() {
   if (!obraId || !localId) { toast('Selecione a obra e o local'); return; }
   await api('/api/locais/' + localId, { method: 'PUT', body: JSON.stringify({ obra_id: parseInt(obraId) }) });
   toast('Local vinculado a obra!');
-  carregarVinculoObra(); carregarLocais();
+  await carregarVinculoObra(); await carregarLocais();
 }
 async function desvincularLocalObra(localId){
   const obraId=document.getElementById('localObraSelect').value;
   if(!obraId) return;
-  if(!confirm('Remover vínculo deste local com a obra?')) return;
-  // Desvincula voltando para TJ-CE (obra_id = TJ-CE) ou null se não houver TJ-CE
-  const tjce=await api('/api/obras').then(r=>r.json()).then(all=> all.find(o=> o.nome.replace(/[-\s]/g,'').toUpperCase()==='TJCE')).catch(()=>null);
-  const novoObraId = tjce ? tjce.id : null;
-  await api('/api/locais/' + localId, { method: 'PUT', body: JSON.stringify({ obra_id: novoObraId }) });
-  toast('Vínculo removido');
-  carregarVinculoObra(); carregarLocais();
+  if(!confirm('Remover vínculo deste local com a obra? Ele fica LIVRE (sem obra) e aparece para vincular em qualquer obra.')) return;
+  await api('/api/locais/' + localId, { method: 'PUT', body: JSON.stringify({ obra_id: null }) });
+  toast('Local livre (sem obra)');
+  await carregarVinculoObra(); await carregarLocais();
 }
 
-async function excluirLocal(id) { await api('/api/locais/' + id, { method: 'DELETE' }); carregarLocais(); carregarVinculoObra(); }
+async function excluirLocal(id) { if(!confirm('Desativar este local? Ele some das listas mas pode ser reativado em Locais → Mostrar inativos.')) return; await api('/api/locais/' + id, { method: 'DELETE' }); await carregarLocais(); await carregarVinculoObra(); }
+async function reativarLocal(id) { await api('/api/locais/' + id, { method: 'PUT', body: JSON.stringify({ ativo: 1 }) }); await carregarLocais(); await carregarVinculoObra(); toast('Local reativado!'); }
 
 // ATIVIDADES - Visual profissional com contagem de RDOs e vínculo com template
 let atividadesCache=[];
@@ -1535,6 +2184,8 @@ async function excluirAtividade(id) { if(!confirm('Excluir atividade?')) return;
 
 // MATERIAIS - Organizado visualmente por categorias
 let materiaisCache = [];
+let saldoCache = [];
+let matCatsAbertas = new Set(); // sanfona: categorias começam fechadas
 let buscaTimer;
 const catCores = {'Câmeras':'#e3f2fd','Cabeamento':'#fff3e0','Óptico / Ativos':'#f3e5f5','Infra Rack':'#e8f5e9','Infra Elétrica':'#fce4ec','Fixação':'#fffde7','Geral':'#f5f5f5'};
 const catIcon = {'Câmeras':'📷','Cabeamento':'🔌','Óptico / Ativos':'💡','Infra Rack':'🗄️','Infra Elétrica':'⚡','Fixação':'🔩','Geral':'📦'};
@@ -1564,21 +2215,36 @@ function renderMateriais(){
   let lista = materiaisCache.slice();
   if(filtroCat) lista = lista.filter(m=>m.categoria===filtroCat);
   if(busca && busca.length>=2) lista = lista.filter(m=>m.nome.toLowerCase().includes(busca));
-  // agrupar por categoria para exibição organizada
+  // agrupar por categoria para exibição organizada (sanfona: começa fechada)
   const porCat = {};
   lista.forEach(m=>{ if(!porCat[m.categoria]) porCat[m.categoria]=[]; porCat[m.categoria].push(m); });
+  const forcarAberto = busca && busca.length >= 2; // buscando: abre tudo
   let html = '';
   Object.entries(porCat).sort().forEach(([cat, items])=>{
+    const aberta = forcarAberto || matCatsAbertas.has(cat);
+    const nCrit = items.filter(m=>saldosDoMaterial(m.id).status==='critico').length;
     html += `<div style="margin-bottom:14px;border:1px solid var(--line);border-radius:10px;overflow:hidden">
-      <div style="background:${catCores[cat]||'#f5f5f5'};padding:8px 12px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--line)">
-        <strong style="font-size:12px">${catIcon[cat]||'📦'} ${cat} <span style="background:#fff;padding:1px 7px;border-radius:10px;font-size:10px;border:1px solid var(--line)">${items.length}</span></strong>
-        <span style="font-size:10px;color:var(--muted)">${cat==='Câmeras'?'demanda do Mesclado':cat==='Cabeamento'?'para instalação':''}</span>
+      <div onclick="toggleCatMat('${cat.replace(/'/g,"\\'")}')" style="cursor:pointer;background:${catCores[cat]||'#f5f5f5'};padding:8px 12px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--line)">
+        <strong style="font-size:12px"><span style="display:inline-block;width:16px">${aberta?'▼':'▶'}</span> ${catIcon[cat]||'📦'} ${cat} <span style="background:#fff;padding:1px 7px;border-radius:10px;font-size:10px;border:1px solid var(--line)">${items.length}</span>${nCrit?` <span style="background:#ffcdd2;color:#c62828;padding:1px 7px;border-radius:10px;font-size:10px;border:1px solid #ef9a9a">🚨 ${nCrit}</span>`:''}</strong>
+        <span style="font-size:10px;color:var(--muted)">${cat==='Câmeras'?'demanda do Mesclado':cat==='Cabeamento'?'para instalação':(aberta?'clique para fechar':'clique para abrir')}</span>
       </div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:6px;padding:8px;background:#fbfcfd">
-        ${items.map(m=>`<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:#fff;border-radius:8px;border:1px solid var(--line);font-size:12px">
-          <span style="flex:1;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${m.nome}">${m.nome}</span>
-          <button class="btn-delete" onclick="excluirMaterial(${m.id})" title="Remover">&times;</button>
-        </div>`).join('')}
+      <div style="display:${aberta?'grid':'none'};grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:6px;padding:8px;background:#fbfcfd">
+        ${items.map(m=>{
+          const s = saldosDoMaterial(m.id);
+          const dot = s.status==='critico' ? '#c62828' : s.status==='atencao' ? '#ef6c00' : (s.geral>0||s.teams.length ? '#2e7d32' : '#bdbdbd');
+          return `<div style="padding:8px 10px;background:#fff;border-radius:8px;border:1px solid var(--line);border-left:4px solid ${dot};font-size:12px">
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="flex:1;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${m.nome}">${m.nome} <small style="color:var(--muted)">[${m.unidade||'UND'}]</small></span>
+            <button class="btn-small" onclick="editarMaterial(${m.id})" title="Editar mínimo" style="background:#e3f2fd;color:#1565c0;padding:4px 8px">✏️</button>
+            <button class="btn-delete" onclick="excluirMaterial(${m.id})" title="Remover">&times;</button>
+          </div>
+          <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:6px">
+            <span style="background:#eceff1;padding:1px 7px;border-radius:10px;font-size:10px;font-weight:700">📦 GERAL ${s.geral}</span>
+            ${(Number(m.quantidade_minima)||0)>0?`<span style="background:#fff3e0;border:1px solid #ffcc80;padding:1px 7px;border-radius:10px;font-size:10px;color:#e65100">mín ${m.quantidade_minima}</span>`:'<span style="font-size:10px;color:var(--muted)">sem mínimo</span>'}
+            ${s.status==='critico'?'<span style="font-size:10px;font-weight:800;color:#c62828">🚨 PRECISA</span>':s.status==='atencao'?'<span style="font-size:10px;font-weight:800;color:#ef6c00">⚠️ ATENÇÃO</span>':''}
+          </div>
+          ${s.teams.length?`<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:6px">${s.teams.map(t=>`<span style="font-size:10px;background:${t.status==='critico'?'#ffebee':'#e3f2fd'};color:${t.status==='critico'?'#c62828':'#1565c0'};padding:2px 7px;border-radius:20px;border:1px solid ${t.status==='critico'?'#ef9a9a':'#90caf9'}">${t.nome}: ${t.saldo}</span>`).join('')}</div>`:''}
+        </div>`;}).join('')}
       </div>
     </div>`;
   });
@@ -1586,6 +2252,12 @@ function renderMateriais(){
 }
 function filtrarMateriais(){ renderMateriais(); }
 function filtrarPorCategoria(cat){ document.getElementById('filtroCatMat').value=cat; renderMateriais(); }
+function toggleCatMat(cat){ if(matCatsAbertas.has(cat)) matCatsAbertas.delete(cat); else matCatsAbertas.add(cat); renderMateriais(); }
+function expandirTodasCats(abrir){
+  if(abrir){ matCatsAbertas = new Set([...new Set((materiaisCache||[]).map(m=>m.categoria))]); }
+  else { matCatsAbertas = new Set(); }
+  renderMateriais();
+}
 async function buscarMateriais() {
   clearTimeout(buscaTimer);
   const texto = document.getElementById('buscaMat').value.trim();
@@ -1604,14 +2276,160 @@ async function buscarMateriais() {
 async function adicionarMaterial() {
   const nome = document.getElementById('nomeMaterial').value.trim();
   const categoria = document.getElementById('catMaterial').value.trim() || 'Geral';
+  const unidade = (document.getElementById('unidMaterial').value.trim() || 'UND').toUpperCase();
+  const quantidade_minima = Number(document.getElementById('minMaterial').value) || 0;
+  const editId = document.getElementById('editMatId').value;
+  const qtdInicial = Number((document.getElementById('qtdInicialMaterial')||{}).value) || 0;
   const msg = document.getElementById('msgMat');
   if (!nome) { toast('Nome obrigatório'); msg.textContent='Nome obrigatório'; msg.style.color='var(--danger)'; return; }
-  const r = await api('/api/materiais', { method: 'POST', body: JSON.stringify({ nome, categoria }) });
+  const url = editId ? '/api/materiais/' + editId : '/api/materiais';
+  const r = await api(url, { method: editId ? 'PUT' : 'POST', body: JSON.stringify({ nome, categoria, unidade, quantidade_minima }) });
   const d = await r.json();
   if(d.error){ msg.textContent=d.error; msg.style.color='var(--danger)'; toast(d.error); return; }
+  const matId = editId || d.id;
+  if (!editId && qtdInicial > 0 && matId) {
+    const rl = await api('/api/estoque/lancar', { method: 'POST', body: JSON.stringify({ material_id: matId, tipo: 'compra', quantidade: qtdInicial, origem: 'qtd inicial (cadastro)' }) });
+    const dl = await rl.json().catch(()=>({}));
+    if (dl.error) { msg.textContent = 'Material criado, mas entrada falhou: ' + dl.error; msg.style.color = 'var(--danger)'; toast(dl.error); return; }
+  }
+  if (editId && matId) {
+    // Edição: diferença na Qtd GERAL vira ajuste (soma ou subtrai)
+    const geralAnt = Number((document.getElementById('geralAntigo')||{}).value) || 0;
+    const diff = Math.round((qtdInicial - geralAnt) * 100) / 100;
+    if (diff !== 0) {
+      const tipoAj = diff > 0 ? 'compra' : 'saida_geral';
+      const rl = await api('/api/estoque/lancar', { method: 'POST', body: JSON.stringify({ material_id: matId, tipo: tipoAj, quantidade: Math.abs(diff), origem: 'ajuste (edição do material)' }) });
+      const dl = await rl.json().catch(()=>({}));
+      if (dl.error) { msg.textContent = 'Material salvo, mas ajuste do geral falhou: ' + dl.error; msg.style.color = 'var(--danger)'; toast(dl.error); return; }
+    }
+  }
   document.getElementById('nomeMaterial').value = '';
+  document.getElementById('minMaterial').value = '0';
+  if(document.getElementById('qtdInicialMaterial')) document.getElementById('qtdInicialMaterial').value = '';
+  document.getElementById('editMatId').value = '';
+  document.getElementById('btnAddMat').textContent = 'Adicionar';
+  document.getElementById('btnCancelMat').style.display = 'none';
+  if(document.getElementById('boxQtdInicial')) document.getElementById('boxQtdInicial').style.display = '';
+  const lblOk=document.getElementById('labelQtdInicial'); if(lblOk) lblOk.textContent = 'Qtd inicial no GERAL (estoque central. Ex: 100 bolas — depois você distribui p/ equipes)';
+  const infoOk=document.getElementById('infoSaldosMat'); if(infoOk){ infoOk.style.display='none'; infoOk.innerHTML=''; }
   msg.textContent=''; renderMateriais();
-  await carregarMateriais(); toast('Material adicionado em '+categoria+'!');
+  await carregarMateriais();
+  try{ await carregarAlertasEquipes(); await carregarSaldos(); }catch(e){}
+  toast(editId ? 'Material atualizado!' : (qtdInicial>0 ? `"${nome}" criado com entrada de ${qtdInicial}!` : `"${nome}" criado!`));
+}
+function editarMaterial(id){
+  const m = (materiaisCache||[]).find(x=>Number(x.id)===Number(id));
+  if(!m) return;
+  document.getElementById('nomeMaterial').value = m.nome;
+  document.getElementById('catMaterial').value = m.categoria || 'Geral';
+  document.getElementById('unidMaterial').value = m.unidade || 'UND';
+  document.getElementById('minMaterial').value = Number(m.quantidade_minima)||0;
+  document.getElementById('editMatId').value = m.id;
+  document.getElementById('btnAddMat').textContent = '💾 Salvar';
+  document.getElementById('btnCancelMat').style.display = '';
+  const gRow = (saldoCache||[]).find(l => Number(l.material_id) === Number(m.id) && Number(l.eh_geral) === 1);
+  const geralAtual = gRow ? (Number(gRow.saldo) || 0) : 0;
+  document.getElementById('qtdInicialMaterial').value = geralAtual;
+  document.getElementById('geralAntigo').value = geralAtual;
+  const lbl = document.getElementById('labelQtdInicial');
+  if(lbl) lbl.textContent = 'Qtd GERAL atual (mudar aqui soma/subtrai a diferença no geral)';
+  const info = document.getElementById('infoSaldosMat');
+  if(info){ info.style.display = ''; info.innerHTML = '⏳ Carregando saldos de <strong>' + m.nome + '</strong>...'; carregarSaldosDoMaterial(m.nome); }
+  document.getElementById('nomeMaterial').focus();
+  toast('Editando mínimo de ' + m.nome);
+}
+async function carregarSaldosDoMaterial(nome){
+  const info = document.getElementById('infoSaldosMat');
+  if(!info) return;
+  try{
+    const linhas = await api('/api/estoque/equipes?busca=' + encodeURIComponent(nome)).then(r=>r.json());
+    const norm = s => (s||'').toString().normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().trim();
+    const exatas = linhas.filter(l => norm(l.material_nome) === norm(nome));
+    if(!exatas.length){ info.innerHTML = '📦 <strong>' + nome + '</strong>: sem estoque ainda — use o <strong>📥 Lançar</strong> abaixo.'; return; }
+    const geral = exatas.find(l => Number(l.eh_geral) === 1);
+    const equipes = exatas.filter(l => Number(l.eh_geral) !== 1 && (Number(l.saldo) !== 0 || Number(l.gasto) !== 0));
+    let html = '📦 <strong>' + nome + '</strong> — GERAL: <strong>' + (geral ? geral.saldo + ' ' + geral.unidade : '0') + '</strong>';
+    html += equipes.length ? ' • ' + equipes.map(l => `${l.equipe_nome}: <strong>${l.saldo}</strong> (gasto ${l.gasto})`).join(' • ') : ' • nenhuma equipe com saldo';
+    html += '<br><small style="color:var(--muted)">Para mexer nesses saldos, use o <strong>📥 Lançar</strong> abaixo (distribuir/comprar/saída).</small>';
+    info.innerHTML = html;
+  }catch(e){ info.innerHTML = 'Não foi possível carregar os saldos.'; }
+}
+function cancelarEdicaoMaterial(){
+  document.getElementById('nomeMaterial').value = '';
+  document.getElementById('minMaterial').value = '0';
+  if(document.getElementById('qtdInicialMaterial')) document.getElementById('qtdInicialMaterial').value = '';
+  document.getElementById('editMatId').value = '';
+  document.getElementById('btnAddMat').textContent = 'Adicionar';
+  document.getElementById('btnCancelMat').style.display = 'none';
+  if(document.getElementById('boxQtdInicial')) document.getElementById('boxQtdInicial').style.display = '';
+  const lbl=document.getElementById('labelQtdInicial'); if(lbl) lbl.textContent = 'Qtd inicial no GERAL (estoque central. Ex: 100 bolas — depois você distribui p/ equipes)';
+  const info=document.getElementById('infoSaldosMat'); if(info){ info.style.display='none'; info.innerHTML=''; }
+}
+// ---- Estoque por equipe: alertas + lançamento + saldo ----
+async function carregarAlertasEquipes(){
+  const box = document.getElementById('listaAlertasEquipes');
+  try{
+    const a = await api('/api/estoque/alertas').then(r=>r.json());
+    document.getElementById('countMateriais').textContent = (materiaisCache||[]).length;
+    if(!a.length){ box.innerHTML = '<p class="empty-state">✅ Nenhuma equipe abaixo do mínimo.</p>'; return; }
+    box.innerHTML = a.map(x=>`<div style="display:flex;align-items:center;gap:8px;padding:10px;background:#ffebee;border:1px solid #ef9a9a;border-radius:8px;font-size:12px"><span style="font-size:16px">🚨</span><span style="flex:1"><strong>${x.equipe_nome}</strong> precisa de <strong>${x.material_nome}</strong><br><small>saldo ${x.saldo} ${x.unidade||''} • mínimo ${x.minimo} • falta ${x.falta}</small></span></div>`).join('');
+  }catch(e){ box.innerHTML = '<p class="empty-state">Erro ao carregar alertas.</p>'; }
+}
+// ---- Estoque: saldos alimentam a lista única de materiais ----
+function saldosDoMaterial(matId){
+  const rows = (saldoCache||[]).filter(l => Number(l.material_id) === Number(matId));
+  const g = rows.find(l => Number(l.eh_geral) === 1);
+  const teams = rows.filter(l => Number(l.eh_geral) !== 1 && (Number(l.saldo) !== 0 || Number(l.gasto) !== 0))
+    .map(l => ({ nome: l.equipe_nome, saldo: l.saldo, status: l.status }));
+  const geral = g ? Number(g.saldo) || 0 : 0;
+  let status = 'ok';
+  if (rows.some(l => l.status === 'critico')) status = 'critico';
+  else if (rows.some(l => l.status === 'atencao')) status = 'atencao';
+  return { geral, teams, status };
+}
+async function carregarSaldos(){
+  // popula selects do Lançar uma vez
+  try{
+    const selE = document.getElementById('lancEquipe'), selM = document.getElementById('lancMaterial');
+    if(selE && selE.options.length<=1){
+      const eqs = await api('/api/equipes').then(r=>r.json());
+      selE.innerHTML = '<option value="">Selecione a equipe...</option>' + eqs.map(e=>`<option value="${e.id}">${e.nome}</option>`).join('');
+    }
+    if(selM && selM.options.length<=1){
+      const mats = materiaisCache && materiaisCache.length ? materiaisCache : await api('/api/materiais').then(r=>r.json());
+      selM.innerHTML = '<option value="">Selecione o material...</option>' + mats.map(m=>`<option value="${m.id}">${m.nome} [${m.unidade||'UND'}] (mín ${Number(m.quantidade_minima)||0})</option>`).join('');
+    }
+  }catch(e){}
+  try{
+    saldoCache = await api('/api/estoque/equipes').then(r=>r.json());
+  }catch(e){ saldoCache = []; }
+  try{ renderMateriais(); }catch(e){}
+}
+function toggleLancTipo(){
+  const tipo = document.getElementById('lancTipo').value;
+  const selE = document.getElementById('lancEquipe');
+  const ehCompra = tipo === 'compra';
+  selE.disabled = ehCompra;
+  selE.style.opacity = ehCompra ? '.5' : '';
+  if (ehCompra) selE.value = '';
+}
+async function lancarEstoque(){
+  const msg = document.getElementById('msgLanc');
+  const equipe_id = document.getElementById('lancEquipe').value;
+  const material_id = document.getElementById('lancMaterial').value;
+  const tipo = document.getElementById('lancTipo').value;
+  const quantidade = Number(document.getElementById('lancQtd').value);
+  const origem = document.getElementById('lancOrigem').value.trim();
+  if(!material_id || !quantidade || quantidade<=0){ msg.textContent='Escolha material e qtd > 0'; msg.style.color='var(--danger)'; return; }
+  if(tipo !== 'compra' && !equipe_id){ msg.textContent='Escolha a equipe (ou use Compra p/ somar no geral)'; msg.style.color='var(--danger)'; return; }
+  const r = await api('/api/estoque/lancar', { method:'POST', body: JSON.stringify({ equipe_id: equipe_id || undefined, material_id, tipo, quantidade, origem }) });
+  const d = await r.json();
+  if(d.error){ msg.textContent=d.error; msg.style.color='var(--danger)'; return; }
+  msg.textContent = d.msg || 'Lançado!';
+  msg.style.color = (d.alerta || d.avisoGeral) ? '#c62828' : 'var(--ok)';
+  toast(d.msg || 'Lançado!');
+  document.getElementById('lancQtd').value = '';
+  carregarAlertasEquipes(); carregarSaldos();
 }
 async function excluirMaterial(id) { if(!confirm('Remover material? Ele some do catálogo mas RDOs antigos mantêm.')) return; await api('/api/materiais/' + id, { method: 'DELETE' }); await carregarMateriais(); toast('Removido'); }
 async function importarListaTxt(){
@@ -1636,8 +2454,12 @@ async function importarListaTxt(){
 let estoqueCache=null;
 let estoqueFiltraBusca='';
 async function carregarEstoque(){
+  const setTxt=(id,txt)=>{ const el=document.getElementById(id); if(el) el.textContent=txt; };
+  const setHTML=(id,html)=>{ const el=document.getElementById(id); if(el) el.innerHTML=html; };
+  const setDisp=(id,disp)=>{ const el=document.getElementById(id); if(el) el.style.display=disp; };
   const sel=document.getElementById('estoqueObra');
-  if(sel && sel.options.length===1){
+  if(!sel) return; // view ainda não está no DOM (aba não carregada) — evita crash
+  if(sel.options.length===1){
     try{
       const obras=await api('/api/obras').then(r=>r.json());
       const cur=sel.value;
@@ -1646,75 +2468,103 @@ async function carregarEstoque(){
       // popula datalist de materiais
       try{
         const mats=await api('/api/materiais').then(r=>r.json());
-        document.getElementById('listaMateriaisDatalist').innerHTML=mats.map(m=>`<option value="${m.nome.replace(/"/g,'&quot;')}">`).join('');
+        setHTML('listaMateriaisDatalist', mats.map(m=>`<option value="${m.nome.replace(/"/g,'&quot;')}">`).join(''));
       }catch(e){}
     }catch(e){}
   }
   const obraId=sel.value;
   if(!obraId){
-    document.getElementById('estoqueKpis').style.display='none';
-    document.getElementById('estoqueAlertasCard').style.display='none';
-    document.getElementById('estoqueBadge').textContent='Selecione a obra';
-    document.getElementById('estoqueInfo').textContent='Escolha a obra acima para ver estimativa vs consumo';
-    document.getElementById('listaEstoque').innerHTML='<p class="empty-state">Selecione a obra para carregar o estoque.</p>';
-    document.getElementById('rankingEquipes').innerHTML='<p class="empty-state">—</p>';
-    document.getElementById('rankingLocais').innerHTML='<p class="empty-state">—</p>';
+    setDisp('estoqueKpis','none');
+    setDisp('estoqueAlertasCard','none');
+    setTxt('estoqueBadge','Selecione a obra');
+    setTxt('estoqueInfo','Escolha a obra acima para ver estimativa vs consumo');
+    setHTML('listaEstoque','<p class="empty-state">Selecione a obra para carregar o estoque.</p>');
+    setHTML('rankingEquipes','<p class="empty-state">—</p>');
+    setHTML('rankingLocais','<p class="empty-state">—</p>');
     return;
   }
-  document.getElementById('estoqueInfo').textContent='Carregando...';
+  setTxt('estoqueInfo','Carregando...');
+  // popula select de local da obra preservando seleção (equipe se gerencia na aba Materiais)
+  (async ()=>{
+    try{
+      const locs=await api('/api/locais?obra_id='+obraId).then(r=>r.json()).catch(()=>[]);
+      const elEstLocal=document.getElementById('estLocal');
+      const elFiltroLocal=document.getElementById('filtroEstoqueLocal');
+      const keepL=elEstLocal?.value;
+      const keepFL=elFiltroLocal?.value;
+      if(elEstLocal){ elEstLocal.innerHTML='<option value="">📍 Toda a obra (sem local)</option>'+locs.map(l=>`<option value="${l.id}">${l.nome}${l.comarca?' - '+l.comarca:''}</option>`).join(''); elEstLocal.value=keepL; }
+      if(elFiltroLocal){ elFiltroLocal.innerHTML='<option value="">Todos locais</option><option value="__obra">Obra toda (sem local)</option>'+locs.map(l=>`<option value="${l.id}">${l.nome}</option>`).join(''); elFiltroLocal.value=keepFL; }
+      if(!locs.length) setTxt('estoqueInfo','⚠️ Não carregou locais — recarregue a página (Ctrl+Shift+R)');
+      try{ atualizarPreviewEst(); }catch(e){}
+    }catch(e){}
+  })();
   try{
     const data=await api('/api/obras/'+obraId+'/materiais/consumo').then(r=>r.json());
     estoqueCache=data;
     const r=data.resumo;
-    document.getElementById('estoqueKpis').style.display='block';
-    document.getElementById('estoqueBadge').textContent=`${r.totalMateriais} materiais • ${r.alertas} alertas • ${r.rdosTotal} RDOs`;
-    document.getElementById('estoqueQtdEst').textContent=`${r.totalEstimadoQtd.toLocaleString('pt-BR')} unid • ${r.totalLocais} locais`;
-    document.getElementById('estoqueValorEst').textContent=`R$ ${r.totalValorEstimado.toLocaleString('pt-BR',{minimumFractionDigits:2})}`;
-    document.getElementById('estoqueValorCons').textContent=`R$ ${r.totalValorConsumido.toLocaleString('pt-BR',{minimumFractionDigits:2})}`;
-    document.getElementById('estoquePctMedio').textContent=`${r.pctMedio}% médio • ${r.totalConsumidoQtd.toLocaleString('pt-BR')} unid`;
-    document.getElementById('estoqueValorSaldo').textContent=`R$ ${r.totalValorSaldo.toLocaleString('pt-BR',{minimumFractionDigits:2})}`;
-    document.getElementById('estoqueSaldoQtd').textContent=`${(r.totalEstimadoQtd - r.totalConsumidoQtd).toLocaleString('pt-BR')} saldo`;
-    document.getElementById('estoqueAlertas').textContent=r.alertas;
-    document.getElementById('estoqueLocaisInfo').textContent=`${r.locaisConcluidos}/${r.totalLocais} locais com RDO • ${r.locaisPendentes} pendentes`;
-    document.getElementById('estoqueResumo').textContent=`Obra #${r.obra_id} • ${r.totalMateriais} materiais estimados • ${r.rdosTotal} RDOs analisados • Projeção por média por local concluído`;
+    setDisp('estoqueKpis','block');
+    setTxt('estoqueBadge',`${r.totalMateriais} materiais • ${r.alertas} alertas • ${r.rdosTotal} RDOs`);
+    setTxt('estoquePctMedio',`${r.pctMedio}%`);
+    setTxt('estoqueConsQtd',`${r.totalConsumidoQtd.toLocaleString('pt-BR')} unid • ${r.rdosTotal} RDOs`);
+    setTxt('estoqueSaldoQtd',`${(r.totalEstimadoQtd - r.totalConsumidoQtd).toLocaleString('pt-BR')} unid`);
+    setTxt('estoqueSaldoPct',`${r.totalEstimadoQtd? Math.max(0, Math.round((r.totalEstimadoQtd - r.totalConsumidoQtd)/r.totalEstimadoQtd*100)):0}% disponível`);
+    setTxt('estoqueAlertas', r.alertas);
+    setTxt('estoqueLocaisInfo',`${r.locaisConcluidos}/${r.totalLocais} locais com RDO • ${r.locaisPendentes} pendentes`);
+    setTxt('estoqueResumo',`Obra #${r.obra_id} • ${r.totalMateriais} materiais estimados • ${r.rdosTotal} RDOs analisados • Projeção por média por local concluído`);
     // alertas
     const alertCard=document.getElementById('estoqueAlertasCard');
-    const alertBox=document.getElementById('listaAlertas');
     if(data.alertas.length){
-      alertCard.style.display='block';
-      alertBox.innerHTML=data.alertas.slice(0,20).map(a=>{
+      setDisp('estoqueAlertasCard','block');
+      setHTML('listaAlertas', data.alertas.slice(0,20).map(a=>{
         const cor=a.status==='estourado'?'#c62828':a.status==='critico'?'#ef6c00':a.status==='extra'?'#6a1b9a':'#f57f17';
         return `<div style="display:flex;align-items:center;gap:10px;padding:10px;background:#fff;border:1px solid var(--line);border-left:4px solid ${cor};border-radius:10px">
           <div style="width:32px;height:32px;border-radius:8px;background:${cor};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px">!</div>
           <div style="flex:1;min-width:0">
             <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><strong style="font-size:13px">${a.material_nome}</strong><span style="font-size:10px;background:${cor};color:#fff;padding:2px 7px;border-radius:8px">${a.status.toUpperCase()}</span><span style="font-size:10px;background:#f7f9fa;border:1px solid var(--line);padding:2px 7px;border-radius:8px">${a.pct}% usado</span></div>
             <div style="font-size:11px;color:var(--muted)">Est: ${a.estimado} • Cons: ${a.consumido} • Saldo: ${a.saldo} • Proj. restante: ${a.projecaoRestante} • Necessidade: ${a.necessidade}</div>
-            <div style="font-size:11px;color:${cor};font-weight:700">Sugestão comprar: ${a.sugestaoCompra} ${a.unidade} ${a.fornecedor?'• '+a.fornecedor:''} • R$ ${(a.sugestaoCompra*(a.valor_unitario||0)).toLocaleString('pt-BR',{minimumFractionDigits:2})}</div>
+            <div style="font-size:11px;color:${cor};font-weight:700">Sugestão comprar: ${a.sugestaoCompra} ${a.unidade}${a.fornecedor?' • '+a.fornecedor:''}</div>
           </div>
         </div>`;
-      }).join('')+(data.alertas.length>20?`<p style="font-size:11px;color:var(--muted);text-align:center">+${data.alertas.length-20} alertas ocultos — filtre a lista</p>`:'');
+      }).join('')+(data.alertas.length>20?`<p style="font-size:11px;color:var(--muted);text-align:center">+${data.alertas.length-20} alertas ocultos — filtre a lista</p>`:''));
     } else {
-      alertCard.style.display='none';
+      setDisp('estoqueAlertasCard','none');
     }
     // rankings
-    document.getElementById('rankingEquipes').innerHTML=data.rankingEquipes.length? data.rankingEquipes.map((e,i)=>`<div style="display:flex;align-items:center;gap:8px;padding:8px;background:#f7f9fa;border:1px solid var(--line);border-radius:8px;margin-bottom:6px"><span style="width:24px;height:24px;border-radius:50%;background:#0f3d4c;color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800">${i+1}</span><span style="flex:1;font-size:12px;font-weight:600">${e.nome}</span><span style="font-size:12px;background:#0f3d4c;color:#fff;padding:2px 8px;border-radius:20px">${e.total}</span></div>`).join(''):'<p class="empty-state">Sem consumo por equipe ainda</p>';
-    document.getElementById('rankingLocais').innerHTML=data.rankingLocais.length? data.rankingLocais.map((l,i)=>`<div style="display:flex;align-items:center;gap:8px;padding:8px;background:#f7f9fa;border:1px solid var(--line);border-radius:8px;margin-bottom:6px"><span style="width:24px;height:24px;border-radius:50%;background:#6a1b9a;color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800">${i+1}</span><span style="flex:1;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${l.nome}</span><span style="font-size:12px;background:#6a1b9a;color:#fff;padding:2px 8px;border-radius:20px">${l.total}</span></div>`).join(''):'<p class="empty-state">Sem consumo por local ainda</p>';
+    setHTML('rankingEquipes', data.rankingEquipes.length? data.rankingEquipes.map((e,i)=>`<div style="display:flex;align-items:center;gap:8px;padding:8px;background:#f7f9fa;border:1px solid var(--line);border-radius:8px;margin-bottom:6px"><span style="width:24px;height:24px;border-radius:50%;background:#0f3d4c;color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800">${i+1}</span><span style="flex:1;font-size:12px;font-weight:600">${e.nome}</span><span style="font-size:12px;background:#0f3d4c;color:#fff;padding:2px 8px;border-radius:20px">${e.total}</span></div>`).join(''):'<p class="empty-state">Sem consumo por equipe ainda</p>');
+    setHTML('rankingLocais', data.rankingLocais.length? data.rankingLocais.map((l,i)=>`<div style="display:flex;align-items:center;gap:8px;padding:8px;background:#f7f9fa;border:1px solid var(--line);border-radius:8px;margin-bottom:6px"><span style="width:24px;height:24px;border-radius:50%;background:#6a1b9a;color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800">${i+1}</span><span style="flex:1;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${l.nome}</span><span style="font-size:12px;background:#6a1b9a;color:#fff;padding:2px 8px;border-radius:20px">${l.total}</span></div>`).join(''):'<p class="empty-state">Sem consumo por local ainda</p>');
     filtrarEstoque();
-    document.getElementById('estoqueInfo').textContent='Atualizado';
+    setTxt('estoqueInfo','Atualizado');
   }catch(e){
     console.error(e);
-    document.getElementById('estoqueInfo').textContent='Erro: '+(e.message||e);
+    setTxt('estoqueInfo','Erro: '+(e.message||e));
     toast('Erro ao carregar estoque');
   }
 }
+// Nexo Estoque → Materiais: pula para o saldo GERAL/equipes do material
+function verSaldoEmMateriais(nome){
+  const btn = document.querySelector('nav.tabs button[data-view=materiais]');
+  if(btn) btn.click();
+  setTimeout(()=>{
+    try{
+      const b = document.getElementById('buscaMat');
+      if(b){ b.value = nome; }
+      if(typeof renderMateriais === 'function') renderMateriais();
+      if(typeof buscarMateriais === 'function') buscarMateriais();
+    }catch(e){}
+  }, 200);
+}
 function filtrarEstoque(){
-  if(!estoqueCache) return;
-  const busca=(document.getElementById('buscaEstoque').value||'').toLowerCase();
+  if(!estoqueCache) return;  const busca=(document.getElementById('buscaEstoque').value||'').toLowerCase();
   const status=document.getElementById('filtroStatusEstoque').value;
+  const fLoc=document.getElementById('filtroEstoqueLocal').value;
   let lista=estoqueCache.itens.slice();
   if(busca) lista=lista.filter(i=> i.material_nome.toLowerCase().includes(busca) || (i.fornecedor||'').toLowerCase().includes(busca));
+  if(fLoc==='__obra') lista=lista.filter(i=> !i.local_id);
+  else if(fLoc) lista=lista.filter(i=> String(i.local_id)===String(fLoc));
   if(status){
     if(status==='comprar') lista=lista.filter(i=> i.precisaComprar);
+    else if(status==='direcionado') lista=lista.filter(i=> i.local_id || i.equipe_id);
+    else if(status==='obra') lista=lista.filter(i=> !i.local_id && !i.equipe_id);
     else lista=lista.filter(i=> i.status===status);
   }
   const cores={ok:'#2e7d32',atencao:'#ef6c00',critico:'#c62828',estourado:'#7f0000',extra:'#6a1b9a',comprar:'#c62828'};
@@ -1730,9 +2580,12 @@ function filtrarEstoque(){
             <span style="font-size:10px;background:${cor};color:#fff;padding:2px 7px;border-radius:8px">${i.status.toUpperCase()} ${i.pct}%</span>
             ${i.precisaComprar?`<span style="font-size:10px;background:#ffcdd2;color:#c62828;padding:2px 7px;border-radius:8px;border:1px solid #ef9a9a">COMPRAR ${i.sugestaoCompra}</span>`:''}
             <span style="font-size:10px;background:#f7f9fa;border:1px solid var(--line);padding:2px 7px;border-radius:8px">${i.unidade}</span>
+            ${(i.minimo_catalogo||0)>0?`<span title="Mínimo cadastrado em Materiais" style="font-size:10px;background:#fff3e0;border:1px solid #ffcc80;color:#e65100;padding:2px 7px;border-radius:8px">mín ${i.minimo_catalogo}</span>`:''}
+            <button class="btn-small" onclick="verSaldoEmMateriais('${(i.material_nome||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;')}')" title="Ver saldo GERAL e por equipe em Materiais" style="background:#eceff1;color:#37474f;padding:2px 8px;font-size:10px">📦 saldo</button>
+            ${(i.local_id)?`<span style="font-size:10px;background:#e8eaf6;color:#3949ab;padding:2px 7px;border-radius:8px;border:1px solid #9fa8da">🎯 ${i.local_nome||'local'}</span>`:`<span style="font-size:10px;background:#f7f9fa;border:1px solid var(--line);color:var(--muted);padding:2px 7px;border-radius:8px">OBRA TODA</span>`}
           </div>
-          <div style="font-size:11px;color:var(--muted);margin-top:2px">Est: <strong style="color:var(--text)">${i.estimado}</strong> • Cons: <strong style="color:${cor}">${i.consumido}</strong> • Saldo: <strong style="color:${i.saldo<0?'#c62828':'#2e7d32'}">${i.saldo}</strong> • RDOs: ${i.rdos} • ${i.fornecedor? 'Forn: '+i.fornecedor+' • ':''} R$ ${(i.valor_unitario||0).toLocaleString('pt-BR',{minimumFractionDigits:2})}/un</div>
-          <div style="font-size:11px;color:var(--muted)">Média/local: ${i.mediaPorLocal} • Projeção restante: ${i.projecaoRestante} • Necessidade: ${i.necessidade} • Valor saldo: R$ ${(i.valorSaldo||0).toLocaleString('pt-BR',{minimumFractionDigits:2})}</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px">Est: <strong style="color:var(--text)">${i.estimado}</strong> • Cons: <strong style="color:${cor}">${i.consumido}</strong> • Saldo: <strong style="color:${i.saldo<0?'#c62828':'#2e7d32'}">${i.saldo}</strong> • RDOs: ${i.rdos}${i.fornecedor? ' • Forn: '+i.fornecedor:''}</div>
+          <div style="font-size:11px;color:var(--muted)">Média/local: ${i.mediaPorLocal} • Projeção restante: ${i.projecaoRestante} • Necessidade: ${i.necessidade}</div>
           <div style="height:6px;background:var(--line);border-radius:99px;overflow:hidden;margin-top:6px"><div style="height:100%;background:${barColor};width:${pct}%"></div></div>
         </div>
         <div style="display:flex;flex-direction:column;gap:4px">
@@ -1802,6 +2655,28 @@ async function importarEstoque(){
   }
   btn.disabled=false; btn.textContent='Importar para obra selecionada';
 }
+function atualizarPreviewEst(){
+  const box=document.getElementById('estPreview'); if(!box) return;
+  const nome=(document.getElementById('estMaterial').value||'').trim();
+  const qtd=(document.getElementById('estQtd').value||'').trim();
+  const und=(document.getElementById('estUnidade').value||'UND').trim();
+  const selL=document.getElementById('estLocal');
+  const locTxt=selL.value? (selL.options[selL.selectedIndex]?.text||'') : '';
+  if(!nome || !qtd){ box.innerHTML='Preencha material e quantidade para pré-visualizar…'; return; }
+  const norm=s=> (s||'').toString().normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().trim();
+  let jaExiste=null;
+  try{
+    jaExiste=(estoqueCache?.itens||[]).find(i=> norm(i.material_nome)===norm(nome)
+      && String(i.local_id||'')===String(selL.value||'')
+      && String(i.id)!==String(document.getElementById('estEditId').value||''));
+  }catch(e){}
+  box.innerHTML=`<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><strong style="font-size:13px">${nome}</strong>`
+    +`<span style="font-size:11px;background:#0f3d4c;color:#fff;padding:2px 8px;border-radius:8px">${qtd} ${und}</span>`
+    +(selL.value
+      ? `<span style="font-size:11px;background:#e8eaf6;color:#3949ab;padding:2px 8px;border-radius:8px;border:1px solid #9fa8da">🎯 ${locTxt}</span>`
+      : `<span style="font-size:11px;background:#f7f9fa;border:1px solid var(--line);color:var(--muted);padding:2px 8px;border-radius:8px">OBRA TODA</span>`)
+    +`<span style="font-size:11px;font-weight:700;color:${jaExiste?'#ef6c00':'#2e7d32'}">${jaExiste?'↻ vai ATUALIZAR o existente':'＋ vai CRIAR novo'}</span></div>`;
+}
 async function salvarEstimativa(){
   const obraId=document.getElementById('estoqueObra').value;
   if(!obraId){ toast('Selecione a obra'); return; }
@@ -1809,9 +2684,10 @@ async function salvarEstimativa(){
     material_nome: document.getElementById('estMaterial').value.trim(),
     unidade: document.getElementById('estUnidade').value.trim()||'UND',
     quantidade_estimada: document.getElementById('estQtd').value,
-    valor_unitario: document.getElementById('estValor').value,
     fornecedor: document.getElementById('estFornecedor').value.trim(),
-    etapa: document.getElementById('estEtapa').value.trim()||'ETAPA 1'
+    etapa: document.getElementById('estEtapa').value.trim()||'ETAPA 1',
+    local_id: document.getElementById('estLocal').value||null,
+    equipe_id: null // equipe se gerencia na aba Materiais (saldo físico + mínimo)
   };
   if(!payload.material_nome || !payload.quantidade_estimada){ toast('Material e quantidade obrigatórios'); return; }
   const editId=document.getElementById('estEditId').value;
@@ -1826,13 +2702,17 @@ async function salvarEstimativa(){
 function cancelarEstimativa(){
   document.getElementById('estEditId').value='';
   document.getElementById('estMaterial').value='';
+  document.getElementById('estUnidade').value='UND';
+  document.getElementById('estLocal').value='';
   document.getElementById('estQtd').value='';
-  document.getElementById('estValor').value='';
   document.getElementById('estFornecedor').value='';
   document.getElementById('estEtapa').value='ETAPA 1';
-  document.getElementById('btnEst').textContent='Salvar estimativa';
+  document.getElementById('btnEst').textContent='💾 Salvar estimativa';
   document.getElementById('btnCancelEst').style.display='none';
   document.getElementById('msgEst').textContent='';
+  const badge=document.getElementById('estModeBadge'); if(badge){ badge.textContent='NOVO'; badge.style.background='#e3f2fd'; badge.style.color='#1565c0'; }
+  const card=document.getElementById('cardEstimativa'); if(card) card.style.borderLeftColor='#1565c0';
+  atualizarPreviewEst();
 }
 async function editarEstimativa(id){
   if(!estoqueCache) return;
@@ -1841,12 +2721,15 @@ async function editarEstimativa(id){
   document.getElementById('estEditId').value=item.id;
   document.getElementById('estMaterial').value=item.material_nome;
   document.getElementById('estUnidade').value=item.unidade;
+  document.getElementById('estLocal').value=item.local_id||'';
   document.getElementById('estQtd').value=item.estimado;
-  document.getElementById('estValor').value=item.valor_unitario;
   document.getElementById('estFornecedor').value=item.fornecedor||'';
   document.getElementById('estEtapa').value=item.etapa||'ETAPA 1';
-  document.getElementById('btnEst').textContent='Atualizar';
+  document.getElementById('btnEst').textContent='💾 Atualizar';
   document.getElementById('btnCancelEst').style.display='block';
+  const badge=document.getElementById('estModeBadge'); if(badge){ badge.textContent='EDITANDO #'+item.id; badge.style.background='#fff3e0'; badge.style.color='#ef6c00'; }
+  const card=document.getElementById('cardEstimativa'); if(card) card.style.borderLeftColor='#ef6c00';
+  atualizarPreviewEst();
   window.scrollTo({top: document.getElementById('estMaterial').offsetTop - 80, behavior:'smooth'});
 }
 async function excluirEstimativa(id){
