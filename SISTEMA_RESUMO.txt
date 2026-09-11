@@ -1,0 +1,101 @@
+================================================================================
+CRM OBRAS (IPQ Tecnologia) — ESTADO DO SISTEMA
+Gerado em 11/09/2026 | Branch main (trabalho local, SEM commit — combinado testar antes)
+================================================================================
+
+1. O QUE É
+--------------------------------------------------------------------------------
+Sistema de gestão de obras com foco em RDO (Registro Diário de Obra) para o
+TJ-CE. Dois frontends: painel do gestor (/) e app do técnico (/app).
+
+2. STACK
+--------------------------------------------------------------------------------
+- Backend: Node.js + Express + Socket.io | Porta 8080 (npm start)
+- Banco: SQLite local (data/crm.db) via better-sqlite3; Postgres/Supabase em
+  produção via DATABASE_URL (camada db.js híbrida com migrações p/ os dois)
+- Frontend: HTML/CSS/JS puro, sem framework
+- Login padrão: admin@ipq.com / admin123 (token 7 dias, com equipe_id)
+
+3. FLUXO OFICIAL (ordem do menu)
+--------------------------------------------------------------------------------
+1. Dashboard (visão geral) → 2. Obras (cadastrar a obra) → 3. Usuários
+→ 4. Equipes (montar times) → 5. Locais (locais + equipe responsável)
+→ 6. Vincular Obras (ligar locais às obras + importar TJCE_Mesclado)
+→ 7. Atividades (tipos de serviço do RDO) → 8. Materiais (catálogo + saldo
+físico geral/equipe/local) → 9. Estoque (compras, planejamento, consumo)
+→ 10. RDOs → 11. Por Equipe → 12. Mapa (GPS) → 13. Relatórios
+→ 14. Auditoria → (Usuários fica logo após Obras, passo 2)
+
+4. MODELO DE ESTOQUE (como funciona hoje)
+--------------------------------------------------------------------------------
+- COMPRA entra no GERAL (estoque central). Uma compra pode servir várias
+  obras: no card Compras, fatia-se em 1 linha por obra (ex: NF 1000 → 600+400).
+  Só se informa NOME + QUANTIDADE (sem preço/fornecedor/NF).
+- Do GERAL distribui p/ EQUIPE; da equipe leva p/ LOCAL (distribuir_local)
+  ou entrada direta no local. Ajustes: entrada/saída (equipe ou local).
+- PLANEJAMENTO (aba Estoque → Estimativa): quanto cada obra/local/equipe
+  planeja usar. Direcionar por local/equipe filtra o que o técnico vê no app.
+- CONSUMO (RDO): dá baixa sozinha — LOCAL primeiro (limitado ao saldo),
+  o que faltar sai da EQUIPE (rateado). Total debitado == qtd do RDO
+  (sem contagem dupla). Editar/excluir/restaurar RDO estorna e reaplica.
+- COMPARATIVO por obra: COMPRADO (notas fatiadas) × CONSUMIDO (RDOs).
+- RELATÓRIO por local: gasto por material e por equipe, com export CSV.
+- ALERTAS: mínimo global por material; RDO que estoura emite evento
+  socket (toast em tempo real no painel e no app).
+- App do técnico: vê SÓ materiais liberados p/ equipe×local (para-rdo);
+  sem direcionamento, vê o catálogo cheio. Pode adicionar item livre
+  (auto-cria no catálogo).
+
+5. TABELAS (SQLite/Postgres)
+--------------------------------------------------------------------------------
+usuarios, equipes (eh_geral p/ estoque central), obras, locais
+(obra_id, equipe_id, regiao), etapas, atividades, materiais
+(unidade, quantidade_minima), obra_materiais (estimativa: obra+local+equipe),
+obra_compras (nota fatiada por obra: material+qtd), rdos (soft-delete ativo,
+local_id, auditoria), rdo_auditoria, estoque_equipes (físico por equipe),
+estoque_movimentacoes (trilha equipe), estoque_locais (físico por local),
+estoque_local_movimentacoes (trilha local), presenca, chat/alertas.
+
+6. ÚLTIMAS MODIFICAÇÕES (sessão atual — tudo local, sem commit)
+--------------------------------------------------------------------------------
+a) db.js: INSERT Postgres sempre com RETURNING id.
+b) Auth: token com exp (7 dias); rdoTravado24h normaliza Date do Postgres.
+c) Estoque/planejamento direcionável por EQUIPE (estEquipe + filtro).
+d) Fix "COMPRAR fantasma": poeira de ponto flutuante virava necessidade>0
+   com 0% usado (sugestão 101 em vez de 100) → tolerância 1e-9.
+e) Estoque físico por LOCAL: tabelas + baixa/estorno no RDO (criar, editar,
+   excluir, restaurar) + GET /api/estoque/locais e /locais/movimentacoes +
+   tipos lancar: distribuir_local, entrada_local, saida_local.
+f) Aba Materiais: cards Alertas de locais + Estoque por local (busca/filtros)
+   + Lançar com campo local (tipos habilitam conforme seleção).
+g) Cadastro único de local (criarLocalAPI p/ abas Obras e Locais);
+   backend barra nome em branco.
+h) Compras por obra (obra_compras + CRUD) + comparativo comprado×consumido
+   (KPIs + Comp: por item) + relatório de gastos por local + export CSV.
+i) Removidos preço/fornecedor/NF/data (só nome + quantidade).
+j) Menu explicativo (subtítulo + tooltip) na ordem do fluxo; removido botão
+   Relatórios duplicado.
+k) Performance: /api/estoque/(equipes|locais)?so_movimento=1 (36.806 linhas
+   → dezenas; era o "↻ que não funcionava").
+l) Tempo real: rdo_novo atualiza a tela ativa; estoque_alerta com toast.
+m) Consumo local-first (corrige contagem dupla equipe+local).
+
+7. TESTES (scripts em %TEMP%\\opencode, banco sempre limpo após)
+--------------------------------------------------------------------------------
+- e2e-local.js (22): abastece, RDO, cobertura total/parcial, estornos, trilha
+- e2e-ui-local.js (7): entrada/saída local, alertas, filtros, RDO sem local
+- e2e-compras.js (9): compra/edita/exclui, comparativo, relatório
+- e2e-split.js (4): 1 NF fatiada em 2 obras, sem contagem dupla
+- e2e-full.js (11): simulação 2 equipes × 2 locais + conservação do físico
+- e2e-onboard.js (10): cadeia obra→usuários→equipes→locais→materiais→divisões
+- e2e-alert.js (1): disparo do alerta de mínimo
+- probe-all.js: 28/28 endpoints GET retornam 200
+Resultado: TUDO PASSOU. Para testar na tela: Estoque → escolher obra →
+registrar compra; Materiais → Lançar/Locais.
+
+8. PENDÊNCIAS / PRÓXIMOS PASSOS
+--------------------------------------------------------------------------------
+- Commit + push + redeploy Render (aguardando seus testes manuais).
+- Validar no app físico (GPS) o recorte de materiais por local/equipe.
+- (Opcional) centralizar fetches repetidos de equipes/locais na aba Estoque.
+================================================================================

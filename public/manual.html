@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Manual do Sistema — CRM Obras</title>
+<style>
+:root{--pri:#0f3d4c;--acc:#ef6c00;--ok:#2e7d32;--bg:#f2f5f6;--card:#fff;--line:#dfe7ea;--tx:#24383e;--mut:#6b7f86}
+*{box-sizing:border-box}body{margin:0;font-family:Segoe UI,Arial,sans-serif;background:var(--bg);color:var(--tx)}
+header{background:var(--pri);color:#fff;padding:22px 16px;text-align:center}
+header h1{margin:0;font-size:22px}header p{margin:6px 0 0;opacity:.85;font-size:13px}
+.modes{display:flex;gap:10px;justify-content:center;margin:16px auto;max-width:640px;padding:0 12px}
+.modes button{flex:1;padding:14px;font-size:15px;font-weight:800;border:2px solid var(--pri);border-radius:12px;background:#fff;color:var(--pri);cursor:pointer}
+.modes button.on{background:var(--pri);color:#fff}
+.wrap{max-width:760px;margin:0 auto;padding:0 12px 60px}
+.passo{background:var(--card);border:1px solid var(--line);border-radius:12px;margin:10px 0;overflow:hidden}
+.passo>button{width:100%;text-align:left;background:none;border:none;padding:14px;font-size:15px;font-weight:800;color:var(--pri);cursor:pointer;display:flex;gap:10px;align-items:center}
+.passo>button .n{background:var(--pri);color:#fff;width:26px;height:26px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:13px;flex:none}
+.passo .corpo{display:none;padding:0 16px 16px;font-size:14px;line-height:1.65}
+.passo.aberto .corpo{display:block}
+.corpo ol{margin:8px 0;padding-left:22px}.corpo li{margin:6px 0}
+.corpo b{color:var(--pri)}.dica{background:#e8f5e9;border-left:4px solid var(--ok);padding:8px 12px;border-radius:0 8px 8px 0;margin:8px 0;font-size:13px}
+.cuidado{background:#fff3e0;border-left:4px solid var(--acc);padding:8px 12px;border-radius:0 8px 8px 0;margin:8px 0;font-size:13px}
+code{background:#eceff1;padding:1px 6px;border-radius:6px;font-size:12px}
+.secao{display:none}.secao.on{display:block}
+h2.sec{color:var(--pri);margin:22px 4px 6px;font-size:18px}
+footer{text-align:center;color:var(--mut);font-size:12px;padding:20px}
+@media print{.modes,header p{display:none}.passo .corpo{display:block}}
+</style>
+</head>
+<body>
+<header>
+<h1>📘 Manual do Sistema — CRM Obras</h1>
+<p>Guia simples para gestor e técnico • Escolha seu perfil abaixo</p>
+</header>
+<div class="modes">
+<button id="bG" class="on" onclick="trocar('G')">🖥️ SOU GESTOR</button>
+<button id="bT" onclick="trocar('T')">📱 SOU TÉCNICO</button>
+</div>
+<div class="wrap">
+
+<!-- ================= GESTOR ================= -->
+<div class="secao on" id="secG">
+<h2 class="sec">Começando (só precisa fazer 1 vez)</h2>
+
+<div class="passo"><button onclick="abrir(this)"><span class="n">1</span>Entrar no sistema</button><div class="corpo">
+<ol>
+<li>Abra o navegador (Chrome) e acesse o endereço do sistema.</li>
+<li>Digite seu <b>e-mail</b> e <b>senha</b> e clique em <b>Entrar</b>.</li>
+<li>Login inicial (troque depois): <code>admin@ipq.com</code> / <code>admin123</code>.</li>
+</ol>
+<div class="cuidado">⚠️ A sessão dura 7 dias. Se expirar, entre de novo — é normal.</div>
+</div></div>
+
+<div class="passo"><button onclick="abrir(this)"><span class="n">2</span>Cadastrar a OBRA (menu Obras)</button><div class="corpo">
+<ol>
+<li>No menu, clique em <b>Obras → 1. cadastrar a obra</b>.</li>
+<li>Preencha <b>nome</b> (ex: TJ-CE), prazo e responsável. Clique <b>Criar Obra</b>.</li>
+<li>Para ver/editar depois, clique na obra na lista.</li>
+</ol>
+</div></div>
+
+<div class="passo"><button onclick="abrir(this)"><span class="n">3</span>Cadastrar USUÁRIOS (menu Usuários)</button><div class="corpo">
+<ol>
+<li>Menu <b>Usuários → 2. cadastrar usuários</b> → <b>Novo Usuário</b>.</li>
+<li>Preencha <b>nome, e-mail e senha</b>. Escolha o perfil: <b>Técnico</b> (campo) ou <b>Gestor</b> (admin).</li>
+<li>Clique <b>Criar Usuário</b>. Passe o login e a senha para a pessoa.</li>
+</ol>
+</div></div>
+
+<div class="passo"><button onclick="abrir(this)"><span class="n">4</span>Montar EQUIPES (menu Equipes)</button><div class="corpo">
+<ol>
+<li>Menu <b>Equipes → 3. montar equipes</b> → digite o nome (ex: Equipe 1).</li>
+<li><b>Marque os membros</b> na lista e clique <b>Criar Equipe</b>.</li>
+<li>Sem equipe, o técnico não recebe local de trabalho.</li>
+</ol>
+</div></div>
+
+<div class="passo"><button onclick="abrir(this)"><span class="n">5</span>Cadastrar LOCAIS e dizer onde cada equipe trabalha</button><div class="corpo">
+<ol>
+<li>Menu <b>Locais → 4. locais e equipes</b>.</li>
+<li>Para criar um local novo, use <b>+ Novo Local</b> (nome, comarca, endereço).</li>
+<li><b>Marque os locais</b> na lista, escolha a <b>equipe</b> e clique em atribuir: pronto, a equipe passa a ver aqueles locais no celular.</li>
+<li>Para ligar um local a uma obra, use o menu <b>Vincular Obras</b>.</li>
+</ol>
+<div class="dica">💡 Dá para importar tudo de uma vez pela planilha em Vincular Obras.</div>
+</div></div>
+
+<div class="passo"><button onclick="abrir(this)"><span class="n">6</span>Cadastrar MATERIAIS e dividir (menu Materiais)</button><div class="corpo">
+<ol>
+<li>Menu <b>Materiais → 5. cadastrar e dividir</b>.</li>
+<li><b>Adicionar Material:</b> nome + categoria + unidade + quantidade mínima (para avisar quando acabar).</li>
+<li><b>📥 Lançar:</b> <b>Compra</b> soma no geral → <b>Distribuir</b> manda do geral para a equipe → <b>Levar p/ local</b> manda da equipe para o local.</li>
+<li>Os cartões mostram: 🚨 quem está precisando e 📍 o saldo de cada local.</li>
+</ol>
+<div class="cuidado">⚠️ A compra entra no <b>GERAL</b> e é dividida. O RDO consome do <b>local primeiro</b>; o que faltar sai da equipe (nunca conta 2 vezes).</div>
+</div></div>
+
+<div class="passo"><button onclick="abrir(this)"><span class="n">7</span>ESTOQUE da obra: compras, planejamento e consumo</button><div class="corpo">
+<ol>
+<li>Menu <b>Estoque → 6. comprado × consumido</b> e escolha a <b>obra</b>.</li>
+<li><b>🛒 Compras:</b> registre <b>nome + quantidade</b> comprados para a obra. Uma nota pode servir várias obras: registre 1 linha por obra.</li>
+<li><b>➕ Estimativa:</b> planeje quanto cada <b>local/equipe</b> vai usar. Dá para importar a planilha Materiais.xlsx.</li>
+<li><b>⚖️ Comparativo</b> mostra comprado × consumido. <b>🧾 Relatório por local</b> mostra o gasto de cada local (com botão de exportar).</li>
+</ol>
+</div></div>
+
+<div class="passo"><button onclick="abrir(this)"><span class="n">8</span>Ver RDOs, relatórios e auditoria</button><div class="corpo">
+<ol>
+<li><b>RDOs:</b> lista tudo que os técnicos lançaram. Dá para abrir, corrigir e restaurar excluídos.</li>
+<li><b>Por Equipe / Relatórios / Mapa:</b> acompanhamento do progresso.</li>
+<li><b>Auditoria:</b> mostra quem criou, editou ou apagou cada RDO e por quê.</li>
+</ol>
+<div class="cuidado">⚠️ RDO com mais de <b>24 horas</b> só o gestor pode corrigir ou excluir — e sempre com motivo escrito.</div>
+</div></div>
+</div>
+
+<!-- ================= TÉCNICO ================= -->
+<div class="secao" id="secT">
+<h2 class="sec">Começando no celular</h2>
+
+<div class="passo"><button onclick="abrir(this)"><span class="n">1</span>Entrar e liberar o GPS</button><div class="corpo">
+<ol>
+<li>Abra o <b>/app</b> no navegador do celular e entre com seu e-mail e senha.</li>
+<li>Quando pedir <b>localização</b>, toque em <b>Permitir</b> — sem GPS o mapa não funciona.</li>
+<li>Na aba <b>Início</b> você vê sua <b>equipe</b> e os <b>locais onde vai trabalhar</b>.</li>
+</ol>
+</div></div>
+
+<div class="passo"><button onclick="abrir(this)"><span class="n">2</span>Criar um RDO passo a passo (aba +RDO)</button><div class="corpo">
+<ol>
+<li>Toque em <b>+RDO</b>.</li>
+<li>Escolha a <b>obra</b>, o <b>local</b> (a cidade preenche sozinha) e a <b>data</b>.</li>
+<li>Escolha a <b>atividade</b> (o que foi feito).</li>
+<li>Em <b>materiais</b>, digite para buscar: aparecem <b>só os liberados para sua equipe naquele local</b>. Toque para adicionar e ajuste a quantidade. Se não achar, use <b>+ Adicionar</b>.</li>
+<li>Preencha os <b>horários</b> (manhã/tarde), marque se <b>parou</b> e o motivo.</li>
+<li>Toque em <b>Salvar</b>. Pronto — o material já sai do estoque sozinho.</li>
+</ol>
+<div class="dica">💡 Dica: toque num local da lista <b>Meus locais</b> no Início — o RDO já abre preenchido.</div>
+</div></div>
+
+<div class="passo"><button onclick="abrir(this)"><span class="n">3</span>Ver e corrigir meus RDOs (aba RDOs)</button><div class="corpo">
+<ol>
+<li>Aba <b>RDOs</b>: mostra tudo que você lançou.</li>
+<li>Para <b>corrigir</b>, abra o RDO e edite — vai pedir o <b>motivo</b> (ex: horário errado).</li>
+<li>Para <b>excluir</b>, também pede motivo. Excluído vai para auditoria e o gestor pode restaurar.</li>
+<li>Dá para exportar em <b>Excel</b>.</li>
+</ol>
+<div class="cuidado">⚠️ Depois de <b>24 horas</b>, só o gestor corrige. Confira no mesmo dia!</div>
+</div></div>
+
+<div class="passo"><button onclick="abrir(this)"><span class="n">4</span>Mapa e dúvidas comuns</button><div class="corpo">
+<ol>
+<li>Aba <b>Mapa</b>: mostra todos os locais e RDOs. O <b>Início</b> mostra o GPS ao vivo.</li>
+<li><b>Não acho o material:</b> ele pode não estar liberado para seu local — fale com o gestor ou use + Adicionar.</li>
+<li><b>Sem internet?</b> O sistema avisa. Volte quando tiver sinal.</li>
+<li><b>Esqueci a senha:</b> peça ao gestor para cadastrar de novo.</li>
+</ol>
+</div></div>
+</div>
+
+</div>
+<footer>CRM Obras • IPQ Tecnologia • Se algo não funcionar, avise o gestor com print da tela</footer>
+<script>
+function trocar(q){document.getElementById('secG').classList.toggle('on',q==='G');document.getElementById('secT').classList.toggle('on',q==='T');document.getElementById('bG').classList.toggle('on',q==='G');document.getElementById('bT').classList.toggle('on',q==='T');window.scrollTo({top:0});}
+function abrir(b){b.parentElement.classList.toggle('aberto');}
+</script>
+</body>
+</html>

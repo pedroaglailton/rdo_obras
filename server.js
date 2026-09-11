@@ -207,7 +207,47 @@ const SQL_CREATE = [
     usuario_id INTEGER,
     criado_em TEXT DEFAULT (datetime('now'))
   )`,
-  `CREATE INDEX IF NOT EXISTS idx_est_mov_eqmat ON estoque_movimentacoes(equipe_id, material_id)`
+  `CREATE INDEX IF NOT EXISTS idx_est_mov_eqmat ON estoque_movimentacoes(equipe_id, material_id)`,
+  // Estoque físico por LOCAL: o local recebe material (da equipe ou direto) e o RDO
+  // consome dele junto com o da equipe. Trilha separada para não misturar com equipe.
+  `CREATE TABLE IF NOT EXISTS estoque_locais (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    local_id INTEGER NOT NULL REFERENCES locais(id) ON DELETE CASCADE,
+    material_id INTEGER NOT NULL REFERENCES materiais(id) ON DELETE CASCADE,
+    quantidade_atual REAL DEFAULT 0,
+    atualizado_em TEXT DEFAULT (datetime('now')),
+    UNIQUE(local_id, material_id)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_estoque_locais_local ON estoque_locais(local_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_estoque_locais_mat ON estoque_locais(material_id)`,
+  `CREATE TABLE IF NOT EXISTS estoque_local_movimentacoes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    local_id INTEGER NOT NULL REFERENCES locais(id) ON DELETE CASCADE,
+    material_id INTEGER NOT NULL REFERENCES materiais(id) ON DELETE CASCADE,
+    tipo TEXT NOT NULL,
+    quantidade REAL NOT NULL,
+    saldo_apos REAL,
+    origem TEXT DEFAULT '',
+    usuario_id INTEGER,
+    criado_em TEXT DEFAULT (datetime('now'))
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_est_locmov_locmat ON estoque_local_movimentacoes(local_id, material_id)`,
+  // Compras por OBRA: o que foi efetivamente comprado para a obra (base do
+  // comparativo comprado x consumido). Estimativa = plano; compra = dinheiro.
+  `CREATE TABLE IF NOT EXISTS obra_compras (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    obra_id INTEGER NOT NULL REFERENCES obras(id) ON DELETE CASCADE,
+    material_nome TEXT NOT NULL,
+    unidade TEXT DEFAULT 'UND',
+    quantidade REAL DEFAULT 0,
+    valor_unitario REAL DEFAULT 0,
+    fornecedor TEXT DEFAULT '',
+    data_compra TEXT DEFAULT '',
+    observacao TEXT DEFAULT '',
+    criado_por TEXT DEFAULT '',
+    criado_em TEXT DEFAULT (datetime('now'))
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_obra_compras_obra ON obra_compras(obra_id)`
 ];
 // DB init - hibrido SQLite / Postgres (Supabase)
 async function initDb(){
@@ -241,6 +281,15 @@ async function initDb(){
     try { await db.exec('ALTER TABLE materiais ADD COLUMN IF NOT EXISTS quantidade_minima DOUBLE PRECISION DEFAULT 0'); } catch(e){}
     try { await db.exec(`CREATE TABLE IF NOT EXISTS estoque_equipes (id SERIAL PRIMARY KEY, equipe_id INTEGER NOT NULL REFERENCES equipes(id) ON DELETE CASCADE, material_id INTEGER NOT NULL REFERENCES materiais(id) ON DELETE CASCADE, quantidade_atual DOUBLE PRECISION DEFAULT 0, atualizado_em TIMESTAMPTZ DEFAULT NOW(), UNIQUE(equipe_id, material_id))`); } catch(e){}
     try { await db.exec(`CREATE TABLE IF NOT EXISTS estoque_movimentacoes (id SERIAL PRIMARY KEY, equipe_id INTEGER NOT NULL REFERENCES equipes(id) ON DELETE CASCADE, material_id INTEGER NOT NULL REFERENCES materiais(id) ON DELETE CASCADE, tipo TEXT NOT NULL, quantidade DOUBLE PRECISION NOT NULL, saldo_apos DOUBLE PRECISION, origem TEXT DEFAULT '', usuario_id INTEGER, criado_em TIMESTAMPTZ DEFAULT NOW())`); } catch(e){}
+    // Estoque físico por LOCAL (bancos já criados: CREATE IF NOT EXISTS é idempotente)
+    try { await db.exec(`CREATE TABLE IF NOT EXISTS estoque_locais (id SERIAL PRIMARY KEY, local_id INTEGER NOT NULL REFERENCES locais(id) ON DELETE CASCADE, material_id INTEGER NOT NULL REFERENCES materiais(id) ON DELETE CASCADE, quantidade_atual DOUBLE PRECISION DEFAULT 0, atualizado_em TIMESTAMPTZ DEFAULT NOW(), UNIQUE(local_id, material_id))`); } catch(e){}
+    try { await db.exec('CREATE INDEX IF NOT EXISTS idx_estoque_locais_local ON estoque_locais(local_id)'); } catch(e){}
+    try { await db.exec('CREATE INDEX IF NOT EXISTS idx_estoque_locais_mat ON estoque_locais(material_id)'); } catch(e){}
+    try { await db.exec(`CREATE TABLE IF NOT EXISTS estoque_local_movimentacoes (id SERIAL PRIMARY KEY, local_id INTEGER NOT NULL REFERENCES locais(id) ON DELETE CASCADE, material_id INTEGER NOT NULL REFERENCES materiais(id) ON DELETE CASCADE, tipo TEXT NOT NULL, quantidade DOUBLE PRECISION NOT NULL, saldo_apos DOUBLE PRECISION, origem TEXT DEFAULT '', usuario_id INTEGER, criado_em TIMESTAMPTZ DEFAULT NOW())`); } catch(e){}
+    try { await db.exec('CREATE INDEX IF NOT EXISTS idx_est_locmov_locmat ON estoque_local_movimentacoes(local_id, material_id)'); } catch(e){}
+    // Compras por OBRA (bancos já criados: CREATE IF NOT EXISTS é idempotente)
+    try { await db.exec(`CREATE TABLE IF NOT EXISTS obra_compras (id SERIAL PRIMARY KEY, obra_id INTEGER NOT NULL REFERENCES obras(id) ON DELETE CASCADE, material_nome TEXT NOT NULL, unidade TEXT DEFAULT 'UND', quantidade DOUBLE PRECISION DEFAULT 0, valor_unitario DOUBLE PRECISION DEFAULT 0, fornecedor TEXT DEFAULT '', data_compra TEXT DEFAULT '', observacao TEXT DEFAULT '', criado_por TEXT DEFAULT '', criado_em TIMESTAMPTZ DEFAULT NOW())`); } catch(e){}
+    try { await db.exec('CREATE INDEX IF NOT EXISTS idx_obra_compras_obra ON obra_compras(obra_id)'); } catch(e){}
     try { await db.exec('ALTER TABLE obra_materiais DROP CONSTRAINT IF EXISTS obra_materiais_obra_id_material_nome_key'); } catch(e){}
     try { await db.exec('CREATE INDEX IF NOT EXISTS idx_obra_mat_escopo ON obra_materiais(obra_id, local_id, equipe_id)'); } catch(e){}
     try { await db.exec('CREATE INDEX IF NOT EXISTS idx_locais_obra ON locais(obra_id)'); } catch(e){}
@@ -308,6 +357,15 @@ async function initDb(){
     try { await db.exec('CREATE INDEX IF NOT EXISTS idx_estoque_equipes_mat ON estoque_equipes(material_id)'); } catch(e){}
     try { await db.exec(`CREATE TABLE IF NOT EXISTS estoque_movimentacoes (id INTEGER PRIMARY KEY AUTOINCREMENT, equipe_id INTEGER NOT NULL REFERENCES equipes(id) ON DELETE CASCADE, material_id INTEGER NOT NULL REFERENCES materiais(id) ON DELETE CASCADE, tipo TEXT NOT NULL, quantidade REAL NOT NULL, saldo_apos REAL, origem TEXT DEFAULT '', usuario_id INTEGER, criado_em TEXT DEFAULT (datetime('now')))`); } catch(e){}
     try { await db.exec('CREATE INDEX IF NOT EXISTS idx_est_mov_eqmat ON estoque_movimentacoes(equipe_id, material_id)'); } catch(e){}
+    // Estoque físico por LOCAL (bancos já criados: CREATE IF NOT EXISTS é idempotente)
+    try { await db.exec(`CREATE TABLE IF NOT EXISTS estoque_locais (id INTEGER PRIMARY KEY AUTOINCREMENT, local_id INTEGER NOT NULL REFERENCES locais(id) ON DELETE CASCADE, material_id INTEGER NOT NULL REFERENCES materiais(id) ON DELETE CASCADE, quantidade_atual REAL DEFAULT 0, atualizado_em TEXT DEFAULT (datetime('now')), UNIQUE(local_id, material_id))`); } catch(e){}
+    try { await db.exec('CREATE INDEX IF NOT EXISTS idx_estoque_locais_local ON estoque_locais(local_id)'); } catch(e){}
+    try { await db.exec('CREATE INDEX IF NOT EXISTS idx_estoque_locais_mat ON estoque_locais(material_id)'); } catch(e){}
+    try { await db.exec(`CREATE TABLE IF NOT EXISTS estoque_local_movimentacoes (id INTEGER PRIMARY KEY AUTOINCREMENT, local_id INTEGER NOT NULL REFERENCES locais(id) ON DELETE CASCADE, material_id INTEGER NOT NULL REFERENCES materiais(id) ON DELETE CASCADE, tipo TEXT NOT NULL, quantidade REAL NOT NULL, saldo_apos REAL, origem TEXT DEFAULT '', usuario_id INTEGER, criado_em TEXT DEFAULT (datetime('now')))`); } catch(e){}
+    try { await db.exec('CREATE INDEX IF NOT EXISTS idx_est_locmov_locmat ON estoque_local_movimentacoes(local_id, material_id)'); } catch(e){}
+    // Compras por OBRA (bancos já criados: CREATE IF NOT EXISTS é idempotente)
+    try { await db.exec(`CREATE TABLE IF NOT EXISTS obra_compras (id INTEGER PRIMARY KEY AUTOINCREMENT, obra_id INTEGER NOT NULL REFERENCES obras(id) ON DELETE CASCADE, material_nome TEXT NOT NULL, unidade TEXT DEFAULT 'UND', quantidade REAL DEFAULT 0, valor_unitario REAL DEFAULT 0, fornecedor TEXT DEFAULT '', data_compra TEXT DEFAULT '', observacao TEXT DEFAULT '', criado_por TEXT DEFAULT '', criado_em TEXT DEFAULT (datetime('now')))`); } catch(e){}
+    try { await db.exec('CREATE INDEX IF NOT EXISTS idx_obra_compras_obra ON obra_compras(obra_id)'); } catch(e){}
   }
   // Admin padrao (async para ambos)
   const admin = await db.prepare('SELECT id FROM usuarios WHERE email=?').get('admin@ipq.com');
@@ -410,7 +468,9 @@ function verifyToken(token) {
     const [d, sig] = token.split('.');
     if (!d || !sig) return null;
     if (sig !== crypto.createHmac('sha256', SECRET).update(d).digest('base64')) return null;
-    return JSON.parse(Buffer.from(d, 'base64').toString());
+    const payload = JSON.parse(Buffer.from(d, 'base64').toString());
+    if (payload.exp && Date.now() > payload.exp) return null; // token expirado
+    return payload;
   } catch { return null; }
 }
 
@@ -910,7 +970,7 @@ app.get('/api/locais/:id', async (req, res) => {
 
 app.post('/api/locais', gestor, async (req, res) => {
   const { nome, comarca, nome_imovel, tipo, ocupacao, endereco, area, longitude, latitude, google_maps_link, street_view_link, cameras, obra_id, equipe_id } = req.body;
-  if (!nome) return res.status(400).json({ error: 'Nome obrigatorio' });
+  if (!nome || !nome.toString().trim()) return res.status(400).json({ error: 'Nome obrigatorio' });
   const r = await db.prepare('INSERT INTO locais (nome,comarca,nome_imovel,tipo,ocupacao,endereco,area,longitude,latitude,google_maps_link,street_view_link,cameras,obra_id,equipe_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
     .run(nome, comarca || '', nome_imovel || '', tipo || '', ocupacao || '', endereco || '', area || '', longitude || '', latitude || '', google_maps_link || '', street_view_link || '', cameras || 0, obra_id||null, equipe_id||null);
   // Mantém regiao string para compatibilidade com app antigo
@@ -1175,7 +1235,7 @@ app.delete('/api/materiais/:id', gestor, async (req, res) => {
 // ============================================================
 // Visão geral: cada linha = 1 material x 1 equipe, com gasto total e status
 app.get('/api/estoque/equipes', async (req, res) => {
-  const { equipe_id, busca, so_alertas } = req.query;
+  const { equipe_id, busca, so_alertas, so_movimento } = req.query;
   const mats = await db.prepare('SELECT id, nome, categoria, COALESCE(unidade,\'UND\') as unidade, COALESCE(quantidade_minima,0) as quantidade_minima FROM materiais WHERE ativo=1 ORDER BY nome').all();
   const eqs = await db.prepare('SELECT id, nome, COALESCE(eh_geral,0) as eh_geral FROM equipes WHERE ativo=1 ORDER BY COALESCE(eh_geral,0) DESC, nome').all();
   const eqFiltradas = equipe_id ? eqs.filter(e => Number(e.id) === Number(equipe_id)) : eqs;
@@ -1201,6 +1261,8 @@ app.get('/api/estoque/equipes', async (req, res) => {
     linhas = linhas.filter(l => l.material_nome.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().includes(n) || l.equipe_nome.toLowerCase().includes(n));
   }
   if (String(so_alertas) === '1' || String(so_alertas) === 'true') linhas = linhas.filter(l => l.status === 'critico' || l.status === 'atencao' || l.status === 'zerado');
+  // so_movimento: trafega só o que tem saldo ou gasto (a tela já ignorava o resto)
+  if (String(so_movimento) === '1' || String(so_movimento) === 'true') linhas = linhas.filter(l => Number(l.saldo) !== 0 || Number(l.gasto) !== 0);
   res.json(linhas);
 });
 
@@ -1228,7 +1290,7 @@ app.post('/api/estoque/lancar', gestor, async (req, res) => {
   const { equipe_id, material_id, tipo, quantidade, origem } = req.body;
   const matId = Number(material_id), qtd = Number(quantidade);
   if (!matId || !qtd || qtd <= 0) return res.status(400).json({ error: 'material_id e quantidade (>0) são obrigatórios' });
-  if (!['entrada', 'saida', 'compra', 'saida_geral', 'distribuir'].includes(tipo)) return res.status(400).json({ error: "tipo deve ser 'entrada', 'saida', 'compra', 'saida_geral' ou 'distribuir'" });
+  if (!['entrada', 'saida', 'compra', 'saida_geral', 'distribuir', 'distribuir_local', 'entrada_local', 'saida_local'].includes(tipo)) return res.status(400).json({ error: "tipo deve ser 'entrada', 'saida', 'compra', 'saida_geral', 'distribuir', 'distribuir_local', 'entrada_local' ou 'saida_local'" });
   const mat = await db.prepare('SELECT id, nome, COALESCE(unidade,\'UND\') as unidade, COALESCE(quantidade_minima,0) as quantidade_minima FROM materiais WHERE id=? AND ativo=1').get(matId);
   if (!mat) return res.status(400).json({ error: 'Material inválido' });
   const minimo = Number(mat.quantidade_minima) || 0;
@@ -1244,9 +1306,10 @@ app.post('/api/estoque/lancar', gestor, async (req, res) => {
   }
 
   const eqId = Number(equipe_id);
-  if (!eqId) return res.status(400).json({ error: 'Escolha a equipe' });
-  const eq = await db.prepare('SELECT id, nome FROM equipes WHERE id=? AND ativo=1').get(eqId);
-  if (!eq) return res.status(400).json({ error: 'Equipe inválida' });
+  const precisaEq = !['entrada_local', 'saida_local'].includes(tipo);
+  if (precisaEq && !eqId) return res.status(400).json({ error: 'Escolha a equipe' });
+  const eq = precisaEq ? await db.prepare('SELECT id, nome FROM equipes WHERE id=? AND ativo=1').get(eqId) : null;
+  if (precisaEq && !eq) return res.status(400).json({ error: 'Equipe inválida' });
 
   if (tipo === 'distribuir') {
     // Transfere GERAL → equipe (duas pernas, auditoria preservada)
@@ -1257,6 +1320,25 @@ app.post('/api/estoque/lancar', gestor, async (req, res) => {
     const avisoGeral = minimo > 0 && g.saldo <= minimo;
     return res.json({ ok: true, equipe: eq.nome, material: mat.nome, unidade: mat.unidade, saldo: t.saldo, saldo_geral: g.saldo, minimo, alerta: t.alerta, avisoGeral,
       msg: t.alerta ? `⚠️ ${eq.nome} ficou com ${t.saldo} ${mat.unidade} de ${mat.nome} (mínimo ${minimo})` : `Distribuído: ${qtd} ${mat.unidade} geral→${eq.nome} (geral: ${g.saldo})` });
+  }
+
+  // distribuir_local: equipe leva material para o LOCAL (equipe→local, duas pernas auditadas)
+  // entrada_local/saida_local: ajuste direto no saldo do local (ex: compra entregue no local)
+  if (['distribuir_local', 'entrada_local', 'saida_local'].includes(tipo)) {
+    const locId = Number(req.body.local_id);
+    if (!locId) return res.status(400).json({ error: 'Escolha o local' });
+    const loc = await db.prepare('SELECT id, nome FROM locais WHERE id=? AND ativo=1').get(locId);
+    if (!loc) return res.status(400).json({ error: 'Local inválido' });
+    if (tipo === 'distribuir_local') {
+      const g = await movimentarEstoqueRdo(eqId, matId, 'saida', qtd, `levado p/ local ${loc.nome}${origTxt ? ' (' + origTxt + ')' : ''}`, uid);
+      const t = await movimentarEstoqueLocal(locId, matId, 'entrada', qtd, `recebido da equipe ${eq.nome}${origTxt ? ' (' + origTxt + ')' : ''}`, uid);
+      return res.json({ ok: true, equipe: eq.nome, local: loc.nome, material: mat.nome, unidade: mat.unidade, saldo_equipe: g.saldo, saldo_local: t.saldo, minimo, alerta: t.alerta,
+        msg: t.alerta ? `⚠️ ${loc.nome} ficou com ${t.saldo} ${mat.unidade} de ${mat.nome} (mínimo ${minimo})` : `Levado: ${qtd} ${mat.unidade} ${eq.nome}→${loc.nome} (equipe: ${g.saldo} • local: ${t.saldo})` });
+    }
+    const mov = tipo === 'entrada_local' ? 'entrada' : 'saida';
+    const t = await movimentarEstoqueLocal(locId, matId, mov, qtd, origTxt || tipo, uid);
+    return res.json({ ok: true, local: loc.nome, material: mat.nome, unidade: mat.unidade, saldo: t.saldo, minimo, alerta: t.alerta,
+      msg: t.alerta ? `⚠️ ${loc.nome} ficou com ${t.saldo} ${mat.unidade} de ${mat.nome} (mínimo ${minimo})` : 'Lançamento no local ok' });
   }
 
   // entrada/saida: ajuste direto no saldo da equipe
@@ -1272,6 +1354,54 @@ app.get('/api/estoque/movimentacoes', async (req, res) => {
   let sql = `SELECT mv.*, e.nome as equipe_nome, m.nome as material_nome, m.unidade as unidade FROM estoque_movimentacoes mv JOIN equipes e ON e.id=mv.equipe_id JOIN materiais m ON m.id=mv.material_id WHERE 1=1`;
   const p = [];
   if (equipe_id) { sql += ' AND mv.equipe_id=?'; p.push(Number(equipe_id)); }
+  if (material_id) { sql += ' AND mv.material_id=?'; p.push(Number(material_id)); }
+  sql += ' ORDER BY mv.id DESC LIMIT ' + (Math.min(Number(limite) || 100, 500));
+  res.json(await db.prepare(sql).all(...p));
+});
+
+// ============================================================
+// ESTOQUE FÍSICO POR LOCAL — saldo por local x mínimo global
+// Espelho do /api/estoque/equipes: cada linha = 1 material x 1 local.
+// ============================================================
+app.get('/api/estoque/locais', async (req, res) => {
+  const { local_id, busca, so_alertas, so_movimento } = req.query;
+  const mats = await db.prepare('SELECT id, nome, categoria, COALESCE(unidade,\'UND\') as unidade, COALESCE(quantidade_minima,0) as quantidade_minima FROM materiais WHERE ativo=1 ORDER BY nome').all();
+  let locs = await db.prepare('SELECT l.id, l.nome, l.comarca, l.obra_id, o.nome as obra_nome FROM locais l LEFT JOIN obras o ON o.id=l.obra_id WHERE l.ativo=1 ORDER BY l.nome').all();
+  if (local_id) locs = locs.filter(l => Number(l.id) === Number(local_id));
+  const saldos = await db.prepare('SELECT local_id, material_id, quantidade_atual FROM estoque_locais').all();
+  const mapSaldo = new Map(saldos.map(s => [`${s.local_id}:${s.material_id}`, Number(s.quantidade_atual) || 0]));
+  const gastos = await db.prepare(`SELECT local_id, material_id, SUM(CASE WHEN tipo='rdo' THEN quantidade WHEN tipo='estorno' THEN -quantidade ELSE 0 END) as gasto FROM estoque_local_movimentacoes GROUP BY local_id, material_id`).all();
+  const mapGasto = new Map(gastos.map(g => [`${g.local_id}:${g.material_id}`, Number(g.gasto) || 0]));
+  let linhas = [];
+  for (const l of locs) {
+    for (const m of mats) {
+      const saldo = mapSaldo.get(`${l.id}:${m.id}`) ?? 0;
+      const minimo = Number(m.quantidade_minima) || 0;
+      const gasto = mapGasto.get(`${l.id}:${m.id}`) ?? 0;
+      let status = 'ok';
+      if (minimo > 0 && saldo <= minimo) status = 'critico';
+      else if (minimo > 0 && saldo <= minimo * 1.2) status = 'atencao';
+      else if (saldo === 0 && gasto > 0) status = 'zerado';
+      linhas.push({ local_id: l.id, local_nome: l.nome, comarca: l.comarca, obra_id: l.obra_id, obra_nome: l.obra_nome, material_id: m.id, material_nome: m.nome, categoria: m.categoria, unidade: m.unidade, saldo, minimo, gasto, status });
+    }
+  }
+  if (busca) {
+    const n = busca.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    linhas = linhas.filter(l => l.material_nome.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().includes(n) || l.local_nome.toLowerCase().includes(n));
+  }
+  if (String(so_alertas) === '1' || String(so_alertas) === 'true') linhas = linhas.filter(l => l.status === 'critico' || l.status === 'atencao' || l.status === 'zerado');
+  // so_movimento: não trafega o cartesiano zerado (239 locais x 154 materiais);
+  // a tela filtra o resto no cliente. Reduz ~36k linhas para dezenas.
+  if (String(so_movimento) === '1' || String(so_movimento) === 'true') linhas = linhas.filter(l => Number(l.saldo) !== 0 || Number(l.gasto) !== 0);
+  res.json(linhas);
+});
+
+// Trilha de movimentações do local (auditoria: quem abasteceu / o que o RDO consumiu)
+app.get('/api/estoque/locais/movimentacoes', async (req, res) => {
+  const { local_id, material_id, limite } = req.query;
+  let sql = `SELECT mv.*, l.nome as local_nome, m.nome as material_nome, m.unidade as unidade FROM estoque_local_movimentacoes mv JOIN locais l ON l.id=mv.local_id JOIN materiais m ON m.id=mv.material_id WHERE 1=1`;
+  const p = [];
+  if (local_id) { sql += ' AND mv.local_id=?'; p.push(Number(local_id)); }
   if (material_id) { sql += ' AND mv.material_id=?'; p.push(Number(material_id)); }
   sql += ' ORDER BY mv.id DESC LIMIT ' + (Math.min(Number(limite) || 100, 500));
   res.json(await db.prepare(sql).all(...p));
@@ -1339,6 +1469,40 @@ app.put('/api/obra-materiais/:id', gestor, async (req, res) => {
 });
 app.delete('/api/obra-materiais/:id', gestor, async (req, res) => {
   await db.prepare('DELETE FROM obra_materiais WHERE id=?').run(Number(req.params.id));
+  res.json({ok:true});
+});
+// ============================================================
+// COMPRAS POR OBRA — o que foi efetivamente comprado para a obra
+// (base do comparativo comprado x consumido; estimativa = plano)
+// ============================================================
+app.get('/api/obras/:obra_id/compras', async (req, res) => {
+  const rows = await db.prepare('SELECT * FROM obra_compras WHERE obra_id=? ORDER BY data_compra DESC, id DESC').all(Number(req.params.obra_id));
+  res.json(rows);
+});
+app.post('/api/obras/:obra_id/compras', gestor, async (req, res) => {
+  const obraId = Number(req.params.obra_id);
+  const { material_nome, unidade, quantidade, valor_unitario, fornecedor, data_compra, observacao } = req.body;
+  if (!material_nome || !material_nome.trim()) return res.status(400).json({error:'material_nome obrigatório'});
+  const qtd = Number(quantidade)||0;
+  if (qtd <= 0) return res.status(400).json({error:'Quantidade deve ser > 0'});
+  const nome = material_nome.trim();
+  const r = await db.prepare('INSERT INTO obra_compras (obra_id, material_nome, unidade, quantidade, valor_unitario, fornecedor, data_compra, observacao, criado_por) VALUES (?,?,?,?,?,?,?,?,?)')
+    .run(obraId, nome, (unidade||'UND').toUpperCase(), qtd, Number(valor_unitario)||0, fornecedor||'', data_compra||new Date().toISOString().slice(0,10), observacao||'', req.user ? req.user.nome : '');
+  // garante que material existe no catálogo
+  try { await db.prepare('INSERT OR IGNORE INTO materiais (nome,categoria) VALUES (?,?)').run(nome, 'Geral'); } catch(e){}
+  res.json({ok:true, id: r.lastInsertRowid});
+});
+app.put('/api/obra-compras/:id', gestor, async (req, res) => {
+  const id = Number(req.params.id);
+  const atual = await db.prepare('SELECT * FROM obra_compras WHERE id=?').get(id);
+  if(!atual) return res.status(404).json({error:'Compra não encontrada'});
+  const { material_nome, unidade, quantidade, valor_unitario, fornecedor, data_compra, observacao } = req.body;
+  await db.prepare('UPDATE obra_compras SET material_nome=?, unidade=?, quantidade=?, valor_unitario=?, fornecedor=?, data_compra=?, observacao=? WHERE id=?')
+    .run((material_nome||atual.material_nome).trim(), (unidade||atual.unidade||'UND').toUpperCase(), quantidade!=null? Number(quantidade):atual.quantidade, valor_unitario!=null? Number(valor_unitario):atual.valor_unitario, fornecedor!=null? fornecedor:atual.fornecedor, data_compra||atual.data_compra, observacao!=null? observacao:atual.observacao, id);
+  res.json({ok:true});
+});
+app.delete('/api/obra-compras/:id', gestor, async (req, res) => {
+  await db.prepare('DELETE FROM obra_compras WHERE id=?').run(Number(req.params.id));
   res.json({ok:true});
 });
 // Importar Materiais.xlsx por obra (espera {linhas:[{Descrição do material, Unidade, Quantidade solicitada, Menor valor Total, Fornecedor...}]})
@@ -1447,8 +1611,21 @@ app.get('/api/obras/:obra_id/materiais/consumo', async (req, res) => {
   // Nexo com Materiais: anexa minimo do catálogo (referência) por nome normalizado
   const catMinimos = await db.prepare('SELECT nome, COALESCE(quantidade_minima,0) as minimo FROM materiais WHERE ativo=1').all();
   const mapMinimo = new Map(catMinimos.map(c => [mapNorm(c.nome), Number(c.minimo) || 0]));
+  // Comprado por material (comparativo comprado x consumido) — soma por nome normalizado
+  let comprasPorMat = new Map();
+  try {
+    const compras = await db.prepare('SELECT material_nome, quantidade, valor_unitario FROM obra_compras WHERE obra_id=?').all(obraId);
+    for (const c of compras) {
+      const k = mapNorm(c.material_nome);
+      const cur = comprasPorMat.get(k) || { qtd: 0, valor: 0 };
+      const q = Number(c.quantidade) || 0;
+      cur.qtd += q; cur.valor += q * (Number(c.valor_unitario) || 0);
+      comprasPorMat.set(k, cur);
+    }
+  } catch (e) { comprasPorMat = new Map(); }
   const itens = estimativas.map(e=>{
     const norm = mapNorm(e.material_nome);
+    const comp = comprasPorMat.get(norm) || { qtd: 0, valor: 0 };
     let consumido, nrdos, porEq, porLoc;
     if (e.local_id || e.equipe_id) {
       const sc = consumoEscopado(e);
@@ -1467,7 +1644,11 @@ app.get('/api/obras/:obra_id/materiais/consumo', async (req, res) => {
     // forecast: média por local concluído
     const mediaPorLocal = locaisConcluidos>0? consumido/locaisConcluidos : (totalLocais>0? estimado/totalLocais : 0);
     const projecaoRestante = mediaPorLocal * locaisPendentes;
-    const necessidade = Math.max(0, projecaoRestante - Math.max(0,saldo));
+    let necessidade = Math.max(0, projecaoRestante - Math.max(0,saldo));
+    // tolerância FP: sem nenhum RDO, projecao=(estimado/L)*L deveria ser == estimado, mas o
+    // IEEE754 deixa poeira ~2e-13 > 0 → virava status COMPRAR fantasma com 0% usado e a
+    // sugestão ganhava +1 via Math.ceil (ex: 100→101). Abaixo de 1e-9 é zero.
+    if (necessidade < 1e-9) necessidade = 0;
     let status='ok';
     if(consumido>estimado) status='estourado';
     else if(saldo<=0) status='critico';
@@ -1482,6 +1663,7 @@ app.get('/api/obras/:obra_id/materiais/consumo', async (req, res) => {
       equipe_id:e.equipe_id||null, equipe_nome:e.equipe_id?(mapEquipeNome[Number(e.equipe_id)]||null):null,
       escopo:(e.local_id||e.equipe_id)?'direcionado':'obra',
       estimado, consumido, saldo, pct, valorEstimado, valorConsumido, valorSaldo,
+      comprado: Math.round(comp.qtd*100)/100, comprado_valor: Math.round(comp.valor*100)/100,
       rdos: nrdos, porEquipe: porEq, porLocal: porLoc,
       mediaPorLocal: Math.round(mediaPorLocal*100)/100, projecaoRestante: Math.round(projecaoRestante*100)/100,
       necessidade: Math.round(necessidade*100)/100, status, precisaComprar, sugestaoCompra,
@@ -1491,10 +1673,13 @@ app.get('/api/obras/:obra_id/materiais/consumo', async (req, res) => {
   // materiais consumidos sem estimativa (extra)
   const estimNorms = new Set(estimativas.map(e=> mapNorm(e.material_nome)));
   const extras = Object.entries(consumoPorMat).filter(([k])=> !estimNorms.has(k)).map(([norm, v])=>{
-    return { material_nome: v.nome, unidade:'UND', estimado:0, consumido: v.total, saldo: -v.total, pct:100, valorEstimado:0, valorConsumido:0, valorSaldo:0, rdos:v.rdos, porEquipe:v.porEquipe, porLocal:v.porLocal, status:'extra', precisaComprar:true, sugestaoCompra:0, minimo_catalogo: mapMinimo.get(norm) || 0 };
+    const comp = comprasPorMat.get(norm) || { qtd: 0, valor: 0 };
+    return { material_nome: v.nome, unidade:'UND', estimado:0, consumido: v.total, saldo: -v.total, pct:100, valorEstimado:0, valorConsumido:0, valorSaldo:0, comprado: Math.round(comp.qtd*100)/100, comprado_valor: Math.round(comp.valor*100)/100, rdos:v.rdos, porEquipe:v.porEquipe, porLocal:v.porLocal, status:'extra', precisaComprar:true, sugestaoCompra:0, minimo_catalogo: mapMinimo.get(norm) || 0 };
   });
   const todosItens = [...itens, ...extras].sort((a,b)=> (b.pct - a.pct) || (b.consumido - a.consumido));
   const alertas = todosItens.filter(i=> i.precisaComprar);
+  const totalCompradoQtd = [...comprasPorMat.values()].reduce((s,c)=>s+c.qtd,0);
+  const totalCompradoValor = [...comprasPorMat.values()].reduce((s,c)=>s+c.valor,0);
   const resumo={
     obra_id:obraId, totalLocais, locaisConcluidos, locaisPendentes,
     totalMateriais: estimativas.length,
@@ -1503,6 +1688,8 @@ app.get('/api/obras/:obra_id/materiais/consumo', async (req, res) => {
     totalValorEstimado: itens.reduce((s,i)=>s+i.valorEstimado,0),
     totalValorConsumido: itens.reduce((s,i)=>s+i.valorConsumido,0),
     totalValorSaldo: itens.reduce((s,i)=>s+i.valorSaldo,0),
+    totalCompradoQtd: Math.round(totalCompradoQtd*100)/100,
+    totalCompradoValor: Math.round(totalCompradoValor*100)/100,
     pctMedio: itens.length? Math.round(itens.reduce((s,i)=>s+i.pct,0)/itens.length):0,
     alertas: alertas.length,
     rdosTotal: rdos.length
@@ -1511,6 +1698,49 @@ app.get('/api/obras/:obra_id/materiais/consumo', async (req, res) => {
   const rankingEquipes = Object.entries(consumoPorEquipe).map(([nome,total])=>({nome, total})).sort((a,b)=>b.total-a.total).slice(0,10);
   const rankingLocais = Object.entries(consumoPorLocal).map(([nome,total])=>({nome, total})).sort((a,b)=>b.total-a.total).slice(0,10);
   res.json({resumo, itens: todosItens, alertas, rankingEquipes, rankingLocais});
+});
+// Relatório de gastos por LOCAL: quanto cada local da obra já consumiu (via RDOs),
+// por material e por equipe. Base do "quanto foi gasto em cada local".
+app.get('/api/obras/:obra_id/materiais/por-local', async (req, res) => {
+  const obraId = Number(req.params.obra_id);
+  const mapNorm = s=> (s||'').toString().normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().trim();
+  const rdos = await db.prepare('SELECT id, local, local_id, materiais_json, equipe_json, data FROM rdos WHERE obra_id=? AND COALESCE(ativo,1)=1 ORDER BY data DESC, id DESC').all(obraId);
+  const locRows = await db.prepare('SELECT id, nome, comarca FROM locais WHERE obra_id=? AND ativo=1 ORDER BY nome').all(obraId);
+  const porId = new Map(locRows.map(l => [Number(l.id), l]));
+  const porNome = new Map(locRows.map(l => [mapNorm(l.nome), l]));
+  const grupos = new Map(); // key -> {local_id, local_nome, comarca, rdos:Set, mats:Map}
+  function grupoDe(r) {
+    let loc = (r.local_id != null && porId.has(Number(r.local_id))) ? porId.get(Number(r.local_id)) : null;
+    if (!loc && r.local && porNome.has(mapNorm(r.local))) loc = porNome.get(mapNorm(r.local));
+    const key = loc ? 'L' + loc.id : 'N' + mapNorm(r.local || 'SEM LOCAL');
+    if (!grupos.has(key)) grupos.set(key, { local_id: loc ? loc.id : null, local_nome: loc ? loc.nome : (r.local || 'SEM LOCAL'), comarca: loc ? loc.comarca : '', rdos: new Set(), mats: new Map() });
+    return grupos.get(key);
+  }
+  for (const r of rdos) {
+    let mats = []; try { mats = JSON.parse(r.materiais_json || '[]'); } catch (e) { mats = []; }
+    if (!Array.isArray(mats) || !mats.length) continue;
+    let eqs = []; try { eqs = JSON.parse(r.equipe_json || '[]'); } catch (e) { eqs = []; }
+    const g = grupoDe(r);
+    g.rdos.add(r.id);
+    for (const m of mats) {
+      const nome = (m.nome || m.material_nome || m.descricao || '').toString().trim();
+      if (!nome) continue;
+      const qtd = Number(m.qtd ?? m.quantidade ?? m.qty ?? 1) || 0;
+      const k = mapNorm(nome);
+      if (!g.mats.has(k)) g.mats.set(k, { material_nome: nome, consumido: 0, rdos: 0, porEquipe: {} });
+      const it = g.mats.get(k);
+      it.consumido = Math.round((it.consumido + qtd) * 100) / 100;
+      it.rdos += 1;
+      for (const eq of (eqs.length ? eqs : ['SEM EQUIPE'])) it.porEquipe[eq] = Math.round(((it.porEquipe[eq] || 0) + qtd) * 100) / 100;
+    }
+  }
+  const locais = [...grupos.values()].map(g => ({
+    local_id: g.local_id, local_nome: g.local_nome, comarca: g.comarca,
+    total_rdos: g.rdos.size,
+    total_qtd: Math.round([...g.mats.values()].reduce((s, i) => s + i.consumido, 0) * 100) / 100,
+    itens: [...g.mats.values()].sort((a, b) => b.consumido - a.consumido)
+  })).sort((a, b) => b.total_qtd - a.total_qtd);
+  res.json({ obra_id: obraId, locais });
 });
 // Materiais liberados para o técnico (login): recorte equipe × local.
 // Lógica: se a obra NÃO tem estimativa direcionada → scoped:false e o app usa o catálogo cheio (compat).
@@ -1561,6 +1791,8 @@ function rdoTravado24h(rdo, req) {
   if (!rdo || (req.user && req.user.perfil === 'gestor')) return null;
   let base = rdo.criado_em || rdo.data || null;
   if (!base) return null;
+  // Postgres (pg) devolve TIMESTAMPTZ como objeto Date; SQLite devolve TEXT — normaliza pra string ISO antes de tratar como texto
+  if (base instanceof Date) base = base.toISOString();
   let dt = new Date(String(base).includes('T') ? base : String(base).replace(' ', 'T') + 'Z');
   if (isNaN(dt.getTime()) && rdo.data) { dt = new Date(rdo.data + 'T23:59:59'); }
   if (isNaN(dt.getTime())) return null;
@@ -1673,7 +1905,7 @@ async function movimentarEstoqueRdo(equipeId, materialId, tipo, qtd, origem, usu
   return { equipe_id: equipeId, equipe_nome: eq?.nome || '', material_id: materialId, material_nome: mat?.nome || '', unidade: mat?.unidade || 'UND', saldo: novo, minimo, alerta: minimo > 0 && novo <= minimo };
 }
 
-async function baixarEstoqueDoRdo(rdoId, equipeNomes, materiais, usuarioId) {
+async function baixarEstoqueDoRdo(rdoId, equipeNomes, materiais, usuarioId, cobertosLocal) {
   const alertas = [];
   let baixas = 0;
   const eqAtivas = await db.prepare('SELECT id, nome FROM equipes WHERE ativo=1').all();
@@ -1689,7 +1921,10 @@ async function baixarEstoqueDoRdo(rdoId, equipeNomes, materiais, usuarioId) {
     if (!nome || qtd <= 0) continue;
     const matId = await resolverMaterialIdRdo(nome);
     if (!matId) continue;
-    const porEquipe = Math.round((qtd / eqIds.length) * 100) / 100; // rateio igual entre equipes do RDO
+    // o que o local já cobriu não sai da equipe (sem contagem dupla)
+    const resto = Math.round((qtd - (Number(cobertosLocal?.[matId]) || 0)) * 100) / 100;
+    if (resto <= 0) continue;
+    const porEquipe = Math.round((resto / eqIds.length) * 100) / 100; // rateio igual entre equipes do RDO
     for (const eqId of eqIds) {
       const r = await movimentarEstoqueRdo(eqId, matId, 'rdo', porEquipe, `RDO #${rdoId}${eqIds.length > 1 ? ` (rateio ${eqIds.length} equipes)` : ''}`, usuarioId);
       baixas++;
@@ -1713,6 +1948,76 @@ async function estornarBaixaDoRdo(rdoId, usuarioId) {
     const pend = Math.round(((Number(r.q) || 0) - (mapEst.get(`${r.equipe_id}:${r.material_id}`) || 0)) * 100) / 100;
     if (pend > 0.0001) {
       await movimentarEstoqueRdo(r.equipe_id, r.material_id, 'estorno', pend, `ESTORNO RDO #${id}`, usuarioId);
+      n++;
+    }
+  }
+  return { estornos: n };
+}
+
+// ============================================================
+// BAIXA AUTOMÁTICA RDO → ESTOQUE FÍSICO DO LOCAL
+// O RDO consome do LOCAL primeiro (limitado ao saldo); o que faltar sai da
+// EQUIPE (rateado). Sem contagem dupla: total debitado == qtd do RDO.
+async function movimentarEstoqueLocal(localId, materialId, tipo, qtd, origem, usuarioId) {
+  const reg = await db.prepare('SELECT id, quantidade_atual FROM estoque_locais WHERE local_id=? AND material_id=?').get(localId, materialId);
+  const saldoAnt = reg ? (Number(reg.quantidade_atual) || 0) : 0;
+  const delta = (tipo === 'entrada' || tipo === 'estorno') ? Math.abs(qtd) : -Math.abs(qtd);
+  const novo = Math.round((saldoAnt + delta) * 100) / 100;
+  if (db.isPostgres) {
+    if (reg) await db.prepare('UPDATE estoque_locais SET quantidade_atual=?, atualizado_em=NOW() WHERE id=?').run(novo, reg.id);
+    else await db.prepare('INSERT INTO estoque_locais (local_id, material_id, quantidade_atual) VALUES (?,?,?)').run(localId, materialId, novo);
+  } else {
+    if (reg) await db.prepare(`UPDATE estoque_locais SET quantidade_atual=?, atualizado_em=datetime('now') WHERE id=?`).run(novo, reg.id);
+    else await db.prepare('INSERT INTO estoque_locais (local_id, material_id, quantidade_atual) VALUES (?,?,?)').run(localId, materialId, novo);
+  }
+  await db.prepare('INSERT INTO estoque_local_movimentacoes (local_id, material_id, tipo, quantidade, saldo_apos, origem, usuario_id) VALUES (?,?,?,?,?,?,?)')
+    .run(localId, materialId, tipo, Math.abs(qtd), novo, (origem || '').toString().slice(0, 200), usuarioId || null);
+  const mat = await db.prepare('SELECT COALESCE(quantidade_minima,0) as minimo, COALESCE(unidade,\'UND\') as unidade, nome FROM materiais WHERE id=?').get(materialId);
+  const loc = await db.prepare('SELECT nome FROM locais WHERE id=?').get(localId);
+  const minimo = Number(mat?.minimo) || 0;
+  return { local_id: localId, local_nome: loc?.nome || '', material_id: materialId, material_nome: mat?.nome || '', unidade: mat?.unidade || 'UND', saldo: novo, minimo, alerta: minimo > 0 && novo <= minimo };
+}
+
+async function baixarEstoqueLocalDoRdo(rdoId, localId, materiais, usuarioId) {
+  // Consome do LOCAL primeiro, limitado ao saldo (sem negativar): o que o local
+  // não cobrir, a equipe cobre (ver cobertos). Evita contagem dupla equipe+local.
+  const alertas = [];
+  const cobertos = {};
+  let baixas = 0;
+  const lid = Number(localId);
+  if (!lid) return { baixas: 0, alertas, cobertos, ignorado: 'RDO sem local vinculado' };
+  const loc = await db.prepare('SELECT id FROM locais WHERE id=?').get(lid);
+  if (!loc) return { baixas: 0, alertas, cobertos, ignorado: 'local do RDO nao encontrado' };
+  for (const m of (materiais || [])) {
+    const nome = (m.nome || m.material_nome || m.descricao || '').toString().trim();
+    const qtd = Number(m.qtd ?? m.quantidade ?? m.qty ?? 0) || 0;
+    if (!nome || qtd <= 0) continue;
+    const matId = await resolverMaterialIdRdo(nome);
+    if (!matId) continue;
+    const reg = await db.prepare('SELECT quantidade_atual FROM estoque_locais WHERE local_id=? AND material_id=?').get(lid, matId);
+    const deb = Math.min(qtd, Math.max(0, Number(reg?.quantidade_atual) || 0));
+    if (deb <= 0) continue; // local sem saldo: equipe cobre tudo
+    const r = await movimentarEstoqueLocal(lid, matId, 'rdo', deb, `RDO #${rdoId}`, usuarioId);
+    cobertos[matId] = Math.round(((cobertos[matId] || 0) + deb) * 100) / 100;
+    baixas++;
+    if (r.alerta) alertas.push(r);
+  }
+  return { baixas, alertas, cobertos };
+}
+
+async function estornarBaixaLocalDoRdo(rdoId, usuarioId) {
+  // Mesmo padrão idempotente da equipe: reverte o líquido pendente por local/material.
+  const id = Number(rdoId);
+  const exata = `RDO #${id}`;
+  const rdoRows = await db.prepare(`SELECT local_id, material_id, SUM(quantidade) as q FROM estoque_local_movimentacoes WHERE tipo='rdo' AND origem=? GROUP BY local_id, material_id`).all(exata);
+  if (!rdoRows.length) return { estornos: 0 };
+  const estRows = await db.prepare(`SELECT local_id, material_id, SUM(quantidade) as q FROM estoque_local_movimentacoes WHERE tipo='estorno' AND origem=? GROUP BY local_id, material_id`).all(`ESTORNO RDO #${id}`);
+  const mapEst = new Map(estRows.map(r => [`${r.local_id}:${r.material_id}`, Number(r.q) || 0]));
+  let n = 0;
+  for (const r of rdoRows) {
+    const pend = Math.round(((Number(r.q) || 0) - (mapEst.get(`${r.local_id}:${r.material_id}`) || 0)) * 100) / 100;
+    if (pend > 0.0001) {
+      await movimentarEstoqueLocal(r.local_id, r.material_id, 'estorno', pend, `ESTORNO RDO #${id}`, usuarioId);
       n++;
     }
   }
@@ -1786,13 +2091,15 @@ app.post('/api/rdos', async (req, res) => {
     await rdoLog(r.lastInsertRowid, 'CRIACAO', req, '', null, { obra_id: obraId, local_id: localId, data: d.data, local: localNome, atividade: d.atividade || '' });
     io.emit('rdo_novo', { id: r.lastInsertRowid });
   } catch(e){}
-  // Baixa automática no estoque da equipe (sem digitação dupla)
+  // Baixa automática: LOCAL primeiro (limitado ao saldo), equipe cobre o resto (sem contagem dupla)
   let estoqueInfo = null;
+  let estoqueLocalInfo = null;
   try {
-    estoqueInfo = await baixarEstoqueDoRdo(r.lastInsertRowid, d.equipe || [], d.materiais || [], req.user ? req.user.id : null);
+    estoqueLocalInfo = await baixarEstoqueLocalDoRdo(r.lastInsertRowid, localId, d.materiais || [], req.user ? req.user.id : null);
+    estoqueInfo = await baixarEstoqueDoRdo(r.lastInsertRowid, d.equipe || [], d.materiais || [], req.user ? req.user.id : null, estoqueLocalInfo.cobertos);
     if (estoqueInfo.alertas?.length) try { io.emit('estoque_alerta', { rdo_id: r.lastInsertRowid, alertas: estoqueInfo.alertas }); } catch (e2) {}
   } catch (e) { console.error('[estoque-rdo-baixa]', e.message); }
-  res.json({ ok: true, id: r.lastInsertRowid, estoque: estoqueInfo });
+  res.json({ ok: true, id: r.lastInsertRowid, estoque: estoqueInfo, estoque_local: estoqueLocalInfo });
 });
 
 app.put('/api/rdos/:id', async (req, res) => {
@@ -1852,11 +2159,14 @@ app.put('/api/rdos/:id', async (req, res) => {
   );
   await rdoLog(req.params.id, 'EDICAO', req, motivoEdicao, antes, depois);
   try { io.emit('rdo_atualizado', { id: Number(req.params.id), por: req.user ? req.user.nome : '' }); } catch(e){}
-  // Recompõe estoque: estorna baixa antiga e aplica a nova (materiais/equipe podem ter mudado)
+  // Recompõe estoque: estorna baixa antiga e aplica a nova (materiais/equipe/local podem ter mudado)
   let estoqueInfo = null;
   try {
     await estornarBaixaDoRdo(req.params.id, req.user ? req.user.id : null);
-    estoqueInfo = await baixarEstoqueDoRdo(req.params.id, depois.equipe || [], depois.materiais || [], req.user ? req.user.id : null);
+    await estornarBaixaLocalDoRdo(req.params.id, req.user ? req.user.id : null);
+    const estoqueLocalInfo = await baixarEstoqueLocalDoRdo(req.params.id, localId, depois.materiais || [], req.user ? req.user.id : null);
+    estoqueInfo = await baixarEstoqueDoRdo(req.params.id, depois.equipe || [], depois.materiais || [], req.user ? req.user.id : null, estoqueLocalInfo.cobertos);
+    estoqueInfo.estoque_local = estoqueLocalInfo;
     if (estoqueInfo.alertas?.length) try { io.emit('estoque_alerta', { rdo_id: Number(req.params.id), alertas: estoqueInfo.alertas }); } catch (e2) {}
   } catch (e) { console.error('[estoque-rdo-edicao]', e.message); }
   res.json({ ok: true, estoque: estoqueInfo });
@@ -1877,6 +2187,7 @@ app.delete('/api/rdos/:id', async (req, res) => {
   await db.prepare(`UPDATE rdos SET ativo=0, excluido_em=datetime('now'), excluido_por=?, motivo_exclusao=? WHERE id=?`).run(quem, motivo.slice(0, 500), req.params.id);
   await rdoLog(req.params.id, 'EXCLUSAO', req, motivo, rdo, { ativo: 0, excluido_por: quem, motivo_exclusao: motivo });
   try { await estornarBaixaDoRdo(req.params.id, req.user ? req.user.id : null); } catch (e) { console.error('[estoque-rdo-exclusao]', e.message); }
+  try { await estornarBaixaLocalDoRdo(req.params.id, req.user ? req.user.id : null); } catch (e) { console.error('[estoque-local-exclusao]', e.message); }
   try { io.emit('rdo_excluido', { id: Number(req.params.id), por: quem, motivo }); } catch(e){}
   res.json({ ok: true, auditoria: { por: quem, motivo } });
 });
@@ -1890,8 +2201,9 @@ app.post('/api/rdos/:id/restaurar', gestor, async (req, res) => {
     .run(req.user ? req.user.nome : 'Anonimo', req.params.id);
   await rdoLog(req.params.id, 'RESTAURACAO', req, (req.body && req.body.motivo) || 'Restaurado pelo gestor', { ativo: 0 }, { ativo: 1 });
   try {
-    const rdoRest = await db.prepare('SELECT equipe_json, materiais_json FROM rdos WHERE id=?').get(req.params.id);
-    await baixarEstoqueDoRdo(req.params.id, JSON.parse(rdoRest.equipe_json || '[]'), JSON.parse(rdoRest.materiais_json || '[]'), req.user ? req.user.id : null);
+    const rdoRest = await db.prepare('SELECT equipe_json, materiais_json, local_id FROM rdos WHERE id=?').get(req.params.id);
+    const locInfo = await baixarEstoqueLocalDoRdo(req.params.id, rdoRest.local_id, JSON.parse(rdoRest.materiais_json || '[]'), req.user ? req.user.id : null);
+    await baixarEstoqueDoRdo(req.params.id, JSON.parse(rdoRest.equipe_json || '[]'), JSON.parse(rdoRest.materiais_json || '[]'), req.user ? req.user.id : null, locInfo.cobertos);
   } catch (e) { console.error('[estoque-rdo-restaurar]', e.message); }
   await rdoLog(req.params.id, 'RESTAURACAO', req, (req.body && req.body.motivo) || 'Restaurado pelo gestor', { ativo: 0 }, { ativo: 1 });
   try { io.emit('rdo_restaurado', { id: Number(req.params.id) }); } catch(e){}
@@ -2114,6 +2426,7 @@ io.on('connection', (socket) => {
 app.get('/', async (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 app.get('/app', async (req, res) => res.sendFile(path.join(__dirname, 'public', 'app.html')));
 app.get('/login', async (req, res) => res.sendFile(path.join(__dirname, 'public', 'login.html')));
+app.get('/manual', async (req, res) => res.sendFile(path.join(__dirname, 'public', 'manual.html')));
 
 // Middleware de erro — transforma PGError/SQLite error em 500 JSON em vez de timeout 502 (Express 4 async)
 app.use((err, req, res, next) => {
