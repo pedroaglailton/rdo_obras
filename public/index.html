@@ -413,7 +413,48 @@
     </div>
   </div>
 
-  <!-- RDOs - Visual profissional igual Atividades -->
+  <!-- MODAL GERENCIAR LOCAL: planta + QR + checklist de pontos -->
+  <div class="modal" id="modalLocal">
+    <div class="modal-content" style="max-width:640px">
+      <div class="modal-header"><h3 id="tituloLocal">📐 Gerenciar local</h3><button class="modal-close" onclick="document.getElementById('modalLocal').classList.remove('show')">&times;</button></div>
+      <div class="modal-body">
+        <div id="localHeadInfo" style="font-size:12px;color:var(--muted);margin-bottom:10px"></div>
+        <div class="card" style="border-left:4px solid #6a1b9a;margin:0 0 10px">
+          <h2 style="margin:0">🗺️ Plantas do local <small style="font-weight:400;color:var(--muted)">(térreo, pavimentos...)</small></h2>
+          <p style="font-size:11px;color:var(--muted);margin:4px 0 8px">A equipe escaneia o QR impresso e abre as plantas no celular. PDF, JPG ou PNG até 15MB.</p>
+          <div id="listaPlantas" style="margin-bottom:8px;display:grid;gap:6px"></div>
+          <div class="form-row"><input type="text" id="tituloPlanta" placeholder="Pavimento (ex: Térreo, 1º andar)" style="grid-column:1/-1"></div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:6px">
+            <input type="file" id="filePlanta" accept=".pdf,.jpg,.jpeg,.png" style="flex:1;min-width:160px">
+            <button class="btn-primary" onclick="uploadPlantaLocal()" id="btnPlanta" style="padding:8px 14px">Enviar</button>
+          </div>
+          <div id="msgPlanta" style="font-size:11px;margin-top:6px;min-height:14px"></div>
+          <div id="qrBox" style="display:none;margin-top:10px;padding:10px;background:#f7f9fa;border:1px dashed var(--line);border-radius:9px;text-align:center">
+            <div style="font-size:11px;font-weight:800;color:var(--muted);margin-bottom:6px">QR PARA IMPRIMIR E ENTREGAR À EQUIPE</div>
+            <img id="qrImg" alt="QR do local" style="width:180px;height:180px;background:#fff;padding:6px;border:1px solid var(--line);border-radius:8px">
+            <div style="font-size:10.5px;color:var(--muted);margin-top:6px">Base: <code id="qrBaseTxt"></code> <a href="#" onclick="trocarBaseQR();return false" style="color:var(--primary)">⚙️ trocar</a></div>
+            <div><button class="btn-small" onclick="imprimirQR()" style="background:#0f3d4c;margin-top:8px">🖨️ Imprimir QR</button></div>
+          </div>
+        </div>
+        <div class="card" style="border-left:4px solid #1565c0;margin:0 0 10px">
+          <h2 style="margin:0">✅ Checklist de pontos <small style="font-weight:400;color:var(--muted)">(câmeras/infra)</small></h2>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;align-items:center">
+            <input type="number" id="qtdGerarPontos" min="1" placeholder="Qtd câmeras" style="width:110px;padding:7px;font-size:12px">
+            <button class="btn-small" onclick="gerarPontos()" style="background:#1565c0">Gerar CAM 01..N</button>
+          </div>
+          <div class="form-row" style="margin-top:8px"><select id="novoPontoTipo"><option value="camera">📷 Câmera</option><option value="infra">🔌 Infra</option></select><input type="text" id="novoPontoCod" placeholder="Código (ex: CAM 09)"></div>
+          <div class="form-row"><input type="text" id="novoPontoDesc" placeholder="Descrição (ex: recepção)" style="grid-column:1/-1"></div>
+          <button class="btn-small" onclick="adicionarPonto()" style="background:#1565c0;margin-top:6px">+ Adicionar ponto</button>
+          <div id="msgPonto" style="font-size:11px;margin-top:6px;min-height:14px"></div>
+          <div id="listaPontosLocal" style="margin-top:8px;display:grid;gap:6px"></div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:4px">
+          <button class="btn-primary" onclick="fecharGerenciarLocal()" style="flex:1;padding:11px;font-size:14px">💾 Salvar e fechar</button>
+        </div>
+        <p style="font-size:10.5px;color:var(--muted);margin:6px 0 0">Plantas, pontos e status já ficam salvos na hora — o botão só fecha a janela.</p>
+      </div>
+    </div>
+  </div>
   <section class="view" id="view-rdos">
     <div class="card" style="border-left:4px solid #0f3d4c">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
@@ -2138,7 +2179,7 @@ async function carregarLocais() {
     '</div>' +
     (inativo
       ? '<button class="btn-small" onclick="reativarLocal(' + l.id + ')" title="Reativar" style="background:#e8f5e9;color:#2e7d32;border:1px solid #a5d6a7">↩ Reativar</button>'
-      : '<button class="btn-delete" onclick="excluirLocal(' + l.id + ')" title="Desativar">&times;</button>') +
+      : '<div style="display:flex;flex-direction:column;gap:4px"><button class="btn-small" onclick="abrirGerenciarLocal(' + l.id + ')" title="Planta, QR e checklist" style="background:#6a1b9a">📐</button><button class="btn-delete" onclick="excluirLocal(' + l.id + ')" title="Desativar">&times;</button></div>') +
     '</div>';
   }).join('') || '<p class="empty-state">Nenhum local</p>';
 }
@@ -2220,6 +2261,127 @@ async function desvincularLocalObra(localId){
 
 async function excluirLocal(id) { if(!confirm('Desativar este local? Ele some das listas mas pode ser reativado em Locais → Mostrar inativos.')) return; await api('/api/locais/' + id, { method: 'DELETE' }); await carregarLocais(); await carregarVinculoObra(); }
 async function reativarLocal(id) { await api('/api/locais/' + id, { method: 'PUT', body: JSON.stringify({ ativo: 1 }) }); await carregarLocais(); await carregarVinculoObra(); toast('Local reativado!'); }
+
+// ---- Gerenciar local: planta + QR + checklist ----
+let _gerLocalId = null;
+const PONTO_LABEL = { a_instalar: 'A instalar', instalada: 'Instalada', cabeada: 'Cabeada', configurada: 'Configurada', testada: 'Testada', aprovada: 'Aprovada' };
+const PONTO_COR = { a_instalar: '#90a4ae', instalada: '#5c6bc0', cabeada: '#ef6c00', configurada: '#00838f', testada: '#2e7d32', aprovada: '#1565c0' };
+async function abrirGerenciarLocal(id){
+  _gerLocalId = id;
+  document.getElementById('msgPlanta').textContent = '';
+  document.getElementById('msgPonto').textContent = '';
+  document.getElementById('filePlanta').value = '';
+  try{
+    const l = await api('/api/locais/' + id).then(r=>r.json());
+    document.getElementById('tituloLocal').textContent = '📐 ' + (l.nome || ('Local ' + id));
+    document.getElementById('localHeadInfo').textContent = (l.comarca || '') + (l.endereco ? ' • ' + l.endereco : '') + ' • 📷 ' + (l.cameras || 0) + ' câmeras';
+    await carregarPlantasLocal();
+    // QR: aponta para o app já abrindo este local (base automática; trocável em ⚙️)
+    const qrBase = ((localStorage.getItem('qrBaseUrl') || '').trim().replace(/\/+$/, '')) || location.origin;
+    const deep = qrBase + '/app?local=' + id;
+    document.getElementById('qrImg').src = 'https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=' + encodeURIComponent(deep);
+    document.getElementById('qrBaseTxt').textContent = qrBase;
+    document.getElementById('qrBox').style.display = 'block';
+    const q = document.getElementById('qtdGerarPontos'); if(q && !q.value) q.value = l.cameras || '';
+  }catch(e){ toast('Falha ao abrir local'); return; }
+  await carregarPontosLocal();
+  document.getElementById('modalLocal').classList.add('show');
+}
+async function carregarPlantasLocal(){
+  const box = document.getElementById('listaPlantas');
+  const pls = await api('/api/locais/' + _gerLocalId + '/plantas').then(r=>r.json()).catch(()=>[]);
+  if(!pls.length){ box.innerHTML = '<p class="empty-state">Sem plantas — envie por pavimento acima.</p>'; return; }
+  box.innerHTML = pls.map(p=>{
+    const ehPdf = /\.pdf$/i.test(p.url);
+    return `<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:#fff;border:1px solid var(--line);border-radius:8px;font-size:12px">
+      ${ehPdf ? '📄' : `<img src="${p.url}" style="width:44px;height:44px;object-fit:cover;border-radius:6px;border:1px solid var(--line)">`}
+      <span style="flex:1"><strong>${p.titulo}</strong><br><a href="${p.url}" target="_blank" style="font-size:11px;color:var(--primary)">abrir ↗</a></span>
+      <button class="btn-delete" onclick="excluirPlanta(${p.id})" title="Remover">&times;</button>
+    </div>`;
+  }).join('');
+}
+async function uploadPlantaLocal(){
+  const f = document.getElementById('filePlanta').files[0];
+  const msg = document.getElementById('msgPlanta');
+  if(!f){ msg.textContent = 'Escolha o arquivo'; msg.style.color = 'var(--danger)'; return; }
+  const fd = new FormData();
+  fd.append('planta', f);
+  fd.append('titulo', document.getElementById('tituloPlanta').value.trim() || 'Geral');
+  msg.textContent = 'Enviando...'; msg.style.color = 'var(--muted)';
+  const login = localStorage.getItem('token');
+  const r = await fetch('/api/locais/' + _gerLocalId + '/plantas', { method: 'POST', headers: { 'Authorization': 'Bearer ' + login }, body: fd });
+  const d = await r.json().catch(()=>({}));
+  if(d.error){ msg.textContent = d.error; msg.style.color = 'var(--danger)'; return; }
+  msg.textContent = '✅ Planta enviada!'; msg.style.color = 'var(--ok)';
+  document.getElementById('tituloPlanta').value = '';
+  carregarPlantasLocal();
+}
+async function excluirPlanta(pid){
+  if(!confirm('Remover esta planta?')) return;
+  await api('/api/plantas/' + pid, { method: 'DELETE' });
+  carregarPlantasLocal(); toast('Planta removida');
+}
+// Base do QR: automático (endereço atual) ou fixo (ex: produção). Útil ao mudar de servidor.
+function trocarBaseQR(){
+  const atual = (localStorage.getItem('qrBaseUrl') || '').trim();
+  const v = prompt('Endereço base do QR (vazio = automático):', atual || 'https://crm-obras.onrender.com');
+  if (v === null) return;
+  const limpo = v.trim().replace(/\/+$/, '');
+  if (limpo) localStorage.setItem('qrBaseUrl', limpo); else localStorage.removeItem('qrBaseUrl');
+  abrirGerenciarLocal(_gerLocalId);
+  toast('Base do QR: ' + (limpo || location.origin));
+}
+function imprimirQR(){  const src = document.getElementById('qrImg').src;
+  const nome = document.getElementById('tituloLocal').textContent;
+  const w = window.open('', '_blank');
+  w.document.write('<html><head><title>QR ' + nome + '</title><style>body{font-family:Arial;text-align:center;padding:30px}img{width:320px;height:320px}h2{margin:10px}</style></head><body><h2>' + nome + '</h2><p>Escaneie com o celular para abrir a planta e o checklist</p><img src="' + src + '" onload="window.print()"></body></html>');
+  w.document.close();
+}
+async function carregarPontosLocal(){
+  const box = document.getElementById('listaPontosLocal');
+  const pts = await api('/api/locais/' + _gerLocalId + '/pontos').then(r=>r.json()).catch(()=>[]);
+  if(!pts.length){ box.innerHTML = '<p class="empty-state">Nenhum ponto — gere CAM 01..N ou adicione.</p>'; return; }
+  const opts = Object.keys(PONTO_LABEL).map(s=>`<option value="${s}">${PONTO_LABEL[s]}</option>`).join('');
+  box.innerHTML = pts.map(p=>`<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:#fff;border:1px solid var(--line);border-left:4px solid ${PONTO_COR[p.status]||'#90a4ae'};border-radius:8px;font-size:12px">
+    <span style="flex:1;min-width:0"><strong>${p.tipo === 'infra' ? '🔌' : '📷'} ${p.codigo}</strong>${p.descricao ? ' <small style="color:var(--muted)">• ' + p.descricao + '</small>' : ''}<br><small style="color:var(--muted)">${PONTO_LABEL[p.status]||p.status}${p.atualizado_por ? ' • ' + p.atualizado_por : ''}</small></span>
+    <select onchange="mudarStatusPonto(${p.id},this.value)" style="padding:5px;font-size:11px;max-width:130px">${opts.replace('value="' + p.status + '"', 'value="' + p.status + '" selected')}</select>
+    <button class="btn-delete" onclick="excluirPonto(${p.id})" title="Excluir">&times;</button>
+  </div>`).join('');
+}
+async function gerarPontos(){
+  const qtd = Number(document.getElementById('qtdGerarPontos').value) || 0;
+  const msg = document.getElementById('msgPonto');
+  if(!qtd){ msg.textContent = 'Informe a qtd'; msg.style.color = 'var(--danger)'; return; }
+  const r = await api('/api/locais/' + _gerLocalId + '/pontos/gerar', { method: 'POST', body: JSON.stringify({ qtd_cameras: qtd }) });
+  const d = await r.json();
+  msg.textContent = d.error || `✅ ${d.criados} pontos criados!`; msg.style.color = d.error ? 'var(--danger)' : 'var(--ok)';
+  carregarPontosLocal(); carregarLocais();
+}
+async function adicionarPonto(){
+  const msg = document.getElementById('msgPonto');
+  const r = await api('/api/locais/' + _gerLocalId + '/pontos', { method: 'POST', body: JSON.stringify({ tipo: document.getElementById('novoPontoTipo').value, codigo: document.getElementById('novoPontoCod').value, descricao: document.getElementById('novoPontoDesc').value }) });
+  const d = await r.json();
+  if(d.error){ msg.textContent = d.error; msg.style.color = 'var(--danger)'; return; }
+  document.getElementById('novoPontoCod').value = ''; document.getElementById('novoPontoDesc').value = '';
+  msg.textContent = '✅ Ponto criado!'; msg.style.color = 'var(--ok)';
+  carregarPontosLocal();
+}
+async function mudarStatusPonto(id, status){
+  const r = await api('/api/pontos/' + id, { method: 'PUT', body: JSON.stringify({ status }) });
+  const d = await r.json().catch(()=>({}));
+  if(d.error){ toast(d.error); carregarPontosLocal(); return; }
+  toast('Ponto atualizado!'); carregarPontosLocal();
+}
+async function excluirPonto(id){
+  if(!confirm('Excluir este ponto?')) return;
+  await api('/api/pontos/' + id, { method: 'DELETE' });
+  carregarPontosLocal(); toast('Excluído');
+}
+function fecharGerenciarLocal(){
+  document.getElementById('modalLocal').classList.remove('show');
+  try{ carregarLocais(); }catch(e){}
+  toast('Salvo!');
+}
 
 // ATIVIDADES - Visual profissional com contagem de RDOs e vínculo com template
 let atividadesCache=[];

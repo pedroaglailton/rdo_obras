@@ -247,7 +247,33 @@ const SQL_CREATE = [
     criado_por TEXT DEFAULT '',
     criado_em TEXT DEFAULT (datetime('now'))
   )`,
-  `CREATE INDEX IF NOT EXISTS idx_obra_compras_obra ON obra_compras(obra_id)`
+  `CREATE INDEX IF NOT EXISTS idx_obra_compras_obra ON obra_compras(obra_id)`,
+  // Checklist de conferência por ponto (CCTV/infra) + planta do local
+  `CREATE TABLE IF NOT EXISTS local_pontos (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    local_id INTEGER NOT NULL REFERENCES locais(id) ON DELETE CASCADE,
+    obra_id INTEGER REFERENCES obras(id) ON DELETE SET NULL,
+    tipo TEXT DEFAULT 'camera',
+    codigo TEXT NOT NULL,
+    descricao TEXT DEFAULT '',
+    status TEXT DEFAULT 'a_instalar',
+    rdo_id INTEGER REFERENCES rdos(id) ON DELETE SET NULL,
+    observacao TEXT DEFAULT '',
+    atualizado_por TEXT DEFAULT '',
+    criado_em TEXT DEFAULT (datetime('now')),
+    atualizado_em TEXT DEFAULT (datetime('now'))
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_local_pontos_local ON local_pontos(local_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_local_pontos_obra ON local_pontos(obra_id)`,
+  // Plantas por PAVIMENTO: um local pode ter Térreo, 1º andar, subsolo...
+  `CREATE TABLE IF NOT EXISTS local_plantas (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    local_id INTEGER NOT NULL REFERENCES locais(id) ON DELETE CASCADE,
+    titulo TEXT NOT NULL DEFAULT 'Geral',
+    url TEXT NOT NULL,
+    criado_em TEXT DEFAULT (datetime('now'))
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_local_plantas_local ON local_plantas(local_id)`
 ];
 // DB init - hibrido SQLite / Postgres (Supabase)
 async function initDb(){
@@ -290,6 +316,13 @@ async function initDb(){
     // Compras por OBRA (bancos já criados: CREATE IF NOT EXISTS é idempotente)
     try { await db.exec(`CREATE TABLE IF NOT EXISTS obra_compras (id SERIAL PRIMARY KEY, obra_id INTEGER NOT NULL REFERENCES obras(id) ON DELETE CASCADE, material_nome TEXT NOT NULL, unidade TEXT DEFAULT 'UND', quantidade DOUBLE PRECISION DEFAULT 0, valor_unitario DOUBLE PRECISION DEFAULT 0, fornecedor TEXT DEFAULT '', data_compra TEXT DEFAULT '', observacao TEXT DEFAULT '', criado_por TEXT DEFAULT '', criado_em TIMESTAMPTZ DEFAULT NOW())`); } catch(e){}
     try { await db.exec('CREATE INDEX IF NOT EXISTS idx_obra_compras_obra ON obra_compras(obra_id)'); } catch(e){}
+    // Checklist de pontos + planta (Postgres; bancos já criados: idempotente)
+    try { await db.exec(`CREATE TABLE IF NOT EXISTS local_pontos (id SERIAL PRIMARY KEY, local_id INTEGER NOT NULL REFERENCES locais(id) ON DELETE CASCADE, obra_id INTEGER REFERENCES obras(id) ON DELETE SET NULL, tipo TEXT DEFAULT 'camera', codigo TEXT NOT NULL, descricao TEXT DEFAULT '', status TEXT DEFAULT 'a_instalar', rdo_id INTEGER REFERENCES rdos(id) ON DELETE SET NULL, observacao TEXT DEFAULT '', atualizado_por TEXT DEFAULT '', criado_em TIMESTAMPTZ DEFAULT NOW(), atualizado_em TIMESTAMPTZ DEFAULT NOW())`); } catch(e){}
+    try { await db.exec('CREATE INDEX IF NOT EXISTS idx_local_pontos_local ON local_pontos(local_id)'); } catch(e){}
+    try { await db.exec('CREATE INDEX IF NOT EXISTS idx_local_pontos_obra ON local_pontos(obra_id)'); } catch(e){}
+    try { await db.exec(`CREATE TABLE IF NOT EXISTS local_plantas (id SERIAL PRIMARY KEY, local_id INTEGER NOT NULL REFERENCES locais(id) ON DELETE CASCADE, titulo TEXT NOT NULL DEFAULT 'Geral', url TEXT NOT NULL, criado_em TIMESTAMPTZ DEFAULT NOW())`); } catch(e){}
+    try { await db.exec('CREATE INDEX IF NOT EXISTS idx_local_plantas_local ON local_plantas(local_id)'); } catch(e){}
+    try { await db.exec('ALTER TABLE locais ADD COLUMN IF NOT EXISTS planta_url TEXT'); } catch(e){}
     try { await db.exec('ALTER TABLE obra_materiais DROP CONSTRAINT IF EXISTS obra_materiais_obra_id_material_nome_key'); } catch(e){}
     try { await db.exec('CREATE INDEX IF NOT EXISTS idx_obra_mat_escopo ON obra_materiais(obra_id, local_id, equipe_id)'); } catch(e){}
     try { await db.exec('CREATE INDEX IF NOT EXISTS idx_locais_obra ON locais(obra_id)'); } catch(e){}
@@ -366,6 +399,13 @@ async function initDb(){
     // Compras por OBRA (bancos já criados: CREATE IF NOT EXISTS é idempotente)
     try { await db.exec(`CREATE TABLE IF NOT EXISTS obra_compras (id INTEGER PRIMARY KEY AUTOINCREMENT, obra_id INTEGER NOT NULL REFERENCES obras(id) ON DELETE CASCADE, material_nome TEXT NOT NULL, unidade TEXT DEFAULT 'UND', quantidade REAL DEFAULT 0, valor_unitario REAL DEFAULT 0, fornecedor TEXT DEFAULT '', data_compra TEXT DEFAULT '', observacao TEXT DEFAULT '', criado_por TEXT DEFAULT '', criado_em TEXT DEFAULT (datetime('now')))`); } catch(e){}
     try { await db.exec('CREATE INDEX IF NOT EXISTS idx_obra_compras_obra ON obra_compras(obra_id)'); } catch(e){}
+    // Checklist de pontos + planta (SQLite; bancos já criados: idempotente)
+    try { await db.exec(`CREATE TABLE IF NOT EXISTS local_pontos (id INTEGER PRIMARY KEY AUTOINCREMENT, local_id INTEGER NOT NULL REFERENCES locais(id) ON DELETE CASCADE, obra_id INTEGER REFERENCES obras(id) ON DELETE SET NULL, tipo TEXT DEFAULT 'camera', codigo TEXT NOT NULL, descricao TEXT DEFAULT '', status TEXT DEFAULT 'a_instalar', rdo_id INTEGER REFERENCES rdos(id) ON DELETE SET NULL, observacao TEXT DEFAULT '', atualizado_por TEXT DEFAULT '', criado_em TEXT DEFAULT (datetime('now')), atualizado_em TEXT DEFAULT (datetime('now')))`) ; } catch(e){}
+    try { await db.exec('CREATE INDEX IF NOT EXISTS idx_local_pontos_local ON local_pontos(local_id)'); } catch(e){}
+    try { await db.exec('CREATE INDEX IF NOT EXISTS idx_local_pontos_obra ON local_pontos(obra_id)'); } catch(e){}
+    try { await db.exec(`CREATE TABLE IF NOT EXISTS local_plantas (id INTEGER PRIMARY KEY AUTOINCREMENT, local_id INTEGER NOT NULL REFERENCES locais(id) ON DELETE CASCADE, titulo TEXT NOT NULL DEFAULT 'Geral', url TEXT NOT NULL, criado_em TEXT DEFAULT (datetime('now')))`) ; } catch(e){}
+    try { await db.exec('CREATE INDEX IF NOT EXISTS idx_local_plantas_local ON local_plantas(local_id)'); } catch(e){}
+    await ensureColumn('locais', 'planta_url', 'TEXT');
   }
   // Admin padrao (async para ambos)
   const admin = await db.prepare('SELECT id FROM usuarios WHERE email=?').get('admin@ipq.com');
@@ -1025,6 +1065,133 @@ app.put('/api/locais/:id', gestor, async (req, res) => {
 app.delete('/api/locais/:id', gestor, async (req, res) => {
   await db.prepare('UPDATE locais SET ativo=0 WHERE id=?').run(req.params.id);
   res.json({ ok: true });
+});
+
+// ============================================================
+// PLANTA DO LOCAL + CHECKLIST DE PONTOS (conferência CCTV/infra)
+// - Planta: PDF/foto por local; QR impresso aponta p/ /app?local=ID
+// - Pontos: CAM 01..N / infra com status; técnica avança até TESTADA,
+//   APROVADA só gestor. Resumo diário p/ acompanhar produção.
+// ============================================================
+const PONTOS_STATUS = ['a_instalar', 'instalada', 'cabeada', 'configurada', 'testada', 'aprovada'];
+const plantasDir = path.join(uploadsDir, 'plantas');
+if (!fs.existsSync(plantasDir)) fs.mkdirSync(plantasDir, { recursive: true });
+const uploadPlanta = multer({
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => cb(null, plantasDir),
+    filename: (req, file, cb) => cb(null, 'planta_' + req.params.id + '_' + Date.now() + path.extname(file.originalname).toLowerCase())
+  }),
+  limits: { fileSize: 15 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (/\.(pdf|jpe?g|png)$/i.test(file.originalname)) cb(null, true);
+    else cb(new Error('Só PDF, JPG ou PNG'));
+  }
+});
+app.get('/api/locais/:id/plantas', async (req, res) => {
+  // migração preguiçosa: planta única antiga vira item "Geral"
+  try {
+    const ant = await db.prepare('SELECT planta_url FROM locais WHERE id=?').get(req.params.id);
+    if (ant?.planta_url) {
+      const n = await db.prepare('SELECT COUNT(*) as c FROM local_plantas WHERE local_id=?').get(req.params.id);
+      if (!Number(n?.c)) await db.prepare('INSERT INTO local_plantas (local_id, titulo, url) VALUES (?,?,?)').run(req.params.id, 'Geral', ant.planta_url);
+    }
+  } catch (e) {}
+  res.json(await db.prepare('SELECT * FROM local_plantas WHERE local_id=? ORDER BY id').all(req.params.id));
+});
+app.post('/api/locais/:id/plantas', gestor, (req, res) => {
+  uploadPlanta.single('planta')(req, res, async (err) => {
+    if (err) return res.status(400).json({ error: err.message || 'Falha no upload' });
+    if (!req.file) return res.status(400).json({ error: 'Envie o arquivo (planta)' });
+    const url = '/uploads/plantas/' + req.file.filename;
+    const titulo = ((req.body && req.body.titulo) || 'Geral').toString().slice(0, 60);
+    const r = await db.prepare('INSERT INTO local_plantas (local_id, titulo, url) VALUES (?,?,?)').run(req.params.id, titulo, url);
+    res.json({ ok: true, id: r.lastInsertRowid, titulo, url });
+  });
+});
+app.delete('/api/plantas/:id', gestor, async (req, res) => {
+  const ant = await db.prepare('SELECT url FROM local_plantas WHERE id=?').get(req.params.id);
+  await db.prepare('DELETE FROM local_plantas WHERE id=?').run(req.params.id);
+  if (ant?.url) { try { fs.unlinkSync(path.join(__dirname, ant.url)); } catch (e) {} }
+  res.json({ ok: true });
+});
+app.get('/api/locais/:id/pontos', async (req, res) => {
+  const rows = await db.prepare('SELECT * FROM local_pontos WHERE local_id=? ORDER BY tipo, codigo').all(req.params.id);
+  res.json(rows);
+});
+app.post('/api/locais/:id/pontos', gestor, async (req, res) => {
+  const { tipo, codigo, descricao } = req.body;
+  if (!codigo || !codigo.trim()) return res.status(400).json({ error: 'Código obrigatório (ex: CAM 01)' });
+  const loc = await db.prepare('SELECT id, obra_id FROM locais WHERE id=?').get(req.params.id);
+  if (!loc) return res.status(404).json({ error: 'Local não encontrado' });
+  const r = await db.prepare(`INSERT INTO local_pontos (local_id, obra_id, tipo, codigo, descricao, status, atualizado_por) VALUES (?,?,?,?,?,?,?)`)
+    .run(loc.id, loc.obra_id, (tipo || 'camera'), codigo.trim().toUpperCase(), (descricao || '').trim(), 'a_instalar', req.user ? req.user.nome : '');
+  res.json({ ok: true, id: r.lastInsertRowid });
+});
+// Gera N pontos CAM a partir da qtd de câmeras do local (pula códigos existentes)
+app.post('/api/locais/:id/pontos/gerar', gestor, async (req, res) => {
+  const loc = await db.prepare('SELECT id, obra_id, cameras FROM locais WHERE id=?').get(req.params.id);
+  if (!loc) return res.status(404).json({ error: 'Local não encontrado' });
+  const qtd = Math.max(0, Number(req.body.qtd_cameras ?? loc.cameras) || 0);
+  if (!qtd) return res.status(400).json({ error: 'Local sem qtd de câmeras — informe qtd_cameras' });
+  const exis = new Set((await db.prepare('SELECT codigo FROM local_pontos WHERE local_id=?').all(loc.id)).map(x => x.codigo));
+  let criados = 0;
+  for (let i = 1; i <= qtd; i++) {
+    const cod = 'CAM ' + String(i).padStart(2, '0');
+    if (exis.has(cod)) continue;
+    await db.prepare(`INSERT INTO local_pontos (local_id, obra_id, tipo, codigo, status, atualizado_por) VALUES (?,?,?,?,?,?)`)
+      .run(loc.id, loc.obra_id, 'camera', cod, 'a_instalar', req.user ? req.user.nome : '');
+    criados++;
+  }
+  res.json({ ok: true, criados, total: qtd });
+});
+app.put('/api/pontos/:id', async (req, res) => {
+  const p = await db.prepare('SELECT * FROM local_pontos WHERE id=?').get(req.params.id);
+  if (!p) return res.status(404).json({ error: 'Ponto não encontrado' });
+  const { status, observacao, rdo_id } = req.body;
+  if (status && !PONTOS_STATUS.includes(status)) return res.status(400).json({ error: 'Status inválido' });
+  if (status === 'aprovada' && req.user.perfil !== 'gestor') return res.status(403).json({ error: 'Só o gestor aprova' });
+  const set = [], vals = [];
+  if (status) { set.push('status=?'); vals.push(status); }
+  if (observacao !== undefined) { set.push('observacao=?'); vals.push(String(observacao).slice(0, 500)); }
+  if (rdo_id !== undefined) { set.push('rdo_id=?'); vals.push(rdo_id ? Number(rdo_id) : null); }
+  set.push('atualizado_por=?'); vals.push(req.user ? req.user.nome : '');
+  if (db.isPostgres) { set.push('atualizado_em=NOW()'); } else { set.push(`atualizado_em=datetime('now')`); }
+  vals.push(req.params.id);
+  await db.prepare(`UPDATE local_pontos SET ${set.join(', ')} WHERE id=?`).run(...vals);
+  res.json({ ok: true });
+});
+app.delete('/api/pontos/:id', gestor, async (req, res) => {
+  await db.prepare('DELETE FROM local_pontos WHERE id=?').run(req.params.id);
+  res.json({ ok: true });
+});
+// Resumo diário: pontos concluídos (testada/aprovada) por equipe e por local
+app.get('/api/pontos/resumo', async (req, res) => {
+  const { obra_id, data } = req.query;
+  const dia = (data || new Date().toISOString().slice(0, 10)).slice(0, 10);
+  let sql = `SELECT p.*, l.nome as local_nome, l.equipe_id, e.nome as equipe_nome FROM local_pontos p
+    JOIN locais l ON l.id=p.local_id LEFT JOIN equipes e ON e.id=l.equipe_id WHERE 1=1`;
+  const prm = [];
+  if (obra_id) { sql += ' AND p.obra_id=?'; prm.push(Number(obra_id)); }
+  const rows = await db.prepare(sql).all(...prm);
+  const noDia = v => { try { const s = (v instanceof Date) ? v.toISOString() : String(v || ''); return s.slice(0, 10) === dia; } catch (e) { return false; } };
+  const feito = s => s === 'testada' || s === 'aprovada';
+  const porEquipe = {}, porLocal = {};
+  let total = 0, concluidos = 0, concluidosHoje = 0;
+  for (const r of rows) {
+    total++;
+    const eq = r.equipe_nome || 'SEM EQUIPE';
+    const lc = r.local_nome || ('Local ' + r.local_id);
+    porEquipe[eq] = porEquipe[eq] || { equipe_nome: eq, total: 0, concluidos: 0, concluidos_hoje: 0 };
+    porLocal[lc] = porLocal[lc] || { local_id: r.local_id, local_nome: lc, total: 0, concluidos: 0, concluidos_hoje: 0 };
+    porEquipe[eq].total++; porLocal[lc].total++;
+    if (feito(r.status)) {
+      concluidos++; porEquipe[eq].concluidos++; porLocal[lc].concluidos++;
+      if (noDia(r.atualizado_em)) { concluidosHoje++; porEquipe[eq].concluidos_hoje++; porLocal[lc].concluidos_hoje++; }
+    }
+  }
+  res.json({ data: dia, total, concluidos, concluidos_hoje: concluidosHoje,
+    porEquipe: Object.values(porEquipe).sort((a, b) => b.concluidos_hoje - a.concluidos_hoje),
+    porLocal: Object.values(porLocal).sort((a, b) => b.concluidos_hoje - a.concluidos_hoje) });
 });
 
 // Importar locais do Excel

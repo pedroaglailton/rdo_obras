@@ -127,6 +127,8 @@ const wrapper = {
         `CREATE TABLE IF NOT EXISTS estoque_locais (id SERIAL PRIMARY KEY, local_id INTEGER NOT NULL REFERENCES locais(id) ON DELETE CASCADE, material_id INTEGER NOT NULL REFERENCES materiais(id) ON DELETE CASCADE, quantidade_atual DOUBLE PRECISION DEFAULT 0, atualizado_em TIMESTAMPTZ DEFAULT NOW(), UNIQUE(local_id, material_id))`,
         `CREATE TABLE IF NOT EXISTS estoque_local_movimentacoes (id SERIAL PRIMARY KEY, local_id INTEGER NOT NULL REFERENCES locais(id) ON DELETE CASCADE, material_id INTEGER NOT NULL REFERENCES materiais(id) ON DELETE CASCADE, tipo TEXT NOT NULL, quantidade DOUBLE PRECISION NOT NULL, saldo_apos DOUBLE PRECISION, origem TEXT DEFAULT '', usuario_id INTEGER, criado_em TIMESTAMPTZ DEFAULT NOW())`,
         `CREATE TABLE IF NOT EXISTS obra_compras (id SERIAL PRIMARY KEY, obra_id INTEGER NOT NULL REFERENCES obras(id) ON DELETE CASCADE, material_nome TEXT NOT NULL, unidade TEXT DEFAULT 'UND', quantidade DOUBLE PRECISION DEFAULT 0, valor_unitario DOUBLE PRECISION DEFAULT 0, fornecedor TEXT DEFAULT '', data_compra TEXT DEFAULT '', observacao TEXT DEFAULT '', criado_por TEXT DEFAULT '', criado_em TIMESTAMPTZ DEFAULT NOW())`,
+        `CREATE TABLE IF NOT EXISTS local_pontos (id SERIAL PRIMARY KEY, local_id INTEGER NOT NULL REFERENCES locais(id) ON DELETE CASCADE, obra_id INTEGER REFERENCES obras(id) ON DELETE SET NULL, tipo TEXT DEFAULT 'camera', codigo TEXT NOT NULL, descricao TEXT DEFAULT '', status TEXT DEFAULT 'a_instalar', rdo_id INTEGER REFERENCES rdos(id) ON DELETE SET NULL, observacao TEXT DEFAULT '', atualizado_por TEXT DEFAULT '', criado_em TIMESTAMPTZ DEFAULT NOW(), atualizado_em TIMESTAMPTZ DEFAULT NOW())`,
+        `CREATE TABLE IF NOT EXISTS local_plantas (id SERIAL PRIMARY KEY, local_id INTEGER NOT NULL REFERENCES locais(id) ON DELETE CASCADE, titulo TEXT NOT NULL DEFAULT 'Geral', url TEXT NOT NULL, criado_em TIMESTAMPTZ DEFAULT NOW())`,
         `CREATE INDEX IF NOT EXISTS idx_obra_materiais_obra ON obra_materiais(obra_id)`,
         `CREATE INDEX IF NOT EXISTS idx_rdos_data ON rdos(data)`,
         `CREATE INDEX IF NOT EXISTS idx_rdos_usuario ON rdos(usuario_id)`,
@@ -135,7 +137,7 @@ const wrapper = {
       console.log('[db] tabelas Postgres verificadas');
       // Habilita RLS para silenciar linter Supabase (postgres role bypassa RLS, então não afeta pool direto)
       // Usa apenas POLICY FOR SELECT USING (true) — o linter ignora SELECT permissivo (lint 0024 só acusa ALL/INSERT/UPDATE/DELETE)
-      const rlsTables = ['usuarios','equipes','locais','obras','etapas','atividades','materiais','rdos','presenca','obra_materiais','rdo_auditoria','estoque_equipes','estoque_movimentacoes','estoque_locais','estoque_local_movimentacoes','obra_compras'];
+      const rlsTables = ['usuarios','equipes','locais','obras','etapas','atividades','materiais','rdos','presenca','obra_materiais','rdo_auditoria','estoque_equipes','estoque_movimentacoes','estoque_locais','estoque_local_movimentacoes','obra_compras','local_pontos','local_plantas'];
       for (const t of rlsTables) {
         try { await pool.query(`ALTER TABLE public.${t} ENABLE ROW LEVEL SECURITY`); } catch (e) { /* já habilitado */ }
         // Remove policy antiga ALL permissiva que gera WARN 0024

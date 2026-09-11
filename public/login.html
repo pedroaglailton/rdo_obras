@@ -108,7 +108,13 @@ async function doLogin(){
         await fetch('/api/presenca',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+d.token},body:JSON.stringify({latitude:window._loginPos.lat,longitude:window._loginPos.lng,accuracy:window._loginPos.acc})});
       }catch(e){}
     }
-    window.location.href=d.user.perfil==='gestor'?'/':'/app';
+    // Deep link (ex: QR da planta /app?local=ID): volta para onde veio
+    var next=null;
+    try{
+      next=new URLSearchParams(window.location.search).get('next');
+      if(next && !(next.charAt(0)==='/' && next.charAt(1)!=='/')) next=null; // só caminho interno
+    }catch(e){ next=null; }
+    window.location.href=next||(d.user.perfil==='gestor'?'/':'/app');
   }catch(e){document.getElementById('e-login').textContent='Erro de conexao'; btn.disabled=false; btn.textContent='Entrar';}
 }
 document.querySelectorAll('input').forEach(function(i){i.addEventListener('keypress',function(e){if(e.key==='Enter')doLogin();});});

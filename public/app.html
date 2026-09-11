@@ -172,6 +172,7 @@
     <button data-view="novo">+ RDO</button>
     <button data-view="lista">RDOs</button>
     <button data-view="mapa">Mapa</button>
+    <button data-view="planta">📐 Planta</button>
   </nav>
 </header>
 
@@ -313,6 +314,17 @@
       <button class="btn-primary" onclick="centralizarMapa()" style="margin-top:8px;padding:10px;font-size:13px">📍 Minha Localizacao</button>
     </div>
   </section>
+  <section class="view" id="view-planta">
+    <div class="card" style="border-left:4px solid #6a1b9a">
+      <h2>📐 Planta do local</h2>
+      <p style="font-size:11px;color:var(--muted);margin:0 0 8px">Escaneou o QR? Cai aqui direto. Veja a planta e avance os pontos conforme executa.</p>
+      <select id="plantaLocalSel" onchange="_plantaLocalId=this.value;carregarPlantaView()" style="width:100%;margin-bottom:8px"><option value="">Selecione o local...</option></select>
+      <select id="plantaPavSel" onchange="renderPlantaSel()" style="width:100%;margin-bottom:8px;display:none"></select>
+      <div id="plantaBar" style="display:none;margin-bottom:8px"><div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:4px"><span id="plantaBarTxt">0/0</span><span>testadas+aprovadas</span></div><div style="height:8px;background:var(--line);border-radius:99px;overflow:hidden"><div id="plantaBarFill" style="height:100%;background:#2e7d32;width:0%"></div></div></div>
+      <div id="plantaView" style="margin-bottom:8px"><p class="empty-state">Selecione um local.</p></div>
+      <div id="plantaPontos" style="display:grid;gap:6px"></div>
+    </div>
+  </section>
 </main>
 
 <div class="toast" id="toast"></div>
@@ -328,7 +340,7 @@
   const token = localStorage.getItem('token');
   const user = JSON.parse(localStorage.getItem('user') || '{}');
 
-  if (!token) { window.location.href = '/login'; return; }
+  if (!token) { window.location.href = '/login?next=' + encodeURIComponent(window.location.pathname + window.location.search); return; }
 
   $('userPill').textContent = user.nome || 'Usuario';
 
@@ -432,6 +444,7 @@
       if (btn.dataset.view === 'lista') renderLista();
       if (btn.dataset.view === 'home') carregarHome();
       if (btn.dataset.view === 'mapa') iniciarMapaFull();
+      if (btn.dataset.view === 'planta') carregarPlantaView();
     });
   });
 
@@ -1404,6 +1417,79 @@
     socket.on('rdo_atualizado', () => { if ($('view-lista').classList.contains('active')) renderLista(); });
     socket.on('rdo_excluido', () => { if ($('view-lista').classList.contains('active')) renderLista(); });
     socket.on('rdo_restaurado', () => { if ($('view-lista').classList.contains('active')) renderLista(); });
+  } catch (e) {}
+
+  // PLANTA DO LOCAL (deep link ?local=ID vindo do QR impresso)
+  let _plantaLocalId = '';
+  try { _plantaLocalId = new URLSearchParams(window.location.search).get('local') || ''; } catch (e) {}
+  const PONTO_ORDEM = ['a_instalar', 'instalada', 'cabeada', 'configurada', 'testada', 'aprovada'];
+  const PONTO_LABEL = { a_instalar: 'A instalar', instalada: 'Instalada', cabeada: 'Cabeada', configurada: 'Configurada', testada: 'Testada ✓ (aguardando aprovação)', aprovada: 'Aprovada ✓' };
+  const PONTO_COR = { a_instalar: '#90a4ae', instalada: '#5c6bc0', cabeada: '#ef6c00', configurada: '#00838f', testada: '#2e7d32', aprovada: '#1565c0' };
+  async function carregarPlantaView(){
+    const sel = $('plantaLocalSel'), view = $('plantaView'), box = $('plantaPontos');
+    const doCache = (window._obraLocaisCache || []).concat(window._equipeLocaisCache || []);
+    const vistos = new Set();
+    const opcoes = doCache.filter(l => l && l.id && !vistos.has(String(l.id)) && vistos.add(String(l.id)));
+    const keep = _plantaLocalId || sel.value;
+    sel.innerHTML = '<option value="">Selecione o local...</option>' + opcoes.map(l => `<option value="${l.id}">${l.nome}</option>`).join('');
+    if (!opcoes.length) {
+      // sem cache ainda: busca o local direto (deep link) ou lista da obra
+      try {
+        if (_plantaLocalId) {
+          const l = await api('/api/locais/' + _plantaLocalId).then(r => r.json());
+          if (l && l.id) { sel.innerHTML = `<option value="${l.id}">${l.nome}</option>`; sel.value = l.id; }
+        }
+      } catch (e) {}
+    } else if (keep) sel.value = keep;
+    const lid = sel.value || _plantaLocalId;
+    if (!lid) { view.innerHTML = '<p class="empty-state">Selecione um local.</p>'; box.innerHTML = ''; $('plantaBar').style.display = 'none'; return; }
+    _plantaLocalId = lid;
+    let pls = [];
+    try { pls = await api('/api/locais/' + lid + '/plantas').then(r => r.json()); } catch (e) {}
+    window._plantasCache = Array.isArray(pls) ? pls : [];
+    const pavSel = $('plantaPavSel');
+    if (window._plantasCache.length > 1) {
+      pavSel.style.display = '';
+      pavSel.innerHTML = window._plantasCache.map((p, i) => `<option value="${i}">${p.titulo}</option>`).join('');
+    } else pavSel.style.display = 'none';
+    renderPlantaSel();
+    let pts = [];
+    try { pts = await api('/api/locais/' + lid + '/pontos').then(r => r.json()); } catch (e) {}
+    const feitas = pts.filter(p => p.status === 'testada' || p.status === 'aprovada').length;
+    $('plantaBar').style.display = pts.length ? 'block' : 'none';
+    $('plantaBarTxt').textContent = feitas + '/' + pts.length + ' pontos';
+    $('plantaBarFill').style.width = (pts.length ? Math.round(feitas / pts.length * 100) : 0) + '%';
+    box.innerHTML = pts.length ? pts.map(p => {
+      const idx = PONTO_ORDEM.indexOf(p.status);
+      const prox = PONTO_ORDEM[idx + 1];
+      const podeAvancar = prox && prox !== 'aprovada';
+      return `<div style="display:flex;align-items:center;gap:8px;padding:10px;background:#fff;border:1px solid var(--line);border-left:4px solid ${PONTO_COR[p.status] || '#90a4ae'};border-radius:8px;font-size:13px">
+        <span style="flex:1"><strong>${p.tipo === 'infra' ? '🔌' : '📷'} ${p.codigo}</strong>${p.descricao ? '<br><small style="color:var(--muted)">' + p.descricao + '</small>' : ''}<br><small style="color:${PONTO_COR[p.status]};font-weight:700">${PONTO_LABEL[p.status] || p.status}</small></span>
+        ${podeAvancar ? `<button class="btn-primary" onclick="avancarPonto(${p.id},'${prox}')" style="padding:8px 12px;font-size:12px">✓ ${PONTO_LABEL[prox].split(' ')[0]}</button>` : (p.status === 'testada' ? '<small style="color:var(--muted)">só gestor aprova</small>' : '<small>✓</small>')}
+      </div>`;
+    }).join('') : '<p class="empty-state">Sem checklist neste local ainda.</p>';
+  }
+  window.carregarPlantaView = carregarPlantaView;
+  function renderPlantaSel(){
+    const view = $('plantaView');
+    const lista = window._plantasCache || [];
+    const pavSel = $('plantaPavSel');
+    const p = lista.length > 1 ? lista[Number(pavSel.value) || 0] : lista[0];
+    if (!p) { view.innerHTML = '<p class="empty-state">Sem planta para este local — avise o gestor.</p>'; return; }
+    view.innerHTML = (/\.pdf$/i.test(p.url) ? `<a href="${p.url}" target="_blank" class="btn-primary" style="display:block;text-align:center;text-decoration:none;padding:12px">📄 Abrir planta — ${p.titulo} (PDF)</a>` : `<div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:4px">🗺️ ${p.titulo}</div><a href="${p.url}" target="_blank"><img src="${p.url}" style="width:100%;border:1px solid var(--line);border-radius:8px"></a>`);
+  }
+  window.renderPlantaSel = renderPlantaSel;
+  async function avancarPonto(id, status){
+    const r = await api('/api/pontos/' + id, { method: 'PUT', body: JSON.stringify({ status }) });
+    const d = await r.json().catch(() => ({}));
+    if (!r || d.error) { toast(d.error || 'Falha ao atualizar'); return; }
+    toast('Ponto atualizado!');
+    carregarPlantaView();
+  }
+  window.avancarPonto = avancarPonto;
+  // Deep link do QR: abre direto na planta do local
+  try {
+    if (_plantaLocalId) setTimeout(() => { document.querySelector('nav.tabs button[data-view=planta]')?.click(); }, 600);
   } catch (e) {}
 
   // Exports: lógica de linhas centralizada (antes as 21 colunas + horas estavam copiadas em CSV e Excel)
