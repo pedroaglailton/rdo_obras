@@ -731,8 +731,13 @@
     const localNome = this.value;
     $('f_cidade').value = '';
     if (!localNome || localNome === '__outro' || localNome === '__ver_todos') return;
-    // tenta cache primeiro (obra atual + equipe), depois API
-    let local = (window._obraLocaisCache||[]).find(l=>l.nome===localNome) || (window._equipeLocaisCache||[]).find(l=>l.nome===localNome);
+    // usa o data-id da opção marcada (id único do local) para não confundir locais com o mesmo nome em comarcas diferentes
+    const optId = this.options[this.selectedIndex]?.dataset.id;
+    let local = optId ? ((window._obraLocaisCache||[]).find(l=>String(l.id)===String(optId)) || (window._equipeLocaisCache||[]).find(l=>String(l.id)===String(optId))) : null;
+    if (!local) {
+      // fallback (sem data-id disponível): tenta cache por nome, depois API
+      local = (window._obraLocaisCache||[]).find(l=>l.nome===localNome) || (window._equipeLocaisCache||[]).find(l=>l.nome===localNome);
+    }
     if(!local){
       try{
         const locais = await api('/api/locais?busca=' + encodeURIComponent(localNome)).then(r => r.json());
@@ -961,7 +966,7 @@
     locais.forEach(l => {
       const prog = l.obra_progresso!=null ? ' · '+l.obra_progresso+'%' : '';
       const cam = l.cameras ? ' · 📷'+l.cameras : '';
-      selLocal.innerHTML += '<option value="' + l.nome + '">' + l.nome + (l.comarca ? ' - ' + l.comarca : '') + prog + cam + (isTJCE ? '' : (l.regiao ? ' ['+l.regiao+']':'')) + '</option>';
+      selLocal.innerHTML += '<option value="' + l.nome + '" data-id="' + l.id + '">' + l.nome + (l.comarca ? ' - ' + l.comarca : '') + prog + cam + (isTJCE ? '' : (l.regiao ? ' ['+l.regiao+']':'')) + '</option>';
     });
     // Link para expandir para todos os 233 quando filtrado por equipe (só TJ-CE)
     if (isTJCE && equipeNome && locais.length < 233) {
@@ -975,14 +980,16 @@
         this.innerHTML = '<option>Carregando todos...</option>';
         const todos = await api('/api/locais?obra_id='+obraId).then(r=>r.json());
         this.innerHTML = '<option value="">Selecione o local (todos: '+todos.length+')</option>';
-        todos.forEach(l => { this.innerHTML += '<option value="' + l.nome + '">' + l.nome + (l.comarca ? ' - ' + l.comarca : '') + (l.regiao ? ' ['+l.regiao+']' : '') + '</option>'; });
+        todos.forEach(l => { this.innerHTML += '<option value="' + l.nome + '" data-id="' + l.id + '">' + l.nome + (l.comarca ? ' - ' + l.comarca : '') + (l.regiao ? ' ['+l.regiao+']' : '') + '</option>'; });
         this.innerHTML += '<option value="__outro">✏️ Outro</option>';
         return;
       }
       $('f_local_outro').style.display = this.value === '__outro' ? 'block' : 'none';
-      // cidade auto
+      // cidade auto — usa o data-id da opção marcada (id único), nunca o nome (pode repetir em comarcas diferentes)
       if (this.value && this.value!=='__outro' && this.value!=='__ver_todos') {
-        const loc = locais.find(x=>x.nome===this.value) || (await api('/api/locais?busca='+encodeURIComponent(this.value)).then(r=>r.json()).then(a=>a[0]));
+        const optId = this.options[this.selectedIndex]?.dataset.id;
+        let loc = optId ? locais.find(x=>String(x.id)===String(optId)) : null;
+        if (!loc) loc = locais.find(x=>x.nome===this.value) || (await api('/api/locais?busca='+encodeURIComponent(this.value)).then(r=>r.json()).then(a=>a[0]));
         if (loc) $('f_cidade').value = loc.comarca || '';
       }
     };
@@ -1185,6 +1192,9 @@
     e.preventDefault();
     const obraId = $('f_obra').value;
     const local = $('f_local').value === '__outro' ? $('f_local_outro').value.trim() : $('f_local').value;
+    // id exato do local selecionado (evita o backend "adivinhar" pelo nome quando há locais homônimos em comarcas diferentes)
+    const localSelEl = $('f_local');
+    const localId = ($('f_local').value !== '__outro' && localSelEl.selectedIndex >= 0) ? localSelEl.options[localSelEl.selectedIndex]?.dataset.id : null;
     const atividade = $('f_atividade').value === '__outro' ? $('f_atividade_outro').value.trim() : $('f_atividade').value;
     if (!obraId) { toast('Selecione a obra'); return; }
     if (!local) { toast('Informe o local'); return; }
@@ -1226,7 +1236,7 @@
     const entry = {
       obra_id: parseInt(obraId),
       data: $('f_data').value,
-      local, atividade,
+      local, local_id: localId ? parseInt(localId) : null, atividade,
       equipe: equipe.slice(),
       materiais: materiais.map(m => ({ ...m })),
       entrada_manha: $('f_entradaM').value,
@@ -1385,8 +1395,12 @@
     // espera os locais da obra carregarem antes de setar o local
     let t = 0;
     while (t < 25 && $('f_local').innerHTML.includes('Carregando')) { await new Promise(r => setTimeout(r, 150)); t++; }
+    // prioriza casar pelo local_id salvo (evita cair no local errado quando há nomes repetidos em comarcas diferentes)
+    const optPorId = entry.local_id ? Array.from($('f_local').options).find(o => o.dataset.id && String(o.dataset.id) === String(entry.local_id)) : null;
     const localExiste = Array.from($('f_local').options).some(o => o.value === entry.local);
-    if (localExiste) { $('f_local').value = entry.local; } else { $('f_local').value = '__outro'; $('f_local_outro').style.display = 'block'; $('f_local_outro').value = entry.local; }
+    if (optPorId) { $('f_local').value = optPorId.value; }
+    else if (localExiste) { $('f_local').value = entry.local; }
+    else { $('f_local').value = '__outro'; $('f_local_outro').style.display = 'block'; $('f_local_outro').value = entry.local; }
     $('f_cidade').value = entry.cidade || '';
     const atvExiste = Array.from($('f_atividade').options).some(o => o.value === entry.atividade);
     if (atvExiste) { $('f_atividade').value = entry.atividade; } else { $('f_atividade').value = '__outro'; $('f_atividade_outro').style.display = 'block'; $('f_atividade_outro').value = entry.atividade; }
