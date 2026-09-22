@@ -2198,8 +2198,17 @@ app.post('/api/rdos', async (req, res) => {
   let obraId = d.obra_id ? Number(d.obra_id) : null;
   let localId = d.local_id ? Number(d.local_id) : null;
   // Se veio só nome do local, tenta resolver local_id e obra_id
+  // ATENÇÃO: pode existir mais de um local com o mesmo nome em comarcas diferentes (ex.: "Fórum" repete em várias comarcas).
+  // Por isso preferimos sempre d.local_id vindo do front (id único da opção marcada). Este é só um fallback best-effort,
+  // restrito à obra selecionada quando possível, para reduzir a chance de pegar o local errado (e a cidade errada).
   if (!localId && d.local) {
-    const loc = await db.prepare('SELECT id, obra_id FROM locais WHERE nome=? AND ativo=1').get(d.local);
+    let loc;
+    if (obraId) {
+      loc = await db.prepare('SELECT id, obra_id FROM locais WHERE nome=? AND ativo=1 AND obra_id=? ORDER BY id LIMIT 1').get(d.local, obraId);
+    }
+    if (!loc) {
+      loc = await db.prepare('SELECT id, obra_id FROM locais WHERE nome=? AND ativo=1 ORDER BY id LIMIT 1').get(d.local);
+    }
     if (loc) { localId = loc.id; if (!obraId) obraId = loc.obra_id; }
   }
   if (!obraId && localId) {
@@ -2280,11 +2289,19 @@ app.put('/api/rdos/:id', async (req, res) => {
   const motivoEdicao = (d.motivo_edicao || d.motivo || '').toString().trim();
   if (!motivoEdicao || motivoEdicao.length < 3) return res.status(400).json({ error: 'Informe o motivo da edicao (min. 3 letras) — exigido para auditoria de documento de obra' });
   let localId = d.local_id ? Number(d.local_id) : null;
+  let obraId = d.obra_id ? Number(d.obra_id) : null;
+  // Fallback por nome (só quando o front não mandou local_id) — restrito à obra quando possível,
+  // pois o mesmo nome de local pode existir em comarcas diferentes.
   if (!localId && d.local) {
-    const loc = await db.prepare('SELECT id FROM locais WHERE nome=? AND ativo=1').get(d.local);
+    let loc;
+    if (obraId) {
+      loc = await db.prepare('SELECT id FROM locais WHERE nome=? AND ativo=1 AND obra_id=? ORDER BY id LIMIT 1').get(d.local, obraId);
+    }
+    if (!loc) {
+      loc = await db.prepare('SELECT id FROM locais WHERE nome=? AND ativo=1 ORDER BY id LIMIT 1').get(d.local);
+    }
     if (loc) localId = loc.id;
   }
-  let obraId = d.obra_id ? Number(d.obra_id) : null;
   if (!obraId && localId) {
     const loc = await db.prepare('SELECT obra_id FROM locais WHERE id=?').get(localId);
     if (loc) obraId = loc.obra_id;
