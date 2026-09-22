@@ -581,7 +581,10 @@
       if(hasOpt){
         selLocal.value=nome;
         // cidade direto do cache (evita API extra e garante preenchimento)
-        const cachedLoc=(window._equipeLocaisCache||[]).find(l=>l.nome===nome) || (window._obraLocaisCache||[]).find(l=>l.nome===nome) || loc;
+    const selOpt = selLocal.selectedOptions && selLocal.selectedOptions[0];
+        const cachedLoc = selOpt && selOpt.getAttribute('data-id')
+          ? (window._equipeLocaisCache||[]).find(l=>String(l.id)===String(selOpt.getAttribute('data-id'))) || loc
+          : (window._equipeLocaisCache||[]).find(l=>l.nome===nome) || (window._obraLocaisCache||[]).find(l=>l.nome===nome) || loc;
         if(cachedLoc) $('f_cidade').value=cachedLoc.comarca||'';
         selLocal.dispatchEvent(new Event('change'));
         // garante cidade após o handler de change (que também seta)
@@ -594,7 +597,10 @@
     // fallback final
     const selLocal=$('f_local');
     selLocal.value=nome;
-    const cachedLoc=(window._equipeLocaisCache||[]).find(l=>l.nome===nome) || loc;
+    const selOpt = selLocal.selectedOptions && selLocal.selectedOptions[0];
+    const cachedLoc = selOpt && selOpt.getAttribute('data-id')
+      ? (window._equipeLocaisCache||[]).find(l=>String(l.id)===String(selOpt.getAttribute('data-id'))) || loc
+      : (window._equipeLocaisCache||[]).find(l=>l.nome===nome) || loc;
     if(cachedLoc) $('f_cidade').value=cachedLoc.comarca||'';
     selLocal.dispatchEvent(new Event('change'));
     toast('Local '+nome+' selecionado');
@@ -731,13 +737,11 @@
     const localNome = this.value;
     $('f_cidade').value = '';
     if (!localNome || localNome === '__outro' || localNome === '__ver_todos') return;
-    // usa o data-id da opção marcada (id único do local) para não confundir locais com o mesmo nome em comarcas diferentes
-    const optId = this.options[this.selectedIndex]?.dataset.id;
-    let local = optId ? ((window._obraLocaisCache||[]).find(l=>String(l.id)===String(optId)) || (window._equipeLocaisCache||[]).find(l=>String(l.id)===String(optId))) : null;
-    if (!local) {
-      // fallback (sem data-id disponível): tenta cache por nome, depois API
-      local = (window._obraLocaisCache||[]).find(l=>l.nome===localNome) || (window._equipeLocaisCache||[]).find(l=>l.nome===localNome);
-    }
+    // tenta cache primeiro (obra atual + equipe), depois API
+    const selOpt = $('f_local').selectedOptions && $('f_local').selectedOptions[0];
+    const selDataId = selOpt ? selOpt.getAttribute('data-id') : '';
+    let local = selDataId ? (window._obraLocaisCache||[]).find(l=>String(l.id)===String(selDataId)) || (window._equipeLocaisCache||[]).find(l=>String(l.id)===String(selDataId)) : null;
+    if(!local) local = (window._obraLocaisCache||[]).find(l=>l.nome===localNome) || (window._equipeLocaisCache||[]).find(l=>l.nome===localNome);
     if(!local){
       try{
         const locais = await api('/api/locais?busca=' + encodeURIComponent(localNome)).then(r => r.json());
@@ -966,7 +970,7 @@
     locais.forEach(l => {
       const prog = l.obra_progresso!=null ? ' · '+l.obra_progresso+'%' : '';
       const cam = l.cameras ? ' · 📷'+l.cameras : '';
-      selLocal.innerHTML += '<option value="' + l.nome + '" data-id="' + l.id + '">' + l.nome + (l.comarca ? ' - ' + l.comarca : '') + prog + cam + (isTJCE ? '' : (l.regiao ? ' ['+l.regiao+']':'')) + '</option>';
+      selLocal.innerHTML += '<option data-id="' + l.id + '" value="' + l.nome + '">' + l.nome + (l.comarca ? ' - ' + l.comarca : '') + prog + cam + (isTJCE ? '' : (l.regiao ? ' ['+l.regiao+']':'')) + '</option>';
     });
     // Link para expandir para todos os 233 quando filtrado por equipe (só TJ-CE)
     if (isTJCE && equipeNome && locais.length < 233) {
@@ -980,16 +984,14 @@
         this.innerHTML = '<option>Carregando todos...</option>';
         const todos = await api('/api/locais?obra_id='+obraId).then(r=>r.json());
         this.innerHTML = '<option value="">Selecione o local (todos: '+todos.length+')</option>';
-        todos.forEach(l => { this.innerHTML += '<option value="' + l.nome + '" data-id="' + l.id + '">' + l.nome + (l.comarca ? ' - ' + l.comarca : '') + (l.regiao ? ' ['+l.regiao+']' : '') + '</option>'; });
+        todos.forEach(l => { this.innerHTML += '<option data-id="' + l.id + '" value="' + l.nome + '">' + l.nome + (l.comarca ? ' - ' + l.comarca : '') + (l.regiao ? ' ['+l.regiao+']' : '') + '</option>'; });
         this.innerHTML += '<option value="__outro">✏️ Outro</option>';
         return;
       }
       $('f_local_outro').style.display = this.value === '__outro' ? 'block' : 'none';
-      // cidade auto — usa o data-id da opção marcada (id único), nunca o nome (pode repetir em comarcas diferentes)
+      // cidade auto
       if (this.value && this.value!=='__outro' && this.value!=='__ver_todos') {
-        const optId = this.options[this.selectedIndex]?.dataset.id;
-        let loc = optId ? locais.find(x=>String(x.id)===String(optId)) : null;
-        if (!loc) loc = locais.find(x=>x.nome===this.value) || (await api('/api/locais?busca='+encodeURIComponent(this.value)).then(r=>r.json()).then(a=>a[0]));
+        const loc = locais.find(x=>x.nome===this.value) || (await api('/api/locais?busca='+encodeURIComponent(this.value)).then(r=>r.json()).then(a=>a[0]));
         if (loc) $('f_cidade').value = loc.comarca || '';
       }
     };
@@ -1081,7 +1083,10 @@
     const obraId = $('f_obra') ? $('f_obra').value : '';
     const lv = $('f_local') ? $('f_local').value : '';
     if (!obraId || !lv || lv === '__outro' || lv === '__ver_todos') return null;
-    const loc = (window._obraLocaisCache || []).find(l => l.nome === lv) || (window._equipeLocaisCache || []).find(l => l.nome === lv);
+     const selOpt = $('f_local').selectedOptions && $('f_local').selectedOptions[0];
+     const loc = selOpt && selOpt.getAttribute('data-id')
+       ? (window._obraLocaisCache||[]).find(l=>String(l.id)===String(selOpt.getAttribute('data-id'))) || (window._equipeLocaisCache||[]).find(l=>String(l.id)===String(selOpt.getAttribute('data-id')))
+       : (window._obraLocaisCache || []).find(l => l.nome === lv) || (window._equipeLocaisCache || []).find(l => l.nome === lv);
     if (!loc) return null;
     const eqId = (_minhaEquipeCache && _minhaEquipeCache.id) || (user && user.equipe_id) || null;
     const key = obraId + '|' + loc.id + '|' + (eqId || '-');
@@ -1191,10 +1196,9 @@
   $('rdoForm').addEventListener('submit', async function(e) {
     e.preventDefault();
     const obraId = $('f_obra').value;
-    const local = $('f_local').value === '__outro' ? $('f_local_outro').value.trim() : $('f_local').value;
-    // id exato do local selecionado (evita o backend "adivinhar" pelo nome quando há locais homônimos em comarcas diferentes)
-    const localSelEl = $('f_local');
-    const localId = ($('f_local').value !== '__outro' && localSelEl.selectedIndex >= 0) ? localSelEl.options[localSelEl.selectedIndex]?.dataset.id : null;
+     const local = $('f_local').value === '__outro' ? $('f_local_outro').value.trim() : $('f_local').value;
+     const selLocOpt = $('f_local').selectedOptions && $('f_local').selectedOptions[0];
+     const localId = $('f_local').value === '__outro' ? null : (selLocOpt && selLocOpt.getAttribute('data-id') ? parseInt(selLocOpt.getAttribute('data-id')) : null);
     const atividade = $('f_atividade').value === '__outro' ? $('f_atividade_outro').value.trim() : $('f_atividade').value;
     if (!obraId) { toast('Selecione a obra'); return; }
     if (!local) { toast('Informe o local'); return; }
@@ -1234,9 +1238,9 @@
     }
 
     const entry = {
-      obra_id: parseInt(obraId),
+       obra_id: parseInt(obraId),
       data: $('f_data').value,
-      local, local_id: localId ? parseInt(localId) : null, atividade,
+      local_id: localId, local, atividade,
       equipe: equipe.slice(),
       materiais: materiais.map(m => ({ ...m })),
       entrada_manha: $('f_entradaM').value,
@@ -1395,12 +1399,9 @@
     // espera os locais da obra carregarem antes de setar o local
     let t = 0;
     while (t < 25 && $('f_local').innerHTML.includes('Carregando')) { await new Promise(r => setTimeout(r, 150)); t++; }
-    // prioriza casar pelo local_id salvo (evita cair no local errado quando há nomes repetidos em comarcas diferentes)
-    const optPorId = entry.local_id ? Array.from($('f_local').options).find(o => o.dataset.id && String(o.dataset.id) === String(entry.local_id)) : null;
-    const localExiste = Array.from($('f_local').options).some(o => o.value === entry.local);
-    if (optPorId) { $('f_local').value = optPorId.value; }
-    else if (localExiste) { $('f_local').value = entry.local; }
-    else { $('f_local').value = '__outro'; $('f_local_outro').style.display = 'block'; $('f_local_outro').value = entry.local; }
+     let optLocal = entry.local_id ? Array.from($('f_local').options).find(o => o.getAttribute('data-id') === String(entry.local_id)) : null;
+     if (!optLocal) optLocal = Array.from($('f_local').options).find(o => o.value === entry.local);
+     if (optLocal) { $('f_local').value = optLocal.value; } else { $('f_local').value = '__outro'; $('f_local_outro').style.display = 'block'; $('f_local_outro').value = entry.local; }
     $('f_cidade').value = entry.cidade || '';
     const atvExiste = Array.from($('f_atividade').options).some(o => o.value === entry.atividade);
     if (atvExiste) { $('f_atividade').value = entry.atividade; } else { $('f_atividade').value = '__outro'; $('f_atividade_outro').style.display = 'block'; $('f_atividade_outro').value = entry.atividade; }
@@ -1507,7 +1508,7 @@
   } catch (e) {}
 
   // Exports: lógica de linhas centralizada (antes as 21 colunas + horas estavam copiadas em CSV e Excel)
-  const COLS_RDO = ['Data', 'Obra', 'Cidade', 'Local', 'Endereco', 'Atividade', 'Equipe', 'Materiais', 'Qtd Total', 'Manha', 'Tarde', 'Horas Trab.', 'Parada', 'Switch', 'Camera', 'Fotos', 'Responsavel', 'Status Obra', 'Latitude', 'Longitude', 'Registrado por'];
+  const COLS_RDO = ['Data', 'Obra', 'Cidade', 'Local', 'Endereco', 'Atividade', 'Equipe', 'Material', 'Quantidade', 'Manha', 'Tarde', 'Horas Trab.', 'Parada', 'Switch', 'Camera', 'Fotos', 'Responsavel', 'Status Obra', 'Latitude', 'Longitude', 'Registrado por'];
   function calcHorasTrab(e) {
     if (!(e.entrada_manha && e.saida_manha && e.entrada_tarde && e.saida_tarde)) return '-';
     const t = s => { const p = String(s).split(':').map(Number); return p[0] * 60 + p[1]; };
@@ -1520,16 +1521,16 @@
     const eq = JSON.parse(e.equipe_json || '[]').join(', ');
     const ft = JSON.parse(e.fotos_json || '[]').length;
     const mats = JSON.parse(e.materiais_json || '[]');
-    const totalItens = mats.reduce((s, m) => s + Number(m.qtd || 0), 0);
     const manha = (e.entrada_manha && e.saida_manha) ? e.entrada_manha + '-' + e.saida_manha : '-';
     const tarde = (e.entrada_tarde && e.saida_tarde) ? e.entrada_tarde + '-' + e.saida_tarde : '-';
     const parada = e.parou === 'sim' ? 'Sim: ' + (e.motivo_parada || '') : 'Nao';
     const sw = e.switch_instalado === 'sim' ? e.nom_switch + ' / ' + e.local_switch : 'Nao';
     const cam = e.camera_instalada === 'sim' ? e.nom_camera + ' / ' + e.local_camera : 'Nao';
     const horas = calcHorasTrab(e);
-    const primeira = m => [e.data, e.obra_nome || vazio, e.cidade || vazio, e.local, e.local_endereco || vazio, e.atividade || vazio, eq || '-', m, totalItens, manha, tarde, horas, parada, sw, cam, ft, e.obra_responsavel || vazio, e.obra_status || vazio, e.local_lat || vazio, e.local_lng || vazio, e.usuario_nome || '-'];
-    if (!mats.length) return [primeira('-')];
-    return mats.map((m, i) => i === 0 ? primeira(m.nome + ' (' + m.qtd + ')') : ['', '', '', '', '', '', '', m.nome + ' (' + m.qtd + ')', '', '', '', '', '', '', '', '', '', '', '', '', '']);
+    // uma linha por material, cada uma com a QUANTIDADE do próprio material (nunca o total da RDO)
+    const linha = (materialNome, qtd) => [e.data, e.obra_nome || vazio, e.cidade || vazio, e.local, e.local_endereco || vazio, e.atividade || vazio, eq || '-', materialNome, qtd, manha, tarde, horas, parada, sw, cam, ft, e.obra_responsavel || vazio, e.obra_status || vazio, e.local_lat || vazio, e.local_lng || vazio, e.usuario_nome || '-'];
+    if (!mats.length) return [linha('-', vazio)];
+    return mats.map(m => linha(m.nome, Number(m.qtd || 0)));
   }
   async function buscarRdosExport() {
     const _r = await api('/api/rdos?usuario_id=' + user.id);
@@ -1563,9 +1564,23 @@
       if (!rdos) return;
       if (!rdos.length) { toast('Nenhum RDO'); return; }
       const linhas = [COLS_RDO];
-      rdos.forEach(e => { linhasRDO(e, '-').forEach(l => linhas.push(l)); });
+      const merges = [];
+      rdos.forEach(e => {
+        const grupo = linhasRDO(e, '-');
+        const linhaInicio = linhas.length; // linha (0-based, já contando o cabeçalho) onde essa RDO começa
+        grupo.forEach(l => linhas.push(l));
+        const linhaFim = linhas.length - 1;
+        if (linhaFim > linhaInicio) {
+          // mescla todas as colunas EXCETO Material (7) e Quantidade (8), que variam linha a linha
+          for (let c = 0; c < COLS_RDO.length; c++) {
+            if (c === 7 || c === 8) continue;
+            merges.push({ s: { r: linhaInicio, c }, e: { r: linhaFim, c } });
+          }
+        }
+      });
 
     const ws = XLSX.utils.aoa_to_sheet(linhas);
+    ws['!merges'] = merges;
 
     // Largura das colunas
     ws['!cols'] = [
@@ -1598,7 +1613,7 @@
     ws['!rows'] = [{ hpt: 28 }];
 
     // Estilizar linhas de dados
-    const centroIdx = [0, 7, 8, 12]; // Data, Manha, Tarde, Fotos
+    const centroIdx = [0, 8, 9, 10, 15]; // Data, Quantidade, Manha, Tarde, Fotos
     for (let r = 1; r < linhas.length; r++) {
       const corFundo = r % 2 === 0 ? corLinhaPar : corLinhaImpar;
       for (let c = 0; c < COLS_RDO.length; c++) {
