@@ -130,8 +130,9 @@ function ensureColumn(table, column, type) {
   }
 }
 
-db.exec(`
-CREATE TABLE IF NOT EXISTS obras (
+ ensureColumn('rdos', 'local_id', 'INTEGER');
+ db.exec(`
+ CREATE TABLE IF NOT EXISTS obras (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   nome TEXT UNIQUE NOT NULL,
   locais TEXT DEFAULT '[]',
@@ -143,10 +144,11 @@ CREATE TABLE IF NOT EXISTS rdos (
   tecnico TEXT,
   criado_em TEXT,
   data_servico TEXT,
-  obra_nome TEXT,
-  local TEXT,
-  atividade TEXT,
-  equipe TEXT,
+   obra_nome TEXT,
+   local TEXT,
+   local_id INTEGER,
+   atividade TEXT,
+   equipe TEXT,
   materiais_json TEXT,
   entrada_manha TEXT, saida_manha TEXT, entrada_tarde TEXT, saida_tarde TEXT,
   parou TEXT, motivo_parada TEXT,
@@ -289,40 +291,51 @@ app.post('/api/sync', checkAuth, (req, res) => {
     INSERT INTO obras (nome, locais, criado_em) VALUES (@nome, @locais, @criado_em)
     ON CONFLICT(nome) DO UPDATE SET locais = @locais
   `);
-  const upsertRdo = db.prepare(`
-    INSERT INTO rdos (uid, tecnico, criado_em, data_servico, obra_nome, local, atividade, equipe,
-      materiais_json, entrada_manha, saida_manha, entrada_tarde, saida_tarde, parou, motivo_parada,
-      switch_instalado, switch_nomenclatura, switch_local, camera_instalada, camera_nomenclatura,
-      camera_local, qtd_fotos, lat, lon, recebido_em)
-    VALUES (@uid, @tecnico, @criado_em, @data_servico, @obra_nome, @local, @atividade, @equipe,
-      @materiais_json, @entrada_manha, @saida_manha, @entrada_tarde, @saida_tarde, @parou, @motivo_parada,
-      @switch_instalado, @switch_nomenclatura, @switch_local, @camera_instalada, @camera_nomenclatura,
-      @camera_local, @qtd_fotos, @lat, @lon, @recebido_em)
-    ON CONFLICT(uid) DO UPDATE SET
-      tecnico=@tecnico, data_servico=@data_servico, obra_nome=@obra_nome, local=@local, atividade=@atividade,
-      equipe=@equipe, materiais_json=@materiais_json, entrada_manha=@entrada_manha, saida_manha=@saida_manha,
-      entrada_tarde=@entrada_tarde, saida_tarde=@saida_tarde, parou=@parou, motivo_parada=@motivo_parada,
-      switch_instalado=@switch_instalado, switch_nomenclatura=@switch_nomenclatura, switch_local=@switch_local,
-      camera_instalada=@camera_instalada, camera_nomenclatura=@camera_nomenclatura, camera_local=@camera_local,
-      qtd_fotos=@qtd_fotos, lat=@lat, lon=@lon, recebido_em=@recebido_em
-  `);
+   const upsertRdo = db.prepare(`
+     INSERT INTO rdos (uid, tecnico, criado_em, data_servico, obra_nome, local, local_id, atividade, equipe,
+       materiais_json, entrada_manha, saida_manha, entrada_tarde, saida_tarde, parou, motivo_parada,
+       switch_instalado, switch_nomenclatura, switch_local, camera_instalada, camera_nomenclatura,
+       camera_local, qtd_fotos, lat, lon, recebido_em)
+     VALUES (@uid, @tecnico, @criado_em, @data_servico, @obra_nome, @local, @local_id, @atividade, @equipe,
+       @materiais_json, @entrada_manha, @saida_manha, @entrada_tarde, @saida_tarde, @parou, @motivo_parada,
+       @switch_instalado, @switch_nomenclatura, @switch_local, @camera_instalada, @camera_nomenclatura,
+       @camera_local, @qtd_fotos, @lat, @lon, @recebido_em)
+     ON CONFLICT(uid) DO UPDATE SET
+       tecnico=@tecnico, data_servico=@data_servico, obra_nome=@obra_nome, local=@local, local_id=@local_id, atividade=@atividade,
+       equipe=@equipe, materiais_json=@materiais_json, entrada_manha=@entrada_manha, saida_manha=@saida_manha,
+       entrada_tarde=@entrada_tarde, saida_tarde=@saida_tarde, parou=@parou, motivo_parada=@motivo_parada,
+       switch_instalado=@switch_instalado, switch_nomenclatura=@switch_nomenclatura, switch_local=@switch_local,
+       camera_instalada=@camera_instalada, camera_nomenclatura=@camera_nomenclatura, camera_local=@camera_local,
+       qtd_fotos=@qtd_fotos, lat=@lat, lon=@lon, recebido_em=@recebido_em
+   `);
 
-  const tx = db.transaction((obras, rdos) => {
-    obras.forEach(o => upsertObra.run({ nome: o.nome, locais: JSON.stringify(o.locais || []), criado_em: o.criado_em || new Date().toISOString() }));
-    rdos.forEach(r => upsertRdo.run({
-      uid: r.uid, tecnico, criado_em: r.criado_em, data_servico: r.data_servico,
-      obra_nome: r.obra_nome, local: r.local, atividade: r.atividade,
-      equipe: r.equipe || '[]', materiais_json: r.materiais_json || '[]',
-      entrada_manha: r.entrada_manha, saida_manha: r.saida_manha,
-      entrada_tarde: r.entrada_tarde, saida_tarde: r.saida_tarde,
-      parou: r.parou, motivo_parada: r.motivo_parada || '',
-      switch_instalado: r.switch_instalado, switch_nomenclatura: r.switch_nomenclatura || '', switch_local: r.switch_local || '',
-      camera_instalada: r.camera_instalada, camera_nomenclatura: r.camera_nomenclatura || '', camera_local: r.camera_local || '',
-      qtd_fotos: r.qtd_fotos || 0, lat: r.lat ?? null, lon: r.lon ?? null,
-      recebido_em: new Date().toISOString()
-    }));
-  });
-  tx(obras, rdos);
+   const obraLocaisMap = {};
+   obras.forEach(o => { try { obraLocaisMap[o.nome] = JSON.parse(o.locais || '[]'); } catch(e) { obraLocaisMap[o.nome] = []; } });
+
+   const tx = db.transaction((obras, rdos) => {
+     obras.forEach(o => upsertObra.run({ nome: o.nome, locais: JSON.stringify(o.locais || []), criado_em: o.criado_em || new Date().toISOString() }));
+     rdos.forEach(r => {
+       let localId = r.local_id ? Number(r.local_id) : null;
+       if (!localId) {
+         const locais = obraLocaisMap[r.obra_nome] || [];
+         const loc = locais.find(l => l.nome === r.local);
+         if (loc) localId = loc.id || null;
+       }
+       upsertRdo.run({
+         uid: r.uid, tecnico, criado_em: r.criado_em, data_servico: r.data_servico,
+         obra_nome: r.obra_nome, local: r.local, local_id: localId, atividade: r.atividade,
+         equipe: r.equipe || '[]', materiais_json: r.materiais_json || '[]',
+         entrada_manha: r.entrada_manha, saida_manha: r.saida_manha,
+         entrada_tarde: r.entrada_tarde, saida_tarde: r.saida_tarde,
+         parou: r.parou, motivo_parada: r.motivo_parada || '',
+         switch_instalado: r.switch_instalado, switch_nomenclatura: r.switch_nomenclatura || '', switch_local: r.switch_local || '',
+         camera_instalada: r.camera_instalada, camera_nomenclatura: r.camera_nomenclatura || '', camera_local: r.camera_local || '',
+         qtd_fotos: r.qtd_fotos || 0, lat: r.lat ?? null, lon: r.lon ?? null,
+         recebido_em: new Date().toISOString()
+       });
+     });
+   });
+   tx(obras, rdos);
 
   // Entregas pendentes de obras criadas pelo dashboard
   const pendentes = db.prepare(
