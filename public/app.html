@@ -225,6 +225,8 @@
         <input type="date" id="f_data" required>
         <label>Obra</label>
         <select id="f_obra" required><option value="">Selecione a obra</option></select>
+        <label>Comarca <span class="opt">(filtra os locais/fóruns da sua equipe por cidade)</span></label>
+        <select id="f_comarca" style="display:none"><option value="">Todas as comarcas</option></select>
         <label>Cidade</label>
         <input type="text" id="f_cidade" readonly placeholder="Selecione obra e local" style="background:#f2f4f6;color:#68767f;cursor:default">
         <label>Local</label>
@@ -934,7 +936,7 @@
     const obraId = this.value;
     const selLocal = $('f_local');
     $('f_cidade').value = '';
-    if (!obraId) { selLocal.innerHTML = '<option value="">Selecione a obra primeiro</option>'; return; }
+    if (!obraId) { selLocal.innerHTML = '<option value="">Selecione a obra primeiro</option>'; $('f_comarca').style.display = 'none'; $('f_comarca').innerHTML = '<option value="">Todas as comarcas</option>'; return; }
     const selText = this.options[this.selectedIndex]?.text || '';
     const isTJCE = selText.replace(/[-\s]/g,'').toUpperCase().includes('TJCE');
     selLocal.innerHTML = '<option value="">Carregando...</option>';
@@ -966,12 +968,40 @@
     window._obraLocaisCache = locais;
     if (isTJCE) window._equipeLocaisCache = locais;
     const label = isTJCE ? ' da sua equipe' : '';
-    selLocal.innerHTML = '<option value="">Selecione o local ('+locais.length+label+')</option>';
-    locais.forEach(l => {
-      const prog = l.obra_progresso!=null ? ' · '+l.obra_progresso+'%' : '';
-      const cam = l.cameras ? ' · 📷'+l.cameras : '';
-      selLocal.innerHTML += '<option data-id="' + l.id + '" value="' + l.nome + '">' + l.nome + (l.comarca ? ' - ' + l.comarca : '') + prog + cam + (isTJCE ? '' : (l.regiao ? ' ['+l.regiao+']':'')) + '</option>';
-    });
+
+    // Monta as <option> do select de Local a partir de uma lista (reaproveitado no filtro por comarca e em "ver todos")
+    function montarOptsLocal(lista) {
+      return lista.map(l => {
+        const prog = l.obra_progresso != null ? ' · ' + l.obra_progresso + '%' : '';
+        const cam = l.cameras ? ' · 📷' + l.cameras : '';
+        return '<option data-id="' + l.id + '" value="' + l.nome + '">' + l.nome + (l.comarca ? ' - ' + l.comarca : '') + prog + cam + (isTJCE ? '' : (l.regiao ? ' [' + l.regiao + ']' : '')) + '</option>';
+      }).join('');
+    }
+    // Popula o filtro de Comarca (cidade) a partir dos locais disponíveis (equipe/obra) — só aparece quando há mais de 1 comarca
+    function popularComarcas(lista) {
+      const selComarca = $('f_comarca');
+      const porComarca = {};
+      lista.forEach(l => { const c = l.comarca || 'Sem comarca'; porComarca[c] = (porComarca[c] || 0) + 1; });
+      const comarcas = Object.keys(porComarca).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+      selComarca.innerHTML = '<option value="">Todas as comarcas (' + lista.length + ' locais)</option>' + comarcas.map(c => '<option value="' + c + '">' + c + ' (' + porComarca[c] + ')</option>').join('');
+      selComarca.value = '';
+      selComarca.style.display = comarcas.length > 1 ? 'block' : 'none';
+    }
+    popularComarcas(locais);
+    selLocal.innerHTML = '<option value="">Selecione o local (' + locais.length + label + ')</option>' + montarOptsLocal(locais);
+    // Ao trocar a comarca, refiltra o select de Local (mantém a lógica de "ver todos"/"outro" abaixo)
+    $('f_comarca').onchange = function() {
+      const c = this.value;
+      const filtrados = c ? locais.filter(l => (l.comarca || 'Sem comarca') === c) : locais;
+      selLocal.innerHTML = '<option value="">Selecione o local (' + filtrados.length + (c ? ' em ' + c : label) + ')</option>' + montarOptsLocal(filtrados);
+      if (isTJCE && equipeNome && locais.length < 233) {
+        selLocal.innerHTML += '<option disabled>──</option>';
+        selLocal.innerHTML += '<option value="__ver_todos">🔍 Ver todos os 233 locais TJ-CE...</option>';
+      }
+      selLocal.innerHTML += '<option value="__outro">✏️ Outro (digitar)</option>';
+      $('f_local_outro').style.display = 'none';
+      $('f_cidade').value = c || '';
+    };
     // Link para expandir para todos os 233 quando filtrado por equipe (só TJ-CE)
     if (isTJCE && equipeNome && locais.length < 233) {
       selLocal.innerHTML += '<option disabled>──</option>';
@@ -983,8 +1013,11 @@
       if (this.value === '__ver_todos') {
         this.innerHTML = '<option>Carregando todos...</option>';
         const todos = await api('/api/locais?obra_id='+obraId).then(r=>r.json());
-        this.innerHTML = '<option value="">Selecione o local (todos: '+todos.length+')</option>';
-        todos.forEach(l => { this.innerHTML += '<option data-id="' + l.id + '" value="' + l.nome + '">' + l.nome + (l.comarca ? ' - ' + l.comarca : '') + (l.regiao ? ' ['+l.regiao+']' : '') + '</option>'; });
+        locais = todos; // amplia a lista base (permite continuar filtrando por comarca com os 233)
+        window._obraLocaisCache = todos;
+        if (isTJCE) window._equipeLocaisCache = todos;
+        popularComarcas(todos);
+        this.innerHTML = '<option value="">Selecione o local (todos: '+todos.length+')</option>' + montarOptsLocal(todos);
         this.innerHTML += '<option value="__outro">✏️ Outro</option>';
         return;
       }
@@ -1279,6 +1312,7 @@
   });
 
   function resetForm() {
+    const obraIdAtual = $('f_obra').value; // mantém a obra selecionada entre um RDO e outro (útil p/ quem preenche vários RDOs seguidos de comarcas diferentes)
     $('rdoForm').reset();
     $('f_data').valueAsDate = new Date();
     $('f_entradaM').value = '08:00'; $('f_saidaM').value = '12:00';
@@ -1294,6 +1328,11 @@
     $('condParou').classList.remove('show');
     $('condSwitch').classList.remove('show');
     $('condCamera').classList.remove('show');
+    if (obraIdAtual) {
+      // reaplica a obra (recarrega locais/comarcas na hora, já limpos: Comarca volta pra "Todas" e Local pra vazio)
+      $('f_obra').value = obraIdAtual;
+      $('f_obra').dispatchEvent(new Event('change'));
+    }
   }
 
   // Toast
