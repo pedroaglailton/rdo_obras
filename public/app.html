@@ -231,6 +231,7 @@
         <input type="text" id="f_cidade" readonly placeholder="Selecione obra e local" style="background:#f2f4f6;color:#68767f;cursor:default">
         <label>Local</label>
         <select id="f_local" required><option value="">Selecione a obra primeiro</option></select>
+        <div id="avisoRdoExistente" style="display:none;background:#fff3cd;border:1px solid #ffe69c;color:#7a5b00;padding:8px 10px;border-radius:8px;font-size:12px;margin-top:6px"></div>
         <input type="text" id="f_local_outro" placeholder="Digite o local" style="display:none;margin-top:8px">
         <label>Atividade principal</label>
         <select id="f_atividade" required><option value="">Selecione</option></select>
@@ -738,6 +739,7 @@
   $('f_local').addEventListener('change', async function() {
     const localNome = this.value;
     $('f_cidade').value = '';
+    $('avisoRdoExistente').style.display = 'none';
     if (!localNome || localNome === '__outro' || localNome === '__ver_todos') return;
     // tenta cache primeiro (obra atual + equipe), depois API
     const selOpt = $('f_local').selectedOptions && $('f_local').selectedOptions[0];
@@ -751,6 +753,7 @@
       }catch(e){}
     }
     if (local) $('f_cidade').value = local.comarca || '';
+    verificarRdoExistente(local ? local.id : selDataId);
 
     if (local && local.latitude && local.longitude) {
       const lat = parseFloat(local.latitude);
@@ -978,16 +981,30 @@
       }).join('');
     }
     // Popula o filtro de Comarca (cidade) a partir dos locais disponíveis (equipe/obra) — só aparece quando há mais de 1 comarca
-    function popularComarcas(lista) {
+    // Marca em vermelho/riscado a comarca cujos locais JÁ têm RDO feito (todos os fóruns daquela cidade concluídos)
+    async function buscarLocaisComRdo(obraIdCheck) {
+      try {
+        const rdos = await api('/api/rdos?obra_id=' + obraIdCheck).then(r => r.json());
+        return new Set((rdos || []).filter(r => r.local_id).map(r => String(r.local_id)));
+      } catch (e) { return new Set(); }
+    }
+    async function popularComarcas(lista) {
       const selComarca = $('f_comarca');
       const porComarca = {};
-      lista.forEach(l => { const c = l.comarca || 'Sem comarca'; porComarca[c] = (porComarca[c] || 0) + 1; });
+      lista.forEach(l => { const c = l.comarca || 'Sem comarca'; (porComarca[c] = porComarca[c] || []).push(l); });
       const comarcas = Object.keys(porComarca).sort((a, b) => a.localeCompare(b, 'pt-BR'));
-      selComarca.innerHTML = '<option value="">Todas as comarcas (' + lista.length + ' locais)</option>' + comarcas.map(c => '<option value="' + c + '">' + c + ' (' + porComarca[c] + ')</option>').join('');
+      const feitos = await buscarLocaisComRdo(obraId);
+      selComarca.innerHTML = '<option value="">Todas as comarcas (' + lista.length + ' locais)</option>' + comarcas.map(c => {
+        const locs = porComarca[c];
+        const concluida = locs.length > 0 && locs.every(l => feitos.has(String(l.id)));
+        const estilo = concluida ? ' style="color:#c62828;text-decoration:line-through"' : '';
+        const marca = concluida ? '✅ ' : '';
+        return '<option value="' + c + '"' + estilo + '>' + marca + c + ' (' + locs.length + ')' + (concluida ? ' — concluída' : '') + '</option>';
+      }).join('');
       selComarca.value = '';
       selComarca.style.display = comarcas.length > 1 ? 'block' : 'none';
     }
-    popularComarcas(locais);
+    await popularComarcas(locais);
     selLocal.innerHTML = '<option value="">Selecione o local (' + locais.length + label + ')</option>' + montarOptsLocal(locais);
     // Ao trocar a comarca, refiltra o select de Local (mantém a lógica de "ver todos"/"outro" abaixo)
     $('f_comarca').onchange = function() {
@@ -1016,7 +1033,7 @@
         locais = todos; // amplia a lista base (permite continuar filtrando por comarca com os 233)
         window._obraLocaisCache = todos;
         if (isTJCE) window._equipeLocaisCache = todos;
-        popularComarcas(todos);
+        popularComarcas(todos); // async - roda em paralelo, não precisa travar a UI
         this.innerHTML = '<option value="">Selecione o local (todos: '+todos.length+')</option>' + montarOptsLocal(todos);
         this.innerHTML += '<option value="__outro">✏️ Outro</option>';
         return;
@@ -1031,6 +1048,31 @@
   });
 
   // f_local change já tratado dentro do handler de f_obra (usa cache da equipe, evita buscar todos 233)
+
+  // Aviso não-bloqueante: já existe RDO desse local nessa data? (pode ser intencional — turno diferente, complemento — por isso só avisa, não impede salvar)
+  async function verificarRdoExistente(localId) {
+    const box = $('avisoRdoExistente');
+    const data = $('f_data').value;
+    if (!localId || !data) { box.style.display = 'none'; return; }
+    try {
+      const existentes = await api('/api/rdos?local_id=' + encodeURIComponent(localId) + '&data_de=' + data + '&data_ate=' + data).then(r => r.json());
+      const outros = (existentes || []).filter(r => String(r.id) !== String(editandoId));
+      if (outros.length) {
+        const nomes = [...new Set(outros.map(r => r.usuario_nome || 'alguém'))].join(', ');
+        box.innerHTML = '⚠️ Já existe ' + (outros.length > 1 ? outros.length + ' RDOs' : '1 RDO') + ' para este local nesta data, registrado por <strong>' + nomes + '</strong>. Confira antes de salvar (pode ser duplicidade ou um novo turno/atividade, tudo bem se for o caso).';
+        box.style.display = 'block';
+      } else {
+        box.style.display = 'none';
+      }
+    } catch (e) { box.style.display = 'none'; }
+  }
+  // Recheca ao trocar a data, usando o local já selecionado (se houver)
+  $('f_data').addEventListener('change', function() {
+    const selOpt = $('f_local').selectedOptions && $('f_local').selectedOptions[0];
+    const localId = selOpt ? selOpt.getAttribute('data-id') : '';
+    verificarRdoExistente(localId);
+  });
+
   $('f_atividade').addEventListener('change', function() { $('f_atividade_outro').style.display = this.value === '__outro' ? 'block' : 'none'; });
 
   // Equipe chips + seleção rápida dos membros da equipe (usuários vinculados)
@@ -1321,6 +1363,7 @@
     renderEquipe(); renderMatList(); renderFotos();
     $('f_local_outro').style.display = 'none';
     $('f_atividade_outro').style.display = 'none';
+    $('avisoRdoExistente').style.display = 'none';
     ['toggleParou', 'toggleSwitch', 'toggleCamera'].forEach(id => {
       const g = $(id); g.dataset.value = 'nao';
       g.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.val === 'nao'));
