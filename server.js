@@ -883,6 +883,34 @@ async function atualizarProgresso(obraId) {
   }
 }
 
+// Normaliza nome de etapa para casar sem acento/caixa/pontuação.
+// (SQL não faz accent-folding: "Instalação" != "Instalacao" em UPPER(nome)=UPPER(?))
+function normEtapa(s){ return (s||'').toString().normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().replace(/[^A-Z0-9]/g,''); }
+
+// Marca a etapa do modelo como concluída para um local (upsert per-local).
+// Reutiliza o nome/ordem do modelo quando existe; senão cai em ordem 999.
+async function concluirEtapaLocal(obraId, localId, nome) {
+  const alvo = (nome||'').toString().trim();
+  if (!alvo || !obraId || !localId) return false;
+  const chave = normEtapa(alvo);
+  if (!chave) return false;
+  const modelo = await db.prepare('SELECT nome, ordem FROM etapas WHERE obra_id=? AND (local_id IS NULL OR local_id=0)').all(obraId);
+  const achado = (modelo||[]).find(e => normEtapa(e.nome) === chave);
+  const nomeFinal = achado ? achado.nome : alvo;
+  const ordemFinal = achado ? Number(achado.ordem) || 1 : 999;
+  // nome PRECISA vir no SELECT: sem ele o find por normEtapa() nunca casa e duplica a etapa
+  const ex = await db.prepare('SELECT id, nome, status FROM etapas WHERE obra_id=? AND local_id=?').all(obraId, localId);
+  const jaExiste = (ex||[]).find(e => normEtapa(e.nome) === chave);
+  if (jaExiste) {
+    if (jaExiste.status === 'concluida') return false;
+    await db.prepare("UPDATE etapas SET status='concluida', data_fim=? WHERE id=?").run(new Date().toISOString(), jaExiste.id);
+    return true;
+  }
+  await db.prepare("INSERT INTO etapas (obra_id, local_id, nome, ordem, status, data_fim) VALUES (?,?,?,?,'concluida',?)")
+    .run(obraId, localId, nomeFinal, ordemFinal, new Date().toISOString());
+  return true;
+}
+
 // ============================================================
 // LOCAIS
 // ============================================================
@@ -2237,30 +2265,24 @@ app.post('/api/rdos', async (req, res) => {
   );
   // Inteligente: auto-etapa per-local — usa obra_id real (não só TJ-CE) para multi-obra
   try {
-    const ativ = (d.atividade||'').toString().trim();
     let targetObraId = obraId;
     let targetLocalId = localId;
     if (!targetLocalId && d.local) {
       const lr = await db.prepare('SELECT id FROM locais WHERE nome=? AND ativo=1').get(d.local);
       if (lr) targetLocalId = lr.id;
     }
-    if (targetLocalId && ativ) {
-      if (!targetObraId) {
-        const lr2 = await db.prepare('SELECT obra_id FROM locais WHERE id=?').get(targetLocalId);
-        if (lr2) targetObraId = lr2.obra_id;
-      }
-      if (targetObraId) {
-        const tmpl = await db.prepare("SELECT ordem FROM etapas WHERE obra_id=? AND (local_id IS NULL OR local_id=0) AND UPPER(nome)=UPPER(?)").get(targetObraId, ativ);
-        const ordem = tmpl ? tmpl.ordem : 999;
-        const existe = await db.prepare("SELECT id FROM etapas WHERE obra_id=? AND local_id=? AND UPPER(nome)=UPPER(?)").get(targetObraId, targetLocalId, ativ);
-        if (!existe) {
-          await db.prepare("INSERT INTO etapas (obra_id, local_id, nome, ordem, status) VALUES (?,?,?,?,?)").run(targetObraId, targetLocalId, ativ, ordem, 'concluida');
-        } else {
-          await db.prepare("UPDATE etapas SET status='concluida' WHERE id=?").run(existe.id);
-        }
-        // Fecha o ciclo: RDO→etapa→progresso da obra na mesma fonte do Relatórios
-        try { await atualizarProgresso(targetObraId); } catch (e2) { console.error('[etapa-auto-progresso]', e2.message); }
-      }
+    if (!targetObraId && targetLocalId) {
+      const lr2 = await db.prepare('SELECT obra_id FROM locais WHERE id=?').get(targetLocalId);
+      if (lr2) targetObraId = lr2.obra_id;
+    }
+    if (targetLocalId && targetObraId) {
+      // 1) etapa da atividade principal (comportamento antigo)
+      if ((d.atividade||'').toString().trim()) await concluirEtapaLocal(targetObraId, targetLocalId, d.atividade);
+      // 2) etapas que o técnico marcou no checklist do fim do RDO
+      const extras = Array.isArray(d.etapas_concluidas) ? d.etapas_concluidas : [];
+      for (const n of extras) await concluirEtapaLocal(targetObraId, targetLocalId, n);
+      // Fecha o ciclo: RDO→etapa→progresso da obra na mesma fonte do Relatórios
+      try { await atualizarProgresso(targetObraId); } catch (e2) { console.error('[etapa-auto-progresso]', e2.message); }
     }
   } catch(e){ console.error('[etapa-auto]', e.message); }
   try {
@@ -2342,6 +2364,15 @@ app.put('/api/rdos/:id', async (req, res) => {
     req.params.id
   );
   await rdoLog(req.params.id, 'EDICAO', req, motivoEdicao, antes, depois);
+  // Etapas concluídas: atividade do RDO + o que o técnico marcou no checklist do fim do formulário
+  try {
+    if (localId && obraId) {
+      if ((depois.atividade||'').toString().trim()) await concluirEtapaLocal(obraId, localId, depois.atividade);
+      const extras = Array.isArray(d.etapas_concluidas) ? d.etapas_concluidas : [];
+      for (const n of extras) await concluirEtapaLocal(obraId, localId, n);
+      await atualizarProgresso(obraId);
+    }
+  } catch (e2) { console.error('[etapa-edicao]', e2.message); }
   try { io.emit('rdo_atualizado', { id: Number(req.params.id), por: req.user ? req.user.nome : '' }); } catch(e){}
   // Recompõe estoque: estorna baixa antiga e aplica a nova (materiais/equipe/local podem ter mudado)
   let estoqueInfo = null;

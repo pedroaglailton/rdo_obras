@@ -292,6 +292,20 @@
         <div class="foto-grid" id="fotoGrid"></div>
       </div>
 
+      <div class="card" id="cardEtapas" style="display:none">
+        <h2><span class="n">7</span>Conclusão das Etapas</h2>
+        <p style="font-size:12px;color:var(--muted);margin:0 0 10px" id="etapasInfo">Marque as etapas concluídas neste local. O progresso da obra é recalculado automaticamente.</p>
+        <div id="etapasBarWrap" style="display:none;margin-bottom:12px">
+          <div style="display:flex;justify-content:space-between;font-size:11px;font-weight:700;color:var(--muted);margin-bottom:4px">
+            <span id="etapasBarTxt">0 de 0</span><span id="etapasBarPct">0%</span>
+          </div>
+          <div style="height:8px;background:var(--line);border-radius:99px;overflow:hidden">
+            <div id="etapasBarFill" style="height:100%;background:#2e7d32;width:0%;transition:width .3s"></div>
+          </div>
+        </div>
+        <div id="etapasLista"></div>
+      </div>
+
       <button type="submit" class="btn-primary">Salvar RDO</button>
     </form>
   </section>
@@ -786,6 +800,9 @@
         enviarPresenca(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy);
       });
     }
+
+    // Checklist de etapas depende de obra + local
+    carregarEtapasRDO();
   });
 
   // MAPA FULL
@@ -1073,7 +1090,25 @@
     verificarRdoExistente(localId);
   });
 
-  $('f_atividade').addEventListener('change', function() { $('f_atividade_outro').style.display = this.value === '__outro' ? 'block' : 'none'; });
+  $('f_atividade').addEventListener('change', function() {
+    $('f_atividade_outro').style.display = this.value === '__outro' ? 'block' : 'none';
+    // Pré-marca a etapa correspondente à atividade (o servidor também faz isso ao salvar)
+    const ativ = this.value === '__outro' ? ($('f_atividade_outro').value || '').trim() : this.value;
+    if (ativ && etapasTemplate.length) {
+      const k = normEtapa(ativ);
+      if (etapasTemplate.some(e => normEtapa(e.nome) === k)) {
+        etapasConcluidas[k] = true;
+        renderEtapasRDO();
+      }
+    }
+  });
+  $('f_atividade_outro').addEventListener('input', function() {
+    const k = normEtapa(this.value);
+    if (this.value && etapasTemplate.some(e => normEtapa(e.nome) === k)) {
+      etapasConcluidas[k] = true;
+      renderEtapasRDO();
+    }
+  });
 
   // Equipe chips + seleção rápida dos membros da equipe (usuários vinculados)
   function renderEquipe() {
@@ -1248,6 +1283,74 @@
   setupToggle('toggleSwitch', 'condSwitch');
   setupToggle('toggleCamera', 'condCamera');
 
+  // ============================================================
+  // ETAPAS DA OBRA — checklist dinâmico no fim do RDO
+  // Usa o modelo real da obra (etapas com local_id nulo). Marcar
+  // "Concluída" grava a etapa per-local e recalcula obras.progresso.
+  // ============================================================
+  let etapasTemplate = [];   // modelo da obra [{nome, ordem}]
+  let etapasConcluidas = {}; // nome normalizado -> true/false (marcadas nesta sessão ou antes)
+  let etapasTravadas = {};   // ja concluidas no banco -> conclusao definitiva, nao pode desmarcar
+  const normEtapa = s => (s||'').toString().normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().replace(/[^A-Z0-9]/g,'');
+
+  async function carregarEtapasRDO() {
+    etapasTemplate = []; etapasConcluidas = {}; etapasTravadas = {};
+    const card = $('cardEtapas');
+    const obraId = $('f_obra') ? $('f_obra').value : '';
+    const selLocal = $('f_local');
+    const selOpt = selLocal && selLocal.selectedOptions && selLocal.selectedOptions[0];
+    const localId = selOpt ? selOpt.getAttribute('data-id') : '';
+    if (!obraId || !localId) { card.style.display = 'none'; return; }
+    try {
+      const todas = await api('/api/obras/' + obraId + '/etapas').then(r => r.json());
+      if (!Array.isArray(todas)) { card.style.display = 'none'; return; }
+      etapasTemplate = todas.filter(e => !e.local_id || e.local_id === 0);
+      const doLocal = todas.filter(e => e.local_id && String(e.local_id) === String(localId));
+      doLocal.forEach(e => { if (e.status === 'concluida') etapasConcluidas[normEtapa(e.nome)] = true; });
+      // tudo que ja estava concluido no banco fica travado (regra: conclusao e definitiva)
+      etapasTravadas = Object.assign({}, etapasConcluidas);
+      if (!etapasTemplate.length) { card.style.display = 'none'; return; }
+      card.style.display = '';
+      renderEtapasRDO();
+    } catch (e) { card.style.display = 'none'; }
+  }
+  window.carregarEtapasRDO = carregarEtapasRDO;
+
+  function renderEtapasRDO() {
+    const box = $('etapasLista');
+    box.innerHTML = etapasTemplate.map((e, i) => {
+      const key = normEtapa(e.nome);
+      const on = !!etapasConcluidas[key];
+      const lock = !!etapasTravadas[key];
+      return `<div style="display:flex;align-items:center;gap:8px;padding:10px;margin-bottom:6px;background:var(--card);border:1px solid var(--line);border-left:4px solid ${on ? '#2e7d32' : '#90a4ae'};border-radius:8px">
+        <span style="flex:1;font-size:13px;font-weight:600">${e.ordem || i + 1}. ${e.nome}</span>
+        <button type="button" data-k="${key}" data-n="${e.nome}" data-lock="${lock ? '1' : ''}" class="btnEtapa"
+          style="padding:8px 12px;border-radius:8px;border:1.5px solid ${on ? '#2e7d32' : 'var(--line)'};background:${on ? '#e8f5e9' : 'var(--card)'};color:${on ? '#2e7d32' : 'var(--muted)'};font-size:12px;font-weight:800;cursor:${lock ? 'default' : 'pointer'}"
+          title="${lock ? 'Etapa ja registrada como concluida neste local' : 'Marcar etapa como concluida'}">
+          ${on ? (lock ? '🔒 ✓ Concluída' : '✓ Concluída') : 'Marcar'}
+        </button>
+      </div>`;
+    }).join('');
+    box.querySelectorAll('.btnEtapa').forEach(b => b.addEventListener('click', () => {
+      const k = b.dataset.k;
+      if (b.dataset.lock) return;            // ja estava no banco: conclusao definitiva
+      if (etapasConcluidas[k]) delete etapasConcluidas[k];
+      else etapasConcluidas[k] = true;
+      renderEtapasRDO();
+    }));
+    atualizarBarraEtapas();
+  }
+
+  function atualizarBarraEtapas() {
+    const total = etapasTemplate.length;
+    const feitas = etapasTemplate.filter(e => etapasConcluidas[normEtapa(e.nome)]).length;
+    $('etapasBarWrap').style.display = total ? 'block' : 'none';
+    $('etapasBarTxt').textContent = feitas + ' de ' + total + ' etapa(s)';
+    const pct = total ? Math.round(feitas / total * 100) : 0;
+    $('etapasBarPct').textContent = pct + '%';
+    $('etapasBarFill').style.width = pct + '%';
+  }
+
   // Fotos
   $('f_fotos').addEventListener('change', function() {
     Array.from(this.files).forEach(file => {
@@ -1333,6 +1436,14 @@
       fotos: fotosUrls
     };
 
+    // Conclusão de etapas: as per-local são gravadas pelo POST /api/rdos
+    // (o servidor auto-marca a etapa da atividade). Só enviamos as extras
+    // que o técnico marcou aqui e que ainda não estão concluídas.
+    const etapasExtras = Object.keys(etapasConcluidas).length
+      ? etapasTemplate.filter(e => etapasConcluidas[normEtapa(e.nome)]).map(e => e.nome)
+      : [];
+    if (etapasExtras.length) entry.etapas_concluidas = etapasExtras;
+
     const method = editandoId ? 'PUT' : 'POST';
     const url = editandoId ? '/api/rdos/' + editandoId : '/api/rdos';
     if (editandoId) {
@@ -1360,6 +1471,9 @@
     $('f_entradaM').value = '08:00'; $('f_saidaM').value = '12:00';
     $('f_entradaT').value = '13:00'; $('f_saidaT').value = '17:00';
     equipe = []; materiais = []; fotos = []; editandoId = null;
+    etapasConcluidas = {}; etapasTemplate = [];
+    $('cardEtapas').style.display = 'none';
+    $('etapasBarWrap').style.display = 'none';
     renderEquipe(); renderMatList(); renderFotos();
     $('f_local_outro').style.display = 'none';
     $('f_atividade_outro').style.display = 'none';
@@ -1495,6 +1609,7 @@
     setToggle('toggleParou', entry.parou); $('condParou').classList.toggle('show', entry.parou === 'sim'); $('f_motivoParada').value = entry.motivo_parada || '';
     setToggle('toggleSwitch', entry.switch_instalado); $('condSwitch').classList.toggle('show', entry.switch_instalado === 'sim'); $('f_nomSwitch').value = entry.nom_switch || ''; $('f_localSwitch').value = entry.local_switch || '';
     setToggle('toggleCamera', entry.camera_instalada); $('condCamera').classList.toggle('show', entry.camera_instalada === 'sim'); $('f_nomCamera').value = entry.nom_camera || ''; $('f_localCamera').value = entry.local_camera || '';
+    await carregarEtapasRDO();
     toast('Editando RDO');
   }
   function setToggle(groupId, val) { const g = $(groupId); const v = (val === 'sim') ? 'sim' : 'nao'; g.dataset.value = v; g.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.val === v)); }

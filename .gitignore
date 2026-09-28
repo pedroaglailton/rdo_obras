@@ -6,6 +6,7 @@ uploads/plantas/*
 !uploads/plantas/.gitkeep
 .env
 *.log
+*.db
 *.db-wal
 *.db-shm
 *.sqlite
