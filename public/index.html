@@ -1802,6 +1802,90 @@ function toggleLixeira(){
   if(b){ b.textContent=rdoVerLixeira?'📋 Voltar (ativos)':'🗑️ Lixeira'; b.style.background=rdoVerLixeira?'#c62828':'#fff'; b.style.color=rdoVerLixeira?'#fff':'var(--muted)'; }
   carregarRdos();
 }
+// ============================================================
+// ETAPAS NO PAINEL DE RDOs — andamento por local + edicao pelo gestor
+// ============================================================
+let _etapasResumo = null;      // { modelos:{obra_id->tpl}, porLocal:{'obra:local'->{c,t}} }
+let _etapasRdoCtx = null;     // { obra_id, local_id, modelo:[{nome,ordem}] } p/ o editor do modal
+
+function escHtml(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function normEtapaNome(s){ return String(s==null?'':s).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().replace(/[^A-Z0-9]/g,''); }
+
+async function carregarResumoEtapas(){
+  try{
+    const d = await api('/api/etapas/resumo').then(r=>r.json());
+    const modelos = {}, porLocal = {};
+    (d.modelos||[]).forEach(m=>{ modelos[String(m.obra_id)] = Number(m.tpl)||0; });
+    (d.locais||[]).forEach(l=>{ porLocal[String(l.obra_id)+':'+String(l.local_id)] = { c:Number(l.concluidas)||0, t:Number(l.total)||0 }; });
+    _etapasResumo = { modelos, porLocal };
+  }catch(e){ _etapasResumo = null; }
+}
+// Retorna {c, t, pct} do local no modelo da obra, ou null se nao houver modelo
+function resumoEtapaDe(obraId, localId){
+  if(!obraId || !localId || !_etapasResumo) return null;
+  const tpl = _etapasResumo.modelos[String(obraId)] || 0;
+  if(!tpl) return null;
+  const e = _etapasResumo.porLocal[String(obraId)+':'+String(localId)];
+  const c = e ? e.c : 0;
+  return { c, t: tpl, pct: Math.min(100, Math.round(c/tpl*100)) };
+}
+
+const _ETAPAS_STATUS = [['pendente','Pendente'],['em_andamento','Em andamento'],['concluida','Concluida']];
+function _corStatusEtapa(s){ return s==='concluida' ? 'var(--ok)' : s==='em_andamento' ? '#ef6c00' : 'var(--muted)'; }
+
+// Carrega modelo + status do local e devolve o HTML do bloco de etapas
+async function blocoEtapasRdo(rdo){
+  if(!rdo.obra_id || !rdo.local_id)
+    return '<div class="detail-row"><span>Etapas</span><span style="color:var(--muted)">RDO sem vinculo de obra/local</span></div>';
+  let todas=[];
+  try{ todas = await api('/api/obras/'+rdo.obra_id+'/etapas').then(r=>r.json()); }catch(e){}
+  if(!Array.isArray(todas) || !todas.length)
+    return '<div class="detail-row"><span>Etapas</span><span style="color:var(--muted)">Obra sem modelo de etapas</span></div>';
+  const modelo = todas.filter(e=>!e.local_id||e.local_id===0).sort((a,b)=>(a.ordem||0)-(b.ordem||0));
+  if(!modelo.length)
+    return '<div class="detail-row"><span>Etapas</span><span style="color:var(--muted)">Obra sem modelo de etapas</span></div>';
+  const doLocal = todas.filter(e=>e.local_id && String(e.local_id)===String(rdo.local_id));
+  const statusDe = n => { const k=normEtapaNome(n); const h=doLocal.find(e=>normEtapaNome(e.nome)===k); return h?h.status:null; };
+  _etapasRdoCtx = { obra_id:rdo.obra_id, local_id:rdo.local_id, modelo };
+  const feitas = modelo.filter(e=>statusDe(e.nome)==='concluida').length;
+  const pct = modelo.length ? Math.round(feitas/modelo.length*100) : 0;
+  const linhas = modelo.map((e,i)=>{
+    const st = statusDe(e.nome) || 'pendente';
+    const opts = _ETAPAS_STATUS.map(([v,l])=>'<option value="'+v+'"'+(st===v?' selected':'')+'>'+l+'</option>').join('');
+    return '<div style="display:flex;align-items:center;gap:8px;padding:8px;background:#f7f9fa;border:1px solid var(--line);border-left:4px solid '+_corStatusEtapa(st)+';border-radius:8px;margin-bottom:6px">'
+      + '<span style="width:22px;height:22px;border-radius:50%;background:'+_corStatusEtapa(st)+';color:#fff;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;flex:none">'+(e.ordem||i+1)+'</span>'
+      + '<strong style="flex:1;min-width:0;font-size:12px">'+escHtml(e.nome)+'</strong>'
+      + '<select onchange="salvarEtapaRdo('+rdo.obra_id+','+rdo.local_id+','+i+',this.value)" style="width:auto;padding:4px 8px;font-size:11px;flex:none">'+opts+'</select>'
+      + '</div>';
+  }).join('');
+  return '<label style="margin-top:14px;display:block">📋 Andamento das etapas deste local</label>'
+    + '<div style="display:flex;justify-content:space-between;font-size:11px;font-weight:700;color:var(--muted);margin-bottom:4px">'
+    + '<span>'+feitas+' de '+modelo.length+' etapa(s) concluida(s)</span><span>'+pct+'%</span></div>'
+    + '<div style="height:8px;background:var(--line);border-radius:99px;overflow:hidden;margin-bottom:10px">'
+    + '<div style="height:100%;background:'+(pct>=100?'var(--ok)':'#0f3d4c')+';width:'+pct+'%;transition:width .3s"></div></div>'
+    + linhas
+    + '<div style="font-size:10px;color:var(--muted);margin-top:4px">Alterar aqui recalcula o progresso da obra. No app do tecnico a conclusao e definitiva.</div>';
+}
+
+async function salvarEtapaRdo(obraId, localId, idx, status){
+  const ctx = _etapasRdoCtx;
+  if(!ctx || String(ctx.obra_id)!==String(obraId) || String(ctx.local_id)!==String(localId) || !ctx.modelo[idx]){
+    toast('Falha: etapa nao carregada'); return;
+  }
+  try{
+    await api('/api/obras/'+obraId+'/locais/'+localId+'/etapas', {
+      method:'PUT', body: JSON.stringify({ nome: ctx.modelo[idx].nome, status })
+    });
+    toast('Etapa "'+ctx.modelo[idx].nome+'" -> '+status.replace('em_andamento','em andamento'));
+    await carregarResumoEtapas();
+    if(window._rdoAberto) await verRdo(window._rdoAberto);   // redesenha o modal com o novo estado
+    if(document.getElementById('view-rdos')?.classList.contains('active')) await carregarRdos();
+  }catch(e){
+    toast('Erro ao salvar etapa');
+    if(window._rdoAberto) await verRdo(window._rdoAberto);
+  }
+}
+
 async function carregarRdos() {
   // popula selects de obra/local na primeira carga
   const selObra=document.getElementById('filtroRdoObra');
@@ -1831,6 +1915,7 @@ async function carregarRdos() {
   const busca=(document.getElementById('buscaRdo')?.value||'').trim().toLowerCase();
   let rdos = await api(url).then(r => r.json());
   rdosCache=rdos;
+  await carregarResumoEtapas();
   // filtro busca local (client-side)
   if(busca) rdos=rdos.filter(r=> (r.local+r.atividade+r.usuario_nome+r.obra_nome).toLowerCase().includes(busca));
   document.getElementById('countRdos').textContent=rdos.length;
@@ -1847,12 +1932,17 @@ async function carregarRdos() {
     const dataFmt=(r.data||'').slice(0,10);
     const hasFoto=(r.fotos_json && r.fotos_json!=='[]');
     const excluido=Number(r.ativo)===0;
+    const _et = resumoEtapaDe(r.obra_id, r.local_id);
+    const _etBadge = _et
+      ? '<span style="font-size:10px;background:'+(_et.pct>=100?'#e8f5e9':_et.c?'#fff3e0':'#f7f9fa')+';color:'+(_et.pct>=100?'#2e7d32':_et.c?'#ef6c00':'var(--muted)')+';padding:2px 7px;border-radius:8px;font-weight:700" title="Etapas concluidas neste local">📋 '+_et.c+'/'+_et.t+' • '+_et.pct+'%</span>'
+      : '';
     return `<div style="display:flex;align-items:center;gap:12px;padding:12px;background:#fff;border:1px solid var(--line);border-left:4px solid ${excluido?'#c62828':cor};border-radius:10px;${excluido?'opacity:.85':''}">
       <div onclick="verRdo(${r.id})" style="width:38px;height:38px;border-radius:8px;background:${excluido?'#c62828':cor};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;flex:none;cursor:pointer">${letra}</div>
       <div style="flex:1;min-width:0" onclick="verRdo(${r.id})">
         <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><strong style="font-size:13px">${r.local||'—'}</strong><span style="font-size:10px;background:${cor};color:#fff;padding:2px 7px;border-radius:8px">${r.atividade||'—'}</span><span style="font-size:10px;background:#f7f9fa;border:1px solid var(--line);padding:2px 7px;border-radius:8px">${dataFmt}</span>${hasFoto?'<span style="font-size:10px;background:#e8f5e9;color:#2e7d32;padding:2px 6px;border-radius:8px">📷</span>':''}${r.parou==='sim'?'<span style="font-size:10px;background:#ffcdd2;color:#c62828;padding:2px 6px;border-radius:8px">⚠️ parada</span>':''}${excluido?'<span style="font-size:10px;background:#c62828;color:#fff;padding:2px 6px;border-radius:8px">🗑️ excluído por '+(r.excluido_por||'?')+'</span>':''}</div>
         <div style="font-size:11px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">🏗️ ${r.obra_nome||'—'} • 👤 ${r.usuario_nome||'—'} • ${r.cidade||''}</div>
         <div style="font-size:11px;color:var(--muted)">🕒 ${(r.entrada_manha||'—')+'-'+(r.saida_manha||'—')} • ${(r.entrada_tarde||'—')+'-'+(r.saida_tarde||'—')}${r.atualizado_por?' • ✏️ editado por '+r.atualizado_por:''}</div>
+        ${_etBadge?`<div style="display:flex;align-items:center;gap:6px;margin-top:4px;cursor:pointer" onclick="verRdo(${r.id})">${_etBadge}<span style="font-size:10px;color:var(--muted)">${_et.pct>=100?'etapas concluídas — ver/editar':'clique para ver/editar as etapas'}</span></div>`:''}
         ${excluido?'<div style="font-size:11px;color:#c62828">Motivo: '+(r.motivo_exclusao||'-')+'</div>':''}
       </div>
       <div style="display:flex;flex-direction:column;gap:4px;flex:none">
@@ -2118,14 +2208,21 @@ async function verRdo(id) {
   if (Number(rdo.ativo) === 0) html += '<div class="detail-row" style="color:#c62828"><span>Excluído por</span><span>' + (rdo.excluido_por || '-') + ' • ' + (rdo.excluido_em || '') + '</span></div>' + '<div class="detail-row" style="color:#c62828"><span>Motivo</span><span>' + (rdo.motivo_exclusao || '-') + '</span></div>';
   if (mats.length) { html += '<label style="margin-top:10px">Materiais</label>'; mats.forEach(m => { html += '<div class="detail-row"><span>' + m.nome + '</span><span>' + m.qtd + '</span></div>'; }); }
   if (fotos.length) { html += '<label style="margin-top:10px">Fotos</label><div class="foto-grid">' + fotos.map(f => '<img src="' + f + '">').join('') + '</div>'; }
-  html += '<div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">'
+  const botoes = '<div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">'
     + (Number(rdo.ativo) === 0
       ? '<button class="btn-small" onclick="restaurarRdo(' + rdo.id + ')" style="background:#2e7d32">♻️ Restaurar</button>'
       : '<button class="btn-small" onclick="editarRdoPainel(' + rdo.id + ')" style="background:#1565c0">✏️ Editar</button>'
       + '<button class="btn-small" onclick="excluirRdoPainel(' + rdo.id + ')" style="background:#fff;border:1px solid #ffcdd2;color:#c62828">🗑️ Excluir</button>')
     + '<button class="btn-small" onclick="verHistoricoRdo(' + rdo.id + ')" style="background:#f7f9fa;border:1px solid var(--line);color:var(--muted)">🕵️ Auditoria</button></div>';
-  document.getElementById('detalheBody').innerHTML = html;
+  document.getElementById('detalheBody').innerHTML = html + '<div id="etapasRdoBox" style="font-size:12px;color:var(--muted)">Carregando etapas…</div>' + botoes;
   document.getElementById('modalDetalhe').classList.add('show');
+  window._rdoAberto = id;
+  // Etapas carregadas depois: o modal ja abre e o bloco se preenche em seguida
+  const box = document.getElementById('etapasRdoBox');
+  if (box) {
+    try { box.innerHTML = await blocoEtapasRdo(rdo); }
+    catch (e) { box.innerHTML = '<div class="detail-row"><span>Etapas</span><span style="color:#c62828">Erro ao carregar</span></div>'; }
+  }
 }
 
 // LOCAIS - com atribuição a equipe e obra progresso

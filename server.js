@@ -846,14 +846,74 @@ app.post('/api/obras/:obra_id/etapas', gestor, async (req, res) => {
   res.json({ ok: true, id: r.lastInsertRowid });
 });
 
+// Atualizacao PARCIAL: so mexe nos campos enviados.
+// Antes sobrescrevia tudo, entao um PUT so com {status} mandava nome/ordem/data_fim
+// como NULL — e como nome e NOT NULL, a query quebrava no Postgres/Supabase.
 app.put('/api/etapas/:id', gestor, async (req, res) => {
-  const { nome, ordem, status, data_inicio, data_fim, observacoes } = req.body;
-  await db.prepare('UPDATE etapas SET nome=?,ordem=?,status=?,data_inicio=?,data_fim=?,observacoes=? WHERE id=?')
-    .run(nome, ordem, status, data_inicio, data_fim, observacoes, req.params.id);
+  const b = req.body || {};
+  const agora = new Date().toISOString();
+  // status coerente com data_fim quando o gestor nao manda explicitamente
+  if (b.status === 'concluida' && b.data_fim === undefined) b.data_fim = agora;
+  if (b.status && b.status !== 'concluida' && b.data_fim === undefined) b.data_fim = null;
+  const campos = [], vals = [];
+  for (const c of ['nome', 'ordem', 'status', 'data_inicio', 'data_fim', 'observacoes']) {
+    if (b[c] !== undefined) { campos.push(c + '=?'); vals.push(b[c] === '' ? null : b[c]); }
+  }
+  if (!campos.length) return res.status(400).json({ error: 'Nada para atualizar' });
+  vals.push(req.params.id);
+  await db.prepare('UPDATE etapas SET ' + campos.join(',') + ' WHERE id=?').run(...vals);
   // Atualizar progresso da obra
   const etapa = await db.prepare('SELECT obra_id FROM etapas WHERE id=?').get(req.params.id);
   if (etapa) await atualizarProgresso(etapa.obra_id);
   res.json({ ok: true });
+});
+
+// Upsert per-local pelo painel: gestor corrige/insere a etapa de um local.
+// Aceita status livre (inclusive reverter para pendente) — o app do tecnico nao tem essa permissao.
+app.put('/api/obras/:obra_id/locais/:local_id/etapas', gestor, async (req, res) => {
+  const obraId = Number(req.params.obra_id);
+  const localId = Number(req.params.local_id);
+  const b = req.body || {};
+  const nome = (b.nome || '').toString().trim();
+  const status = ['pendente', 'em_andamento', 'concluida'].includes(b.status) ? b.status : 'pendente';
+  if (!obraId || !localId) return res.status(400).json({ error: 'Obra e local sao obrigatorios' });
+  if (!nome) return res.status(400).json({ error: 'Nome da etapa obrigatorio' });
+  const loc = await db.prepare('SELECT id FROM locais WHERE id=? AND obra_id=?').get(localId, obraId);
+  if (!loc) return res.status(400).json({ error: 'Local nao pertence a esta obra' });
+  const chave = normEtapa(nome);
+  const modelo = await db.prepare('SELECT nome, ordem FROM etapas WHERE obra_id=? AND (local_id IS NULL OR local_id=0)').all(obraId);
+  const achado = (modelo || []).find(e => normEtapa(e.nome) === chave);
+  const nomeFinal = achado ? achado.nome : nome;
+  const ordemFinal = achado ? Number(achado.ordem) || 1 : 999;
+  const dataFim = status === 'concluida' ? (b.data_fim || new Date().toISOString()) : null;
+  const ex = await db.prepare('SELECT id, nome FROM etapas WHERE obra_id=? AND local_id=?').all(obraId, localId);
+  const jaExiste = (ex || []).find(e => normEtapa(e.nome) === chave);
+  let id;
+  if (jaExiste) {
+    id = jaExiste.id;
+    await db.prepare('UPDATE etapas SET nome=?,ordem=?,status=?,data_fim=? WHERE id=?')
+      .run(nomeFinal, ordemFinal, status, dataFim, id);
+    if (b.observacoes !== undefined) await db.prepare('UPDATE etapas SET observacoes=? WHERE id=?').run(b.observacoes, id);
+  } else {
+    const r = await db.prepare('INSERT INTO etapas (obra_id,local_id,nome,ordem,status,data_fim,observacoes) VALUES (?,?,?,?,?,?,?)')
+      .run(obraId, localId, nomeFinal, ordemFinal, status, dataFim, b.observacoes || null);
+    id = r.lastInsertRowid;
+  }
+  await atualizarProgresso(obraId);
+  res.json({ ok: true, id, status });
+});
+
+// Resumo compacto: quanto cada local ja concluiu (badge na lista de RDOs sem
+// baixar as ~940 linhas de etapas de uma obra inteira).
+app.get('/api/etapas/resumo', async (req, res) => {
+  const modelos = await db.prepare('SELECT obra_id, CAST(COUNT(*) AS INTEGER) as tpl FROM etapas WHERE local_id IS NULL OR local_id=0 GROUP BY obra_id').all();
+  const locais = await db.prepare(`SELECT e.obra_id, e.local_id, l.nome as local_nome,
+      CAST(SUM(CASE WHEN e.status='concluida' THEN 1 ELSE 0 END) AS INTEGER) as concluidas,
+      CAST(COUNT(*) AS INTEGER) as total
+    FROM etapas e LEFT JOIN locais l ON l.id=e.local_id
+    WHERE e.local_id IS NOT NULL AND e.local_id<>0
+    GROUP BY e.obra_id, e.local_id, l.nome`).all();
+  res.json({ modelos, locais });
 });
 
 app.delete('/api/etapas/:id', gestor, async (req, res) => {
