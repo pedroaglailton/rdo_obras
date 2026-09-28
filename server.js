@@ -2655,17 +2655,27 @@ app.get('/api/dashboard/etapas-desempenho', gestor, async (req,res)=>{
   const ultimosRows = await db.prepare('SELECT local, data, atividade, usuario_nome FROM rdos WHERE obra_id=? ORDER BY data DESC, criado_em DESC').all(obraId);
   const mapUltimo = {};
   for(const r of ultimosRows){ if(!mapUltimo[r.local]) mapUltimo[r.local]=r; }
+  // nomes das etapas concluidas por local - permite dizer QUAL etapa falta (relatorio de faixa 25/50/75/100%)
+  const etapasFeitasRows = await db.prepare("SELECT local_id, nome FROM etapas WHERE obra_id=? AND local_id IS NOT NULL AND status='concluida' ORDER BY ordem").all(obraId);
+  const mapEtapasLocal = {};
+  for(const r of etapasFeitasRows){ const k=String(r.local_id); (mapEtapasLocal[k]=mapEtapasLocal[k]||[]).push(r.nome); }
   const totalTpl = template.length || 1;
   let perLocal = locais.map(l=>{
     const concl = mapConclLocal[String(l.id)] || 0;
+    const feitas = mapEtapasLocal[String(l.id)] || [];
+    const feitasChave = new Set(feitas.map(normEtapa));
     return {
       ...l,
       concluidas: concl, total: totalTpl,
       progresso: Math.round(concl/totalTpl*100),
+      etapasFeitas: feitas,
+      etapasPendentes: template.map(t=>t.nome).filter(n=> !feitasChave.has(normEtapa(n))),
       totalRdos: mapRdosLocal[l.nome] || 0,
       ultimoRdo: mapUltimo[l.nome] ? `${mapUltimo[l.nome].data} - ${mapUltimo[l.nome].atividade} (${mapUltimo[l.nome].usuario_nome})` : null
     };
   });
+  // filtro por faixa exata de progresso (25/50/75/100) - util para achar "as obras em X%"
+  if(req.query.faixa) perLocal = perLocal.filter(l=> String(l.progresso)===String(req.query.faixa));
   if(req.query.regiao) perLocal = perLocal.filter(l=> (l.regiao||'SEM EQUIPE')===req.query.regiao);
   if(req.query.busca) {
     const b=req.query.busca.toLowerCase();

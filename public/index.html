@@ -282,6 +282,7 @@
       <p style="font-size:11px;color:var(--muted)">Gera planilha pronta para BI: <strong>Resumo por Etapa</strong> (concluídos/pendentes/%) + <strong>Detalhe por Local</strong> (progresso, RDOs, último RDO) — igual ao de Equipes, mas filtrado por desempenho.</p>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;align-items:center">
         <button class="btn-small" onclick="exportarDesempenhoExcel()" style="background:#1b5e20">📗 Excel Geral (todas equipes)</button>
+        <button class="btn-small" onclick="exportarDesempenhoExcelFaixa()" style="background:#ef6c00">📗 Excel por Faixa (25/50/75/100%)</button>
         <select id="exportDesempenhoEquipe" style="padding:7px;font-size:12px;border:1.5px solid var(--line);border-radius:8px;min-width:180px"><option value="">Selecione a equipe...</option></select>
         <button class="btn-small" onclick="exportarDesempenhoExcelEquipe()" style="background:#0f3d4c">📗 Por Equipe</button>
       </div>
@@ -310,6 +311,9 @@
         <select id="filtroDesempenhoRegiao" onchange="carregarDesempenho()"><option value="">Todas equipes</option></select>
         <input type="text" id="buscaDesempenho" placeholder="Buscar local/comarca..." oninput="filtrarDesempenhoLocal()">
       </div>
+      <p style="font-size:11px;color:var(--muted);margin:10px 0 4px"><strong>Filtrar por % de conclusão:</strong> clique numa faixa (ou clique de novo para desmarcar). Os números são a quantidade de locais em cada faixa.</p>
+      <div id="desempenhoFaixas" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+      <div id="desempenhoFaixaAtual" style="font-size:11px;color:var(--muted);margin-top:8px"></div>
       <div id="listaDesempenho" style="margin-top:10px"></div>
     </div>
 
@@ -1176,17 +1180,50 @@ async function carregarDesempenho(){
   }catch(e){}
   renderDesempenhoLista();
 }
+let _desemFaixa='';
+// faixas atingiveis a partir do modelo de etapas (4 etapas -> 0/25/50/75/100)
+function faixasPossiveis(){
+  const tpl=(desempenhoCache&&desempenhoCache.totalTpl)||1;
+  const out=[]; for(let i=0;i<=tpl;i++){ const p=Math.round(i/tpl*100); if(!out.includes(p)) out.push(p); }
+  return out.sort((a,b)=>b-a);
+}
+function filtrarDesempenhoFaixa(p){
+  const v=String(p);
+  _desemFaixa = (_desemFaixa===v) ? '' : v;
+  renderDesempenhoLista();
+}
+function renderDesempenhoFaixas(base){
+  const box=document.getElementById('desempenhoFaixas');
+  if(!box) return;
+  const cnt={}; (base||[]).forEach(l=>{ cnt[l.progresso]=(cnt[l.progresso]||0)+1; });
+  const cor=p=> p>=100?'#2e7d32' : p>0?'#ef6c00' : '#90a4ae';
+  const btns=faixasPossiveis().map(p=>{
+    const n=cnt[p]||0, on=(_desemFaixa===String(p));
+    return `<button class="btn-small" onclick="filtrarDesempenhoFaixa('${p}')" title="${n} local(is) nesta faixa" style="background:${on?cor(p):'#fff'};color:${on?'#fff':cor(p)};border:1.5px solid ${cor(p)};font-weight:800">${p}% · ${n}</button>`;
+  }).join('');
+  box.innerHTML = btns + `<button class="btn-small" onclick="filtrarDesempenhoFaixa('')" style="background:${_desemFaixa===''?'#0f3d4c':'#fff'};color:${_desemFaixa===''?'#fff':'var(--muted)'};border:1px solid var(--line)">Todos</button>`;
+  const info=document.getElementById('desempenhoFaixaAtual');
+  if(info){
+    info.textContent = _desemFaixa===''
+      ? `Mostrando todos os locais (faixa: todas)`
+      : `Faixa selecionada: ${_desemFaixa}% — ${(base||[]).length} local(is) · "Todos" desmarca`;
+  }
+}
 function renderDesempenhoLista(){
   if(!desempenhoCache) return;
   const busca=(document.getElementById('buscaDesempenho').value||'').toLowerCase();
-  let lista=desempenhoCache.locais;
-  if(busca) lista=lista.filter(l=> (l.nome+l.comarca+l.regiao).toLowerCase().includes(busca));
+  let base=desempenhoCache.locais;
+  if(busca) base=base.filter(l=> (l.nome+l.comarca+l.regiao).toLowerCase().includes(busca));
+  renderDesempenhoFaixas(base);
+  let lista=base;
+  if(_desemFaixa!=='') lista=base.filter(l=> String(l.progresso)===_desemFaixa);
   document.getElementById('listaDesempenho').innerHTML=lista.slice(0,200).map(l=>{
     const cor=l.progresso===100?'#2e7d32':l.progresso>0?'#ef6c00':'#90a4ae';
     return `<div style="padding:10px;background:#fff;border-radius:9px;margin-bottom:6px;border:1px solid var(--line);border-left:4px solid ${cor};display:flex;gap:8px;align-items:center">
       <div style="flex:1;min-width:0">
         <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><strong style="font-size:13px">${l.nome}</strong><span style="font-size:10px;background:${cor};color:#fff;padding:2px 6px;border-radius:8px">${l.progresso}% ${l.concluidas}/${l.total}</span><span style="font-size:10px;background:#f7f9fa;border:1px solid var(--line);padding:2px 6px;border-radius:8px">${l.regiao||'SEM EQUIPE'}</span></div>
-        <div style="font-size:11px;color:var(--muted)">${l.comarca||''} • ${l.totalRdos} RDOs ${l.ultimoRdo?'• último: '+l.ultimoRdo:''}</div>
+        <div style="font-size:11px;color:var(--muted)">${escHtml(l.comarca||'')} • ${l.totalRdos} RDOs ${l.ultimoRdo?'• último: '+escHtml(l.ultimoRdo):''}</div>
+        ${(l.etapasPendentes&&l.etapasPendentes.length)?`<div style="font-size:10px;color:#b26500;margin-top:3px">⏳ Faltam: ${l.etapasPendentes.map(escHtml).join(' • ')}</div>`:''}
         <div style="height:4px;background:var(--line);border-radius:99px;overflow:hidden;margin-top:4px"><div style="height:100%;background:${cor};width:${l.progresso}%"></div></div>
       </div>
     </div>`;
@@ -1232,6 +1269,75 @@ async function exportarDesempenhoExcel(){
         sel.innerHTML='<option value=\"\">Selecione a equipe...</option>'+eqs.map(e=>`<option value=\"${e.nome}\">${e.nome}</option>`).join('');
       }
     }catch(e){}
+  }catch(e){ console.error(e); if(btnMsg) btnMsg.textContent='Erro: '+(e.message||e); toast('Erro ao exportar'); }
+}
+// Exporta os locais agrupados por faixa de conclusao (25/50/75/100%).
+// Respeita os filtros da tela: obra, equipe, busca e a faixa selecionada.
+async function exportarDesempenhoExcelFaixa(){
+  const btnMsg=document.getElementById('msgDesempenhoExcel');
+  try{
+    const params=new URLSearchParams();
+    const obraId=document.getElementById('filtroDesempenhoObra')?.value||'';
+    const reg=document.getElementById('filtroDesempenhoRegiao')?.value||'';
+    if(obraId) params.set('obra_id', obraId);
+    if(reg) params.set('regiao', reg);
+    params.set('limit','2000');
+    const data=await api('/api/dashboard/etapas-desempenho?'+params.toString()).then(r=>r.json());
+    const busca=(document.getElementById('buscaDesempenho').value||'').toLowerCase();
+    let lista=data.locais;
+    if(busca) lista=lista.filter(l=> (l.nome+l.comarca+l.regiao).toLowerCase().includes(busca));
+    if(_desemFaixa!=='') lista=lista.filter(l=> String(l.progresso)===_desemFaixa);
+    if(!lista.length){ toast('Nenhum local neste filtro'); if(btnMsg) btnMsg.textContent='Nenhum local neste filtro'; return; }
+    toast('Gerando Excel por faixa...');
+    if(btnMsg) btnMsg.textContent='Gerando...';
+    const wb=XLSX.utils.book_new();
+    const hdrStyle={font:{bold:true,color:{rgb:'FFFFFF'}}, fill:{fgColor:{rgb:'0F3D4C'}}, alignment:{horizontal:'center',vertical:'center'}, border:{top:{style:'thin',color:{rgb:'D0D5DD'}},bottom:{style:'thin',color:{rgb:'D0D5DD'}},left:{style:'thin',color:{rgb:'D0D5DD'}},right:{style:'thin',color:{rgb:'D0D5DD'}}}};
+    const borda={border:{top:{style:'thin',color:{rgb:'D0D5DD'}},bottom:{style:'thin',color:{rgb:'D0D5DD'}},left:{style:'thin',color:{rgb:'D0D5DD'}},right:{style:'thin',color:{rgb:'D0D5DD'}}}};
+    const bordas=(ws,cab)=>{ for(let r=1;r<=ws['!ref']?+ws['!ref'].split(':')[1]:0;r++) for(let c=0;c<cab.length;c++){ const ref=XLSX.utils.encode_cell({r,c}); if(ws[ref]) ws[ref].s=borda; } };
+    // Aba 1: Resumo por Faixa
+    const cab1=['Faixa %','Etapas Concluídas','Locais','% dos Locais','Total RDOs'];
+    const tot=faixasPossiveis().reduce((a,p)=>a+((_desemFaixa!==''&&String(p)!==_desemFaixa)?0:1),0)||1;
+    const linhas1=[cab1];
+    faixasPossiveis().forEach(p=>{
+      if(_desemFaixa!=='' && String(p)!==_desemFaixa) return;
+      const sub=data.locais.filter(l=>l.progresso===p);
+      if(!sub.length) return;
+      const rdos=sub.reduce((a,l)=>a+(l.totalRdos||0),0);
+      linhas1.push([p+'%', p+'/100', sub.length, Math.round(sub.length/tot*100)+'%', rdos]);
+    });
+    const ws1=XLSX.utils.aoa_to_sheet(linhas1);
+    ws1['!cols']=[{wch:10},{wch:18},{wch:10},{wch:14},{wch:12}];
+    for(let c=0;c<cab1.length;c++){ const ref=XLSX.utils.encode_cell({r:0,c}); if(ws1[ref]) ws1[ref].s=hdrStyle; }
+    bordas(ws1,cab1);
+    ws1['!freeze']={xSplit:0,ySplit:1};
+    XLSX.utils.book_append_sheet(wb, ws1, 'Resumo por Faixa');
+    // Aba 2: Locais filtrados
+    const cab2=['Faixa %','Local','Comarca','Equipe','Concluídas','Total','Progresso %','Etapas Concluídas','Etapas Pendentes','Total RDOs','Último RDO'];
+    const linhas2=[cab2];
+    lista.forEach(l=> linhas2.push([l.progresso+'%', l.nome, l.comarca||'', l.regiao||'SEM EQUIPE', l.concluidas, l.total, l.progresso+'%', (l.etapasFeitas||[]).join(' | '), (l.etapasPendentes||[]).join(' | '), l.totalRdos, l.ultimoRdo||'']));
+    const ws2=XLSX.utils.aoa_to_sheet(linhas2);
+    ws2['!cols']=[{wch:10},{wch:32},{wch:16},{wch:16},{wch:12},{wch:8},{wch:12},{wch:38},{wch:38},{wch:12},{wch:40}];
+    for(let c=0;c<cab2.length;c++){ const ref=XLSX.utils.encode_cell({r:0,c}); if(ws2[ref]) ws2[ref].s=hdrStyle; }
+    bordas(ws2,cab2);
+    ws2['!freeze']={xSplit:0,ySplit:1};
+    ws2['!autofilter']={ref:XLSX.utils.encode_range({s:{r:0,c:0},e:{r:0,c:cab2.length-1}})};
+    XLSX.utils.book_append_sheet(wb, ws2, 'Locais');
+    // Aba 3: Resumo por Etapa
+    const cab3=['Ordem','Etapa','Concluídos','Pendentes','%','Total RDOs','RDOs Hoje'];
+    const linhas3=[cab3];
+    (data.etapas||[]).forEach(e=> linhas3.push([e.ordem, e.nome, e.concluidos, e.pendentes, e.pct+'%', e.totalRdos, e.rdosHoje]));
+    const ws3=XLSX.utils.aoa_to_sheet(linhas3);
+    ws3['!cols']=[{wch:8},{wch:22},{wch:12},{wch:12},{wch:8},{wch:12},{wch:10}];
+    for(let c=0;c<cab3.length;c++){ const ref=XLSX.utils.encode_cell({r:0,c}); if(ws3[ref]) ws3[ref].s=hdrStyle; }
+    bordas(ws3,cab3);
+    ws3['!freeze']={xSplit:0,ySplit:1};
+    XLSX.utils.book_append_sheet(wb, ws3, 'Resumo por Etapa');
+    const esc=reg? reg.replace(/\s+/g,'_') : 'geral';
+    const fx=_desemFaixa!==''? `_${_desemFaixa}pct` : '';
+    const nome=`faixas_progresso_${esc}${fx}_${new Date().toISOString().slice(0,10)}.xlsx`;
+    XLSX.writeFile(wb, nome);
+    if(btnMsg) btnMsg.textContent=`✅ ${nome} (${lista.length} locais)`;
+    toast('Excel por faixa exportado');
   }catch(e){ console.error(e); if(btnMsg) btnMsg.textContent='Erro: '+(e.message||e); toast('Erro ao exportar'); }
 }
 async function exportarDesempenhoExcelEquipe(){
