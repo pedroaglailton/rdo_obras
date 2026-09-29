@@ -5,6 +5,7 @@ uploads/fotos/*
 uploads/plantas/*
 !uploads/plantas/.gitkeep
 .env
+backup_banco/
 *.log
 *.db
 *.db-wal
