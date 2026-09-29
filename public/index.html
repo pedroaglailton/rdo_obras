@@ -289,6 +289,16 @@
       <div id="msgDesempenhoExcel" style="font-size:11px;color:var(--muted);margin-top:8px"></div>
     </div>
 
+    <div class="card" style="border-left:4px solid #ef6c00">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+        <h2 style="margin:0">🎯 Filtrar por % de conclusão</h2>
+        <button class="btn-small" onclick="exportarDesempenhoExcelFaixa()" style="background:#ef6c00">📗 Excel desta seleção</button>
+      </div>
+      <p style="font-size:11px;color:var(--muted);margin:6px 0 0">Clique numa faixa para filtrar — vale para as duas listas abaixo (<strong>locais</strong> e <strong>obras</strong>). Clique de novo na mesma faixa para desmarcar. O número é quantos locais estão nela.</p>
+      <div id="desempenhoFaixas" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px"></div>
+      <div id="desempenhoFaixaAtual" style="font-size:11px;color:var(--muted);margin-top:8px"></div>
+    </div>
+
     <div class="card" style="border-left:4px solid #0f3d4c">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
         <h2 style="margin:0">📊 Relatórios — progresso por etapa</h2>
@@ -311,10 +321,17 @@
         <select id="filtroDesempenhoRegiao" onchange="carregarDesempenho()"><option value="">Todas equipes</option></select>
         <input type="text" id="buscaDesempenho" placeholder="Buscar local/comarca..." oninput="filtrarDesempenhoLocal()">
       </div>
-      <p style="font-size:11px;color:var(--muted);margin:10px 0 4px"><strong>Filtrar por % de conclusão:</strong> clique numa faixa (ou clique de novo para desmarcar). Os números são a quantidade de locais em cada faixa.</p>
-      <div id="desempenhoFaixas" style="display:flex;gap:6px;flex-wrap:wrap"></div>
-      <div id="desempenhoFaixaAtual" style="font-size:11px;color:var(--muted);margin-top:8px"></div>
       <div id="listaDesempenho" style="margin-top:10px"></div>
+    </div>
+
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+        <h2 style="margin:0">🏗️ Obras — quantos locais em cada faixa</h2>
+        <span id="obrasFaixaInfo" style="font-size:11px;color:var(--muted)"></span>
+      </div>
+      <p style="font-size:11px;color:var(--muted);margin:6px 0 0">A % da obra é a etapa concluída em <strong>todos</strong> os locais — por isso costuma ser menor que a de cada local. Clique numa faixa de uma obra para ver quais locais são.</p>
+      <div id="obrasFaixaLista" style="margin-top:10px"></div>
+      <div id="obrasFaixaLocais" style="margin-top:12px"></div>
     </div>
 
   </section>
@@ -370,7 +387,16 @@
       <textarea id="obraDescricao" placeholder="Descricao..." rows="2" style="width:100%;padding:10px;border:1.5px solid var(--line);border-radius:9px;font-size:14px;margin-bottom:8px"></textarea>
       <div style="display:flex;gap:8px"><button class="btn-primary" onclick="salvarObra()" style="flex:1" id="btnObra">Criar Obra</button><button class="btn-primary" onclick="cancelarObra()" style="flex:1;display:none;background:var(--muted)" id="btnCancelObra">Cancelar</button></div>
     </div>
-    <div class="card"><h2>Obras Cadastradas</h2><div id="listaObras"></div></div>
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+        <h2 style="margin:0">Obras Cadastradas</h2>
+        <button class="btn-small" onclick="exportarObrasExcelFaixa()" style="background:#ef6c00">📗 Excel por %</button>
+      </div>
+      <p style="font-size:11px;color:var(--muted);margin:8px 0 4px"><strong>Filtrar obras por % de avanço:</strong> clique numa faixa. A % aqui é da obra inteira (etapa concluída em todos os locais).</p>
+      <div id="obrasFaixas" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+      <div id="obrasFaixaAtual" style="font-size:11px;color:var(--muted);margin-top:8px"></div>
+      <div id="listaObras" style="margin-top:10px"></div>
+    </div>
   </section>
 
   <!-- MODAL ETAPAS -->
@@ -1054,7 +1080,7 @@ async function carregarPorEquipe(){
     try{
       const obras=await api('/api/obras').then(r=>r.json());
       const cur=selObraPE.value;
-      selObraPE.innerHTML='<option value="">Todas obras</option>'+obras.filter(o=>o.ativo!==0).map(o=>`<option value="${o.id}">${o.nome}</option>`).join('');
+      selObraPE.innerHTML='<option value="">Todas obras</option>'+obras.filter(o=>o.ativo!==0).map(o=>`<option value="${Number(o.id)}">${escHtml(o.nome)}</option>`).join('');
       selObraPE.value=cur;
     }catch(e){}
   }
@@ -1137,7 +1163,7 @@ async function carregarDesempenho(){
     try{
       const obras=await api('/api/obras').then(r=>r.json());
       const cur=selObra.value;
-      selObra.innerHTML='<option value="">Todas obras</option>'+obras.filter(o=>o.ativo!==0).map(o=>`<option value="${o.id}">${o.nome}</option>`).join('');
+      selObra.innerHTML='<option value="">Todas obras</option>'+obras.filter(o=>o.ativo!==0).map(o=>`<option value="${Number(o.id)}">${escHtml(o.nome)}</option>`).join('');
       selObra.value=cur;
     }catch(e){}
   }
@@ -1152,7 +1178,7 @@ async function carregarDesempenho(){
   desempenhoCache=data;
   document.getElementById('desempenhoEtapas').innerHTML = data.etapas.map(e=>`
     <div style="padding:12px;background:#fff;border-radius:10px;border:1px solid var(--line);border-left:4px solid ${e.pct===100?'#2e7d32':e.pct>0?'#ef6c00':'#90a4ae'}">
-      <div style="font-size:12px;font-weight:700">${e.ordem}. ${e.nome}</div>
+      <div style="font-size:12px;font-weight:700">${Number(e.ordem)||0}. ${escHtml(e.nome)}</div>
       <div style="font-size:22px;font-weight:800;color:${e.pct===100?'#2e7d32':'#0f3d4c'}">${e.pct}%</div>
       <div style="font-size:11px;color:var(--muted)">${e.concluidos}/${e.concluidos+e.pendentes} locais • ${e.totalRdos} RDOs (${e.rdosHoje} hoje)</div>
       <div style="height:6px;background:var(--line);border-radius:99px;overflow:hidden;margin-top:6px"><div style="height:100%;background:${e.pct===100?'#2e7d32':'#0f3d4c'};width:${e.pct}%"></div></div>
@@ -1179,6 +1205,16 @@ async function carregarDesempenho(){
     }
   }catch(e){}
   renderDesempenhoLista();
+  // avanco por obra e faixa - falha aqui nao pode derrubar a tela de desempenho
+  try{
+    const p2=new URLSearchParams();
+    if(obraId) p2.set('obra_id', obraId);
+    _obrasFaixaCache = await api('/api/dashboard/obras-por-faixa'+(p2.toString()?'?'+p2.toString():'')).then(r=>r.json());
+  }catch(e){ _obrasFaixaCache=null; }
+  renderObrasFaixa();
+  const ofs=(_obrasFaixaCache&&_obrasFaixaCache.obras)||[];
+  const infoOF=document.getElementById('obrasFaixaInfo');
+  if(infoOF) infoOF.textContent=`${ofs.length} obra(s) • ${ofs.reduce((a,o)=>a+o.totalLocais,0)} locais`;
 }
 let _desemFaixa='';
 // faixas atingiveis a partir do modelo de etapas (4 etapas -> 0/25/50/75/100)
@@ -1221,7 +1257,7 @@ function renderDesempenhoLista(){
     const cor=l.progresso===100?'#2e7d32':l.progresso>0?'#ef6c00':'#90a4ae';
     return `<div style="padding:10px;background:#fff;border-radius:9px;margin-bottom:6px;border:1px solid var(--line);border-left:4px solid ${cor};display:flex;gap:8px;align-items:center">
       <div style="flex:1;min-width:0">
-        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><strong style="font-size:13px">${l.nome}</strong><span style="font-size:10px;background:${cor};color:#fff;padding:2px 6px;border-radius:8px">${l.progresso}% ${l.concluidas}/${l.total}</span><span style="font-size:10px;background:#f7f9fa;border:1px solid var(--line);padding:2px 6px;border-radius:8px">${l.regiao||'SEM EQUIPE'}</span></div>
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><strong style="font-size:13px">${escHtml(l.nome)}</strong><span style="font-size:10px;background:${cor};color:#fff;padding:2px 6px;border-radius:8px">${l.progresso}% ${l.concluidas}/${l.total}</span><span style="font-size:10px;background:#f7f9fa;border:1px solid var(--line);padding:2px 6px;border-radius:8px">${escHtml(l.regiao||'SEM EQUIPE')}</span></div>
         <div style="font-size:11px;color:var(--muted)">${escHtml(l.comarca||'')} • ${l.totalRdos} RDOs ${l.ultimoRdo?'• último: '+escHtml(l.ultimoRdo):''}</div>
         ${(l.etapasPendentes&&l.etapasPendentes.length)?`<div style="font-size:10px;color:#b26500;margin-top:3px">⏳ Faltam: ${l.etapasPendentes.map(escHtml).join(' • ')}</div>`:''}
         <div style="height:4px;background:var(--line);border-radius:99px;overflow:hidden;margin-top:4px"><div style="height:100%;background:${cor};width:${l.progresso}%"></div></div>
@@ -1230,7 +1266,77 @@ function renderDesempenhoLista(){
   }).join('') || '<p class="empty-state">Nenhum local</p>';
   if(lista.length>200) document.getElementById('listaDesempenho').innerHTML+=`<p style="text-align:center;font-size:11px;color:var(--muted)">Mostrando 200 de ${lista.length}</p>`;
 }
-function filtrarDesempenhoLocal(){ renderDesempenhoLista(); }
+function filtrarDesempenhoLocal(){ renderDesempenhoLista(); renderObrasFaixa(); }
+// ============================================================
+// OBRAS POR FAIXA: quantos locais de cada obra estao em 25/50/75/100%
+// ============================================================
+let _obrasFaixaCache=null, _faixaObraSel=null;
+const _corFaixa = p => p>=100?'#2e7d32' : p>0?'#ef6c00' : '#90a4ae';
+function faixaObra(obraId, p){
+  _faixaObraSel = (_faixaObraSel && _faixaObraSel.obraId===obraId && _faixaObraSel.pct===p) ? null : {obraId, pct:p};
+  renderObrasFaixa();
+}
+function renderObrasFaixa(){
+  const box=document.getElementById('obrasFaixaLista');
+  if(!box) return;
+  if(!_obrasFaixaCache || !_obrasFaixaCache.obras.length){
+    box.innerHTML='<p class="empty-state">Nenhuma obra com locais ou etapas</p>';
+    document.getElementById('obrasFaixaLocais').innerHTML='';
+    return;
+  }
+  const faixas=_obrasFaixaCache.faixas || [];
+  box.innerHTML=_obrasFaixaCache.obras.map(o=>{
+    const pctCor = o.progresso===null ? '#90a4ae' : _corFaixa(o.progresso);
+    const chips = faixas.map(p=>{
+      const n=(o.faixas&&o.faixas[p])||0;
+      const on = _faixaObraSel && _faixaObraSel.obraId===o.id && _faixaObraSel.pct===p;
+      if(!n && !on) return '';
+      return `<button class="btn-small" onclick="faixaObra(${o.id},${p})" style="background:${on?_corFaixa(p):'#fff'};color:${on?'#fff':_corFaixa(p)};border:1.5px solid ${_corFaixa(p)}">${p}% · ${n}</button>`;
+    }).join('');
+    const semModelo=(o.faixas&&o.faixas.semModelo)||0;
+    // barra empilhada: proporcao de locais por faixa
+    const total=o.totalLocais||1;
+    const barra=faixas.map(p=>{
+      const n=(o.faixas&&o.faixas[p])||0; if(!n) return '';
+      return `<div title="${p}%: ${n} local(is)" style="width:${n/total*100}%;height:100%;background:${_corFaixa(p)}"></div>`;
+    }).join('');
+    return `<div style="padding:11px;background:#fff;border-radius:9px;margin-bottom:8px;border:1px solid var(--line);border-left:4px solid ${pctCor}">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+        <div><strong style="font-size:13px">${escHtml(o.nome)}</strong>
+          <span style="font-size:10px;background:${pctCor};color:#fff;padding:2px 6px;border-radius:8px;margin-left:4px">${o.progresso===null?'sem modelo':o.progresso+'% geral'}</span>
+          ${o.comarca?`<span style="font-size:10px;background:#f7f9fa;border:1px solid var(--line);padding:2px 6px;border-radius:8px;margin-left:4px">${escHtml(o.comarca)}</span>`:''}
+        </div>
+        <span style="font-size:10px;color:var(--muted)">${o.totalLocais} locais • ${o.totalTpl} etapas • ${o.totalRdos} RDOs</span>
+      </div>
+      <div style="display:flex;height:8px;background:var(--line);border-radius:99px;overflow:hidden;margin-top:7px">${barra}${semModelo?`<div title="Sem modelo de etapas: ${semModelo}" style="width:${semModelo/total*100}%;height:100%;background:#cfd8dc"></div>`:''}</div>
+      <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:7px">${chips}${semModelo?`<span style="font-size:10px;background:#eceff1;border:1px solid #cfd8dc;padding:4px 7px;border-radius:8px;color:#607d8b">sem modelo · ${semModelo}</span>`:''}</div>
+    </div>`;
+  }).join('');
+  renderObrasFaixaLocais();
+}
+function renderObrasFaixaLocais(){
+  const box=document.getElementById('obrasFaixaLocais');
+  if(!box || !_obrasFaixaCache) return;
+  if(!_faixaObraSel){
+    box.innerHTML='<p style="font-size:11px;color:var(--muted);margin:0">Clique numa faixa acima para ver os locais.</p>';
+    return;
+  }
+  const o=_obrasFaixaCache.obras.find(x=>x.id===_faixaObraSel.obraId);
+  if(!o){ box.innerHTML=''; return; }
+  const locais=o.locais.filter(l=>l.progresso===_faixaObraSel.pct);
+  box.innerHTML=`<div style="border-top:1px solid var(--line);padding-top:10px">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+      <strong style="font-size:12px">${escHtml(o.nome)} — locais em ${_faixaObraSel.pct}% (${locais.length})</strong>
+      <button class="btn-small" onclick="_faixaObraSel=null;renderObrasFaixa()" style="background:#607d8b">Fechar</button>
+    </div>
+    ${locais.map(l=>`<div style="padding:8px;background:#f7f9fa;border-radius:8px;margin-bottom:5px;border:1px solid var(--line);border-left:3px solid ${_corFaixa(l.progresso)}">
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><strong style="font-size:12px">${escHtml(l.nome)}</strong>
+        <span style="font-size:10px;background:${_corFaixa(l.progresso)};color:#fff;padding:2px 6px;border-radius:8px">${l.progresso}% ${l.concluidas}/${l.total}</span>
+        <span style="font-size:10px;background:#fff;border:1px solid var(--line);padding:2px 6px;border-radius:8px">${escHtml(l.regiao)}</span></div>
+      ${l.etapasPendentes.length?`<div style="font-size:10px;color:#b26500;margin-top:3px">⏳ Faltam: ${l.etapasPendentes.map(escHtml).join(' • ')}</div>`:''}
+    </div>`).join('') || '<p class="empty-state">Nenhum local nesta faixa</p>'}
+  </div>`;
+}
 async function exportarDesempenhoExcel(){
   const btnMsg=document.getElementById('msgDesempenhoExcel');
   try{
@@ -1332,6 +1438,26 @@ async function exportarDesempenhoExcelFaixa(){
     bordas(ws3,cab3);
     ws3['!freeze']={xSplit:0,ySplit:1};
     XLSX.utils.book_append_sheet(wb, ws3, 'Resumo por Etapa');
+    // Aba 4: quantos locais de cada obra estao em cada faixa
+    try{
+      const p4=new URLSearchParams();
+      if(obraId) p4.set('obra_id', obraId);
+      const d4=await api('/api/dashboard/obras-por-faixa'+(p4.toString()?'?'+p4.toString():'')).then(r=>r.json());
+      const f4=(d4&&d4.faixas)||[];
+      const cab4=['Obra','% Geral','Total Locais','Etapas'].concat(f4.map(p=>p+'%')).concat(['Sem Modelo','Total RDOs']);
+      const l4=[cab4];
+      (d4&&d4.obras||[]).forEach(o=> l4.push([o.nome, o.progresso===null?'':(o.progresso+'%'), o.totalLocais, o.totalTpl]
+        .concat(f4.map(p=>(o.faixas&&o.faixas[p])||0))
+        .concat([(o.faixas&&o.faixas.semModelo)||0, o.totalRdos])));
+      if(l4.length>1){
+        const ws4=XLSX.utils.aoa_to_sheet(l4);
+        ws4['!cols']=[{wch:32},{wch:10},{wch:12},{wch:8}].concat(f4.map(()=>({wch:8}))).concat([{wch:11},{wch:11}]);
+        for(let c=0;c<cab4.length;c++){ const ref=XLSX.utils.encode_cell({r:0,c}); if(ws4[ref]) ws4[ref].s=hdrStyle; }
+        bordas(ws4,cab4);
+        ws4['!freeze']={xSplit:0,ySplit:1};
+        XLSX.utils.book_append_sheet(wb, ws4, 'Obras por Faixa');
+      }
+    }catch(e){ console.warn('aba obras por faixa indisponivel', e); }
     const esc=reg? reg.replace(/\s+/g,'_') : 'geral';
     const fx=_desemFaixa!==''? `_${_desemFaixa}pct` : '';
     const nome=`faixas_progresso_${esc}${fx}_${new Date().toISOString().slice(0,10)}.xlsx`;
@@ -1384,7 +1510,7 @@ async function carregarMapa3D(){
   if(selObra && selObra.options.length===1){
     try{
       const obras=await api('/api/obras').then(r=>r.json());
-      selObra.innerHTML='<option value="">Todas obras</option>'+obras.filter(o=>o.ativo!==0).map(o=>`<option value="${o.id}">${o.nome}</option>`).join('');
+      selObra.innerHTML='<option value="">Todas obras</option>'+obras.filter(o=>o.ativo!==0).map(o=>`<option value="${Number(o.id)}">${escHtml(o.nome)}</option>`).join('');
     }catch(e){}
   }
   // popula filtro de equipes na primeira carga
@@ -1551,32 +1677,118 @@ async function importarMesclado(){
 
 // OBRAS
 let locaisGlobal = [];
+let obrasCache = null, _obraFaixa = '';
 
 async function carregarObras() {
   const [obras, locais] = await Promise.all([api('/api/obras').then(r => r.json()), api('/api/locais').then(r => r.json())]);
   locaisGlobal = locais;
-  
+  obrasCache = obras;
+
   // Popular select de locais no form
   const sel = document.getElementById('obraLocal');
   sel.innerHTML = '<option value="">Selecione o local</option>' + locais.map(l => '<option value="' + l.id + '">' + l.nome + ' - ' + (l.comarca || '') + '</option>').join('');
 
+  renderObrasLista();
+}
+
+// Faixas da % da obra: o modelo de etapas da obra define os degraus possíveis.
+function faixasObra(){
+  const tpls = (obrasCache||[]).map(o=> Number(o.tpl)||0).filter(t=>t>0);
+  const maior = tpls.length ? Math.max(...tpls) : 0;
+  if(!maior) return [100,75,50,25,0];
+  const out=[]; for(let i=0;i<=maior;i++){ const p=Math.round(i/maior*100); if(!out.includes(p)) out.push(p); }
+  return out.sort((a,b)=>b-a);
+}
+function filtrarObraFaixa(p){
+  const v=String(p);
+  _obraFaixa = (_obraFaixa===v) ? '' : v;
+  renderObrasLista();
+}
+function renderObrasLista(){
   const div = document.getElementById('listaObras');
-  div.innerHTML = obras.map(o => {
+  if(!div) return;
+  const obras = obrasCache || [];
+  // chips: quantas obras em cada faixa de %
+  const cnt={}; obras.forEach(o=>{ const p=Number(o.progresso)||0; cnt[p]=(cnt[p]||0)+1; });
+  const box=document.getElementById('obrasFaixas');
+  if(box){
+    const cor=p=> p>=100?'#2e7d32' : p>0?'#ef6c00' : '#90a4ae';
+    box.innerHTML = faixasObra().map(p=>{
+      const n=cnt[p]||0, on=(_obraFaixa===String(p));
+      return `<button class="btn-small" onclick="filtrarObraFaixa('${p}')" style="background:${on?cor(p):'#fff'};color:${on?'#fff':cor(p)};border:1.5px solid ${cor(p)};font-weight:800">${p}% · ${n}</button>`;
+    }).join('') + `<button class="btn-small" onclick="filtrarObraFaixa('')" style="background:${_obraFaixa===''?'#0f3d4c':'#fff'};color:${_obraFaixa===''?'#fff':'var(--muted)'};border:1px solid var(--line)">Todas</button>`;
+  }
+  const info=document.getElementById('obrasFaixaAtual');
+  if(info) info.textContent = _obraFaixa===''
+    ? `Mostrando todas as obras (${obras.length})`
+    : `Faixa ${_obraFaixa}%: ${obras.filter(o=>(Number(o.progresso)||0)===Number(_obraFaixa)).length} obra(s)`;
+
+  let lista=obras;
+  if(_obraFaixa!=='') lista=obras.filter(o=> (Number(o.progresso)||0)===Number(_obraFaixa));
+  div.innerHTML = lista.map(o => {
     const localInfo = o.local_nome ? o.local_nome + (o.local_comarca ? ' - ' + o.local_comarca : '') : 'Sem local';
-    return '<div style="padding:12px;background:#f7f9fa;border-radius:9px;margin-bottom:8px;border:1px solid var(--line)">' +
+    const pc = (Number(o.progresso)||0);
+    return '<div style="padding:12px;background:#f7f9fa;border-radius:9px;margin-bottom:8px;border:1px solid var(--line);border-left:4px solid '+(pc>=100?'#2e7d32':pc>0?'#ef6c00':'#90a4ae')+'"' + '>' +
       '<div style="display:flex;justify-content:space-between;align-items:center">' +
-      '<div><strong>' + o.nome + '</strong> <span class="badge badge-' + o.status + '">' + (o.status || 'planejamento') + '</span></div>' +
+      '<div><strong>' + escHtml(o.nome) + '</strong> <span class="badge badge-' + o.status + '">' + (o.status || 'planejamento') + '</span></div>' +
       '<div>' +
       '<button class="btn-small" onclick="abrirEtapas(' + o.id + ')" style="margin-right:4px;background:#6a1b9a">Etapas</button>' +
       '<button class="btn-small" onclick="toggleObra(' + o.id + ')" style="margin-right:4px;background:var(--ok)">' + (o.status === 'concluida' ? 'Reabrir' : 'Concluir') + '</button>' +
       '<button class="btn-small" onclick="editarObra(' + o.id + ')" style="margin-right:4px;background:#1565c0">Editar</button>' +
       '<button class="btn-delete" onclick="excluirObra(' + o.id + ')">&times;</button>' +
       '</div></div>' +
-      '<div style="font-size:12px;color:var(--muted);margin-top:6px">📍 ' + localInfo + ' | ' + o.prazo_dias + ' dias | ' + (o.responsavel || '') + ' | ' + (o.progresso || 0) + '% concluido</div>' +
+      '<div style="font-size:12px;color:var(--muted);margin-top:6px">📍 ' + escHtml(localInfo) + ' | ' + o.prazo_dias + ' dias | ' + escHtml(o.responsavel || '') + ' | ' + pc + '% concluido</div>' +
       '<div style="font-size:11px;color:var(--muted);margin-top:2px">📋 Modelo: ' + (o.tpl || 0) + ' etapas • 📍 ' + (o.nlocais || 0) + ' locais • ✅ ' + (o.nconcl || 0) + '/' + ((o.nlocais || 0) * (o.tpl || 0)) + ' combinações</div>' +
-      '<div class="progress-bar" style="height:5px;background:var(--line);border-radius:3px;overflow:hidden;margin-top:4px"><div style="height:100%;background:var(--ok);border-radius:3px;width:' + (o.progresso || 0) + '%"></div></div>' +
+      '<div class="progress-bar" style="height:5px;background:var(--line);border-radius:3px;overflow:hidden;margin-top:4px"><div style="height:100%;background:var(--ok);border-radius:3px;width:' + pc + '%"></div></div>' +
       '</div>';
-  }).join('') || '<p class="empty-state">Nenhuma obra</p>';
+  }).join('') || '<p class="empty-state">Nenhuma obra nesta faixa</p>';
+}
+
+// Excel das obras filtradas por % de avanco
+async function exportarObrasExcelFaixa(){
+  const obras = obrasCache || [];
+  let lista=obras;
+  if(_obraFaixa!=='') lista=obras.filter(o=> (Number(o.progresso)||0)===Number(_obraFaixa));
+  if(!lista.length){ toast('Nenhuma obra nesta faixa'); return; }
+  try{
+    toast('Gerando Excel das obras...');
+    const wb=XLSX.utils.book_new();
+    const hdrStyle={font:{bold:true,color:{rgb:'FFFFFF'}}, fill:{fgColor:{rgb:'0F3D4C'}}, alignment:{horizontal:'center',vertical:'center'}};
+    const borda={border:{top:{style:'thin',color:{rgb:'D0D5DD'}},bottom:{style:'thin',color:{rgb:'D0D5DD'}},left:{style:'thin',color:{rgb:'D0D5DD'}},right:{style:'thin',color:{rgb:'D0D5DD'}}}};
+    // Aba 1: obras da faixa
+    const cab1=['Obra','% Avanço','Status','Comarca','Responsável','Prazo (dias)','Etapas (modelo)','Locais','Concluídas','Total combinações','Locais sem etapa'];
+    const l1=[cab1];
+    lista.forEach(o=> l1.push([o.nome, (Number(o.progresso)||0)+'%', o.status||'', o.comarca||'', o.responsavel||'', o.prazo_dias, o.tpl||0, o.nlocais||0, o.nconcl||0, (o.nlocais||0)*(o.tpl||0), (o.nlocais||0)-(o.nconcl||0)]));
+    const ws1=XLSX.utils.aoa_to_sheet(l1);
+    ws1['!cols']=[{wch:32},{wch:10},{wch:14},{wch:16},{wch:18},{wch:11},{wch:14},{wch:8},{wch:12},{wch:17},{wch:16}];
+    for(let c=0;c<cab1.length;c++){ const ref=XLSX.utils.encode_cell({r:0,c}); if(ws1[ref]) ws1[ref].s=hdrStyle; }
+    for(let r=1;r<l1.length;r++) for(let c=0;c<cab1.length;c++){ const ref=XLSX.utils.encode_cell({r,c}); if(ws1[ref]) ws1[ref].s=borda; }
+    ws1['!freeze']={xSplit:0,ySplit:1};
+    ws1['!autofilter']={ref:XLSX.utils.encode_range({s:{r:0,c:0},e:{r:0,c:cab1.length-1}})};
+    XLSX.utils.book_append_sheet(wb, ws1, 'Obras');
+    // Aba 2: distribuicao de locais por faixa
+    try{
+      const d=await api('/api/dashboard/obras-por-faixa').then(r=>r.json());
+      const faixas=(d&&d.faixas)||[];
+      const cab2=['Obra','% Geral','Total Locais','Etapas'].concat(faixas.map(p=>p+'%')).concat(['Sem Modelo','Total RDOs']);
+      const l2=[cab2];
+      (d&&d.obras||[]).forEach(o=> l2.push([o.nome, o.progresso===null?'':(o.progresso+'%'), o.totalLocais, o.totalTpl]
+        .concat(faixas.map(p=>(o.faixas&&o.faixas[p])||0))
+        .concat([(o.faixas&&o.faixas.semModelo)||0, o.totalRdos])));
+      if(l2.length>1){
+        const ws2=XLSX.utils.aoa_to_sheet(l2);
+        ws2['!cols']=[{wch:32},{wch:10},{wch:12},{wch:8}].concat(faixas.map(()=>({wch:8}))).concat([{wch:11},{wch:11}]);
+        for(let c=0;c<cab2.length;c++){ const ref=XLSX.utils.encode_cell({r:0,c}); if(ws2[ref]) ws2[ref].s=hdrStyle; }
+        for(let r=1;r<l2.length;r++) for(let c=0;c<cab2.length;c++){ const ref=XLSX.utils.encode_cell({r,c}); if(ws2[ref]) ws2[ref].s=borda; }
+        ws2['!freeze']={xSplit:0,ySplit:1};
+        XLSX.utils.book_append_sheet(wb, ws2, 'Locais por Faixa');
+      }
+    }catch(e){ console.warn('aba locais por faixa indisponivel', e); }
+    const fx=_obraFaixa!==''? `_${_obraFaixa}pct` : '_todas';
+    const nome=`obras_avanco${fx}_${new Date().toISOString().slice(0,10)}.xlsx`;
+    XLSX.writeFile(wb, nome);
+    toast(`Excel com ${lista.length} obra(s) exportado`);
+  }catch(e){ console.error(e); toast('Erro ao exportar'); }
 }
 
 async function salvarObra() {
@@ -1999,7 +2211,7 @@ async function carregarRdos() {
     try{
       const obras=await api('/api/obras').then(r=>r.json());
       const cur=selObra.value;
-      selObra.innerHTML='<option value="">Todas as obras</option>'+obras.filter(o=>o.ativo!==0).map(o=>`<option value="${o.id}">${o.nome}</option>`).join('');
+      selObra.innerHTML='<option value="">Todas as obras</option>'+obras.filter(o=>o.ativo!==0).map(o=>`<option value="${Number(o.id)}">${escHtml(o.nome)}</option>`).join('');
       selObra.value=cur;
     }catch(e){}
   }
@@ -2207,7 +2419,7 @@ async function carregarAuditoria(){
   if(selObra && selObra.options.length<=1){
     try{
       const obras=await api('/api/obras').then(r=>r.json());
-      selObra.innerHTML='<option value="">Todas obras</option>'+obras.filter(o=>o.ativo!==0).map(o=>`<option value="${o.id}">${o.nome}</option>`).join('');
+      selObra.innerHTML='<option value="">Todas obras</option>'+obras.filter(o=>o.ativo!==0).map(o=>`<option value="${Number(o.id)}">${escHtml(o.nome)}</option>`).join('');
     }catch(e){}
   }
   let url='/api/auditoria/rdo?limit=200&';
@@ -2993,7 +3205,7 @@ async function carregarEstoque(){
     try{
       const obras=await api('/api/obras').then(r=>r.json());
       const cur=sel.value;
-      sel.innerHTML='<option value="">Selecione a obra...</option>'+obras.filter(o=>o.ativo!==0).map(o=>`<option value="${o.id}">${o.nome}</option>`).join('');
+      sel.innerHTML='<option value="">Selecione a obra...</option>'+obras.filter(o=>o.ativo!==0).map(o=>`<option value="${Number(o.id)}">${escHtml(o.nome)}</option>`).join('');
       sel.value=cur;
       // popula datalist de materiais
       try{

@@ -2687,6 +2687,60 @@ app.get('/api/dashboard/etapas-desempenho', gestor, async (req,res)=>{
   res.json({etapas, locais: perLocal.slice(0,limit), totalLocais, totalTpl, totalFiltrados: perLocal.length});
 });
 
+// Distribuicao de LOCAIS por faixa de conclusao, agrupada por obra.
+// A faixa (25/50/75/100) e do local; a % da obra e a etapa concluida em todos os locais.
+// Obra sem modelo de etapas fica sem faixa (progresso=null) em vez de virar 0% falso.
+app.get('/api/dashboard/obras-por-faixa', gestor, async (req,res)=>{
+  const obras = await db.prepare('SELECT id,nome,comarca,responsavel,prazo_dias,progresso,status FROM obras WHERE ativo=1 ORDER BY nome').all();
+  const tplRows = await db.prepare('SELECT obra_id, nome FROM etapas WHERE local_id IS NULL OR local_id=0 ORDER BY obra_id, ordem').all();
+  const tplPorObra = {};
+  for(const r of tplRows){ const k=String(r.obra_id); (tplPorObra[k]=tplPorObra[k]||[]).push(r.nome); }
+  const feitasRows = await db.prepare("SELECT obra_id, local_id, nome FROM etapas WHERE local_id IS NOT NULL AND local_id<>0 AND status='concluida'").all();
+  const feitasPorLocal = {};
+  for(const r of feitasRows){ const k=String(r.obra_id)+':'+String(r.local_id); (feitasPorLocal[k]=feitasPorLocal[k]||[]).push(r.nome); }
+  const locaisRows = await db.prepare('SELECT id,obra_id,nome,comarca,regiao FROM locais WHERE ativo=1 ORDER BY nome').all();
+  const rdosPorObra = await db.prepare('SELECT obra_id, CAST(COUNT(*) AS INTEGER) c FROM rdos GROUP BY obra_id').all();
+  const mapRdos = Object.fromEntries(rdosPorObra.map(r=>[String(r.obra_id), Number(r.c)||0]));
+
+  // faixas em ordem decrescente (100 -> 0): e a ordem de exibicao dos chips e da barra
+  const faixasDe = (tpl) => { if(!tpl || tpl<1) return []; const out=[]; for(let i=tpl;i>=0;i--){ const p=Math.round(i/tpl*100); if(!out.includes(p)) out.push(p); } return out; };
+  const saida = obras.map(o=>{
+    const tpl = (tplPorObra[String(o.id)]||[]);
+    const nTpl = tpl.length;
+    const locais = locaisRows.filter(l=> String(l.obra_id)===String(o.id) ).map(l=>{
+      const key = String(o.id)+':'+String(l.id);
+      const feitas = feitasPorLocal[key] || [];
+      const feitasChave = new Set(feitas.map(normEtapa));
+      const pendentes = nTpl ? tpl.filter(n=> !feitasChave.has(normEtapa(n))) : [];
+      return {
+        id: l.id, nome: l.nome, comarca: l.comarca||'', regiao: l.regiao||'SEM EQUIPE',
+        concluidas: feitas.length, total: nTpl,
+        progresso: nTpl ? Math.round(feitas.length/nTpl*100) : null,
+        etapasFeitas: feitas, etapasPendentes: pendentes
+      };
+    });
+    const faixas = {};
+    for(const l of locais){ const p = l.progresso; faixas[p===null?'semModelo':p] = (faixas[p===null?'semModelo':p]||0)+1; }
+    // mesma conta de atualizarProgresso: concluidas / (locais * etapas) - media das % dos locais da no mesmo
+    const combos = locais.reduce((a,l)=>a+l.concluidas, 0);
+    const progresso = (nTpl && locais.length) ? Math.min(100, Math.round(combos/(locais.length*nTpl)*100)) : null;
+    return {
+      id: o.id, nome: o.nome, comarca: o.comarca||'', responsavel: o.responsavel||'',
+      prazo_dias: o.prazo_dias, progresso, status: o.status||'',
+      totalTpl: nTpl, faixasDisponiveis: faixasDe(nTpl), faixas, totalLocais: locais.length,
+      totalRdos: mapRdos[String(o.id)]||0, locais
+    };
+  }).filter(o=> o.totalLocais>0 || o.totalTpl>0);
+
+  if(req.query.obra_id) {
+    const id = String(req.query.obra_id);
+    const alvo = saida.filter(o=> String(o.id)===id);
+    return res.json({obras: alvo, faixas: faixasDe(alvo[0]?alvo[0].totalTpl:0)});
+  }
+  const maiorTpl = saida.reduce((a,o)=>Math.max(a,o.totalTpl), 0);
+  res.json({obras: saida, faixas: faixasDe(maiorTpl)});
+});
+
 // ============================================================
 // SOCKET.IO
 // ============================================================
